@@ -1,0 +1,39 @@
+@font-face {
+  font-family: 'HarmonyOS_Regular';
+  src: url('./fonts/HarmonyOS_Sans_Regular.woff2');
+}
+
+@font-face {
+  font-family: 'HarmonyOS_Bold';
+  src: url('./fonts/HarmonyOS_Sans_Bold.woff2');
+}
+
+/* SF Pro Regular */
+@font-face {
+  font-family: 'SF_Pro_Regular';
+  src: url('./fonts/sf-pro-text_regular.woff2') format('woff2');
+  font-display: swap;
+}
+
+/* SF Pro Semibold */
+@font-face {
+  font-family: 'SF_Pro_Semibold';
+  src: url('./fonts/sf-pro-text_semibold.woff2') format('woff2');
+  font-display: swap;
+}
+
+/* 苹方-简 常规体 */
+@font-face {
+  font-family: 'PingFangSC_Regular';
+  src: url('./fonts/PingFangSC-Regular.woff2') format('woff2');
+  font-display: swap;
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF;
+}
+
+/* 苹方-简 中粗体 */
+@font-face {
+  font-family: 'PingFangSC_Semibold';
+  src: url('./fonts/PingFangSC-Semibold.woff2') format('woff2');
+  font-display: swap;
+  unicode-range: U+4E00-9FFF, U+3400-4DBF, U+3000-303F, U+FF00-FFEF;
+}

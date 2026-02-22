@@ -1,0 +1,174 @@
+<template>
+  <Provider>
+    <!-- 主框架 -->
+    <n-layout :class="['all-layout', { 'full-player': showFullPlayer }]">
+      <!-- 导航栏 -->
+      <n-layout-header bordered>
+        <MainNav />
+      </n-layout-header>
+      <!-- 主内容 - 有侧边栏 -->
+      <n-layout v-if="showSider" :class="{
+        'body-layout': true,
+        'player-bar': music.getPlaySongData?.id && showPlayBar,
+      }" position="absolute" has-sider>
+        <!-- 侧边栏 -->
+        <n-layout-sider :collapsed="asideMenuCollapsed" :native-scrollbar="false" :collapsed-width="64" :width="240"
+          class="main-sider" show-trigger="bar" collapse-mode="width" bordered @collapse="asideMenuCollapsed = true"
+          @expand="asideMenuCollapsed = false">
+          <div class="sider-all">
+            <Menu />
+          </div>
+        </n-layout-sider>
+        <!-- 页面区 -->
+        <n-layout :native-scrollbar="false" embedded>
+          <MainLayout />
+        </n-layout>
+      </n-layout>
+      <!-- 主内容 - 无侧边栏 -->
+      <n-layout-content v-else :class="{
+        'body-layout': true,
+        'player-bar': music.getPlaySongData?.id && showPlayBar,
+      }" :native-scrollbar="false" position="absolute" embedded>
+        <MainLayout />
+      </n-layout-content>
+    </n-layout>
+    <!-- 主播放器 -->
+    <MainControl />
+    <!-- 全屏播放器 -->
+    <FullPlayer />
+    <!-- 全局播放列表 -->
+    <n-config-provider v-if="showFullPlayer" :theme="darkTheme">
+      <Playlist />
+    </n-config-provider>
+    <Playlist v-else />
+    <!-- 全局水印 -->
+    <!-- <n-watermark
+      :font-size="16"
+      :line-height="16"
+      :width="384"
+      :height="384"
+      :x-offset="12"
+      :y-offset="60"
+      :rotate="-15"
+      content="开发中，敬请期待"
+      cross
+      fullscreen
+    /> -->
+  </Provider>
+</template>
+
+<script setup>
+import { storeToRefs } from "pinia";
+import { useRouter } from "vue-router";
+import { darkTheme } from "naive-ui";
+import { musicData, siteStatus, siteSettings } from "@/stores";
+import { initPlayer } from "@/utils/Player";
+import globalShortcut from "@/utils/globalShortcut";
+
+const router = useRouter();
+const music = musicData();
+const status = siteStatus();
+const settings = siteSettings();
+const { autoPlay, showSider } = storeToRefs(settings);
+const { showPlayBar, asideMenuCollapsed, showFullPlayer } = storeToRefs(status);
+
+showFullPlayer.value = false;
+
+// PWA 更新逻辑
+if ("serviceWorker" in navigator) {
+  // 监听 Service Worker 控制权的更替
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    console.info("站点资源有更新，请刷新以应用更新");
+
+    // 创建一个常驻消息
+    $message.info("站点资源有更新，点击此消息刷新应用", {
+      keepAliveOnHover: true, // 鼠标悬停时不消失
+      closable: true,         // 显示关闭按钮
+      duration: 0,            // 设置为 0 则不自动消失
+      // 关键：点击消息主体时触发刷新
+      onClick: () => {
+        window.location.reload();
+      }
+    });
+  });
+}
+
+// 网络无法连接
+const canNotConnect = (error) => {
+  console.error("网络连接错误：", error.message);
+  $dialog.destroyAll();
+  $dialog.error({
+    title: "网络连接错误",
+    content: "网络连接错误，请检查您当前的网络状态",
+    positiveText: "重试",
+    negativeText: "取消",
+    onPositiveClick: () => {
+      location.reload();
+    },
+  });
+};
+
+// 网页端键盘事件
+const handleKeyUp = (event) => {
+  globalShortcut(event, router);
+};
+
+onMounted(async () => {
+  // 挂载方法
+  window.$canNotConnect = canNotConnect;
+  // 主播放器
+  status.playState = false;
+  await initPlayer(autoPlay.value);
+  // 键盘监听
+  window.addEventListener("keyup", handleKeyUp);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keyup", handleKeyUp);
+});
+</script>
+
+<style lang="scss" scoped>
+.all-layout {
+  height: 100%;
+  transition:
+    transform 0.3s,
+    opacity 0.3s;
+
+  .n-layout-header {
+    height: 60px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    -webkit-app-region: drag;
+  }
+
+  .body-layout {
+    top: 60px;
+    transition: bottom 0.3s;
+
+    .main-sider {
+      :deep(.n-scrollbar-content) {
+        height: 100%;
+      }
+
+      .sider-all {
+        height: 100%;
+      }
+
+      @media (max-width: 900px) {
+        display: none;
+      }
+    }
+
+    &.player-bar {
+      bottom: 80px;
+    }
+  }
+
+  &.full-player {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+</style>
