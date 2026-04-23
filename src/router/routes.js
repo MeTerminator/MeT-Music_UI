@@ -132,6 +132,15 @@ const routes = [
     },
     component: () => import("@/views/Setting/index.vue"),
   },
+  // 歌曲详情
+  {
+    path: "/song",
+    name: "song",
+    meta: {
+      title: "歌曲详情",
+    },
+    component: () => import("@/views/SongDetail.vue"),
+  },
   // 歌曲下载
   {
     path: "/download",

@@ -1,7 +1,7 @@
 <template>
   <div class="main-container">
-    <n-grid :cols="24" :x-gap="24" :y-gap="24" item-responsive responsive="screen">
-      <n-gi span="24 m:12 l:10">
+    <n-grid :cols="24" :y-gap="24" item-responsive responsive="screen">
+      <n-gi span="24">
         <n-space vertical size="large">
           <n-h2 prefix="bar" align-text>
             <n-text type="primary">歌曲</n-text>
@@ -22,8 +22,32 @@
                   </template>
                   点击下载封面
                 </n-tooltip>
-                <div class="title-text">
-                  {{ musicInfo.filename || '正在解析歌曲信息...' }}
+                <div class="title-info">
+                  <div class="title-text">
+                    {{ musicInfo.name || '正在解析...' }}
+                  </div>
+                  <div class="artist-album-text" v-if="rawTrackInfo">
+                    <div class="artist-line-mini">
+                      <n-icon size="14" depth="3">
+                        <SvgIcon icon="account-music" />
+                      </n-icon>
+                      <template v-for="(ar, index) in rawTrackInfo.singer" :key="ar.mid">
+                        <n-text depth="3" class="clickable-text" @click="router.push(`/artist?id=${ar.mid}`)">
+                          {{ ar.name }}
+                        </n-text>
+                        <n-text v-if="index < (rawTrackInfo.singer.length - 1)" depth="3">/</n-text>
+                      </template>
+                    </div>
+                    <div class="album-line-mini">
+                      <n-icon size="14" depth="3">
+                        <SvgIcon icon="album" />
+                      </n-icon>
+                      <n-text depth="3" class="clickable-text"
+                        @click="router.push(`/album?id=${rawTrackInfo.album.mid}`)">
+                        {{ rawTrackInfo.album.name }}
+                      </n-text>
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
@@ -41,6 +65,12 @@
                 <template #icon><i class="ri-download-cloud-2-line"></i></template>
                 {{ isDownloading ? `正在下载 ${progressText}` : '立即下载歌曲文件' }}
               </n-button>
+              <n-space vertical size="small">
+                <n-button tertiary block size="large" @click="handleViewInfo">
+                  <template #icon><i class="ri-information-line"></i></template>
+                  查看单曲信息
+                </n-button>
+              </n-space>
               <n-collapse-transition :show="isDownloading || downloadStatus !== 'idle'">
                 <n-progress type="line" :percentage="progressPercent" :status="progressStatus"
                   indicator-placement="inside" processing />
@@ -57,7 +87,7 @@
         </n-space>
       </n-gi>
 
-      <n-gi span="24 m:12 l:14">
+      <n-gi span="24">
         <n-space vertical size="large">
           <n-h2 prefix="bar" align-text>
             <n-text type="primary">歌词</n-text>
@@ -96,6 +126,7 @@ import { getMusicUrl } from '@/api/extra';
 import { getSongLyric, getAMttmlLyric } from "@/api/song";
 import { parseLyric } from "@/utils/parseLyric";
 import { copyData } from "@/utils/helper";
+import SvgIcon from "@/components/Global/SvgIcon";
 
 const route = useRoute();
 const router = useRouter();
@@ -109,9 +140,11 @@ const downloadStatus = ref('idle');
 const progressPercent = ref(0);
 const progressText = ref('0%');
 const activeLyricTab = ref(null);
+const rawTrackInfo = ref(null);
 
 const musicInfo = reactive({
   url: '',
+  name: '',
   filename: '',
   extension: '',
   rawTags: [],
@@ -203,9 +236,11 @@ const fetchMusicUrl = async () => {
     const res = await getMusicUrl(mid.value, currentQuality.value);
     const data = res.data || res;
     const track = data[0]?.track_info;
+    rawTrackInfo.value = track;
 
     if (track && track.file_url) {
       musicInfo.url = track.file_url.replace("http://", "https://");
+      musicInfo.name = track.name;
       const singers = track.singer.map(s => s.name).join('_');
       const path = new URL(musicInfo.url).pathname;
       musicInfo.extension = path.split('.').pop().toLowerCase();
@@ -218,6 +253,7 @@ const fetchMusicUrl = async () => {
         musicInfo.coverFilename = `${track.name} - ${singers}.jpg`;
       }
     } else {
+      musicInfo.name = "暂无信息";
       musicInfo.filename = "该音质暂无可下载链接";
       musicInfo.url = "";
     }
@@ -291,6 +327,15 @@ const downloadFile = async () => {
   } finally {
     isDownloading.value = false;
   }
+};
+
+
+
+const handleViewInfo = () => {
+  router.push({
+    path: '/song',
+    query: { mid: mid.value }
+  });
 };
 
 const downloadCover = async () => {
@@ -386,14 +431,76 @@ watch(() => route.query.mid, () => {
   color: #666;
 }
 
+.title-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  width: 0;
+  overflow: hidden;
+}
+
+.artist-album-text {
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0.8;
+}
+
+.artist-line-mini,
+.album-line-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clickable-text {
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.clickable-text:hover {
+  opacity: 0.6;
+}
+
 .title-text {
   font-size: 18px;
   font-weight: bold;
   line-height: 1.4;
-  /* 如果文件名太长，可以限制行数 */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .main-container {
+    padding: 12px;
+  }
+
+  .card-header-custom {
+    gap: 12px;
+  }
+
+  .title-text {
+    font-size: 16px;
+  }
+
+  .artist-album-text {
+    font-size: 12px;
+  }
+
+  .lyric-preview {
+    height: 240px;
+  }
+
+  :deep(.n-card-header) {
+    padding: 16px !important;
+  }
+
+  :deep(.n-card__content) {
+    padding: 16px !important;
+  }
 }
 </style>
