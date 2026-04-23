@@ -7,6 +7,10 @@
         <n-icon v-if="!music.getPlaySongData.path" class="hidden" size="24" @click="UrlDownloadSong()">
           <SvgIcon icon="download" />
         </n-icon>
+        <!-- 详情 -->
+        <n-icon v-if="!music.getPlaySongData.path" class="hidden" size="24" @click="router.push(`/song?mid=${music.getPlaySongData.id}`), showFullPlayer = false">
+          <SvgIcon icon="information-line" />
+        </n-icon>
       </div>
       <div class="center">
         <div class="btn">

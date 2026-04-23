@@ -252,6 +252,17 @@ const openDropdown = (e, data, song, index, sourceId, type) => {
           },
           icon: renderIcon("download", 20, 1),
         },
+        {
+          key: "song-detail",
+          label: "查看单曲详情",
+          show: isSong && !isLocalSong,
+          props: {
+            onClick: () => {
+              router.push(`/song?mid=${song.id}`);
+            },
+          },
+          icon: renderIcon("information-line", 20, 1),
+        },
       ];
       // 右键菜单状态
       dropdownShow.value = true;

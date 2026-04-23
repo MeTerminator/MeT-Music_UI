@@ -344,6 +344,17 @@ const songMoreOptions = computed(() => [
     icon: renderIcon("video"),
   },
   {
+    key: "song-detail",
+    label: "查看单曲详情",
+    show: music.getPlaySongData?.path ? false : true,
+    props: {
+      onClick: () => {
+        router.push(`/song?mid=${music.getPlaySongData?.id}`);
+      },
+    },
+    icon: renderIcon("information-line"),
+  },
+  {
     key: "download",
     label: "下载歌曲",
     show: music.getPlaySongData?.path ? false : true,

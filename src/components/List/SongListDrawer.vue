@@ -119,6 +119,21 @@
           </n-icon>
           <n-text class="name"> 下载歌曲 </n-text>
         </div>
+        <div
+          v-if="isSong && !isLocalSong"
+          class="menu-item"
+          @click="
+            () => {
+              drawerShow = false;
+              router.push(`/song?mid=${songData.id}`);
+            }
+          "
+        >
+          <n-icon size="22">
+            <SvgIcon icon="information-line" />
+          </n-icon>
+          <n-text class="name"> 查看单曲详情 </n-text>
+        </div>
       </div>
     </n-drawer-content>
   </n-drawer>
