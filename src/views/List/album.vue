@@ -19,7 +19,7 @@
           >
             <template #placeholder>
               <div class="cover-loading">
-                <img class="loading-img" src="/images/pic/song.jpg?assest" alt="song" />
+                <img class="loading-img" :src="getAssetUrl('/images/pic/song.jpg?assest')" alt="song" />
               </div>
             </template>
           </n-image>
@@ -187,7 +187,7 @@ import { NIcon } from "naive-ui";
 import { useRouter } from "vue-router";
 import { siteStatus } from "@/stores";
 import { getAlbumDetail } from "@/api/album";
-import { formatNumber, fuzzySearch } from "@/utils/helper";
+import { formatNumber, fuzzySearch, getAssetUrl } from "@/utils/helper";
 import { getTimestampTime } from "@/utils/timeTools";
 import { playAllSongs } from "@/utils/Player";
 import debounce from "@/utils/debounce";

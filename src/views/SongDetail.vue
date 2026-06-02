@@ -16,7 +16,7 @@
           <n-gi span="24 m:10 l:8">
             <div class="cover-section">
               <n-image v-if="songData?.track_info?.album?.pmid" :src="getCoverUrl(songData.track_info.album.pmid)"
-                class="main-cover" fallback-src="/images/pic/song.jpg" show-toolbar-tooltip />
+                class="main-cover" :fallback-src="getAssetUrl('/images/pic/song.jpg')" show-toolbar-tooltip />
               <div v-else class="cover-placeholder">
                 <i class="ri-music-2-line"></i>
               </div>
@@ -109,6 +109,7 @@ import { musicData, siteStatus } from '@/stores';
 import useListenTogetherStore from '@/stores/listenTogether';
 import { getSongPlayTime } from '@/utils/timeTools';
 import SvgIcon from '@/components/Global/SvgIcon';
+import { getAssetUrl } from '@/utils/helper';
 
 const route = useRoute();
 const router = useRouter();

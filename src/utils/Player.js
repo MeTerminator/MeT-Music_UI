@@ -14,6 +14,7 @@ import { parseLyric } from "@/utils/parseLyric";
 
 // 全局播放器
 let player;
+let currentPlayId = 0;
 // 时长定时器
 let seekInterval;
 // let justSeekInterval;
@@ -110,6 +111,7 @@ const reportPlaybackStatus = (eventType) => {
  */
 export const initPlayer = async (playNow = false) => {
   console.log("[Player.js] initPlayer called with playNow =", playNow);
+  const myPlayId = ++currentPlayId;
   try {
     // 停止播放器
     soundStop();
@@ -127,6 +129,10 @@ export const initPlayer = async (playNow = false) => {
     // 获取封面
     if (isLocalSong) {
       music.playSongData.localCover = await getLocalCoverData(playSongData?.path);
+    }
+    if (myPlayId !== currentPlayId) {
+      console.log("[Player.js] initPlayer discarded after local cover fetching");
+      return;
     }
     const cover = isLocalSong ? music.playSongData?.localCover : playSongData?.coverSize;
     // 歌词归位
@@ -153,6 +159,11 @@ export const initPlayer = async (playNow = false) => {
         played: getSongPlayTime(0),
         durationTime: getSongPlayTime(simulationDuration),
       };
+
+      if (myPlayId !== currentPlayId) {
+        console.log("[Player.js] initPlayer simulation aborted");
+        return;
+      }
 
       if (playNow) {
         status.playState = true;
@@ -187,10 +198,16 @@ export const initPlayer = async (playNow = false) => {
       status.playLoading = true;
       // 获取播放地址
       const url = await getNormalSongUrl(id, status, playNow);
+      
+      if (myPlayId !== currentPlayId) {
+        console.log("[Player.js] initPlayer discarded after getNormalSongUrl");
+        return;
+      }
+      
       // 正常播放地址
       if (url) {
         status.playUseOtherSource = false;
-        createPlayer(url);
+        await createPlayer(url, playNow, myPlayId);
       }
       // 下一曲
       else {
@@ -214,8 +231,12 @@ export const initPlayer = async (playNow = false) => {
       const url = playList[playIndex]?.path;
       if (playNow && url) status.playState = true;
       if (url) {
+        if (myPlayId !== currentPlayId) {
+          console.log("[Player.js] initPlayer discarded before local song createPlayer");
+          return;
+        }
         // 创建播放器
-        createPlayer(url);
+        await createPlayer(url, playNow, myPlayId);
       } else {
         if (status.isInRoom) {
           status.playLoading = false;
@@ -225,6 +246,10 @@ export const initPlayer = async (playNow = false) => {
           changePlayIndex("next", playNow);
         }
       }
+    }
+    if (myPlayId !== currentPlayId) {
+      console.log("[Player.js] initPlayer discarded before loading resources");
+      return;
     }
     // 获取歌词
     if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData);
@@ -282,8 +307,8 @@ const getNormalSongUrl = async (id, status, playNow) => {
  * @param {number} volume - 音量（ 默认为 0.7 ）
  * @param {number} seek - 初始播放进度（ 默认为 0 ）
  */
-export const createPlayer = async (src, autoPlay = true) => {
-  console.log("[Player.js] createPlayer called with src =", src, "autoPlay =", autoPlay);
+export const createPlayer = async (src, autoPlay = true, playId = null) => {
+  console.log("[Player.js] createPlayer called with src =", src, "autoPlay =", autoPlay, "playId =", playId);
   try {
     // --- 新增：确保已退出模拟模式 ---
     isSimulating = false;
@@ -302,6 +327,14 @@ export const createPlayer = async (src, autoPlay = true) => {
     // 获取播放链接（非电台及云盘歌曲）
     const songUrl =
       useMusicCache && playMode !== "dj" && !playSongData.pc ? await getBlobUrlFromUrl(src) : src;
+
+    // --- Guard check after async blob url fetch ---
+    if (playId && playId !== currentPlayId) {
+      console.log("[Player.js] createPlayer discarded because playId changed during blob fetching");
+      return;
+    }
+    // --- Guard check end ---
+
     console.log("播放地址：", songUrl);
     // 初始化播放器
     status.playTimeData = {
@@ -347,9 +380,16 @@ export const createPlayer = async (src, autoPlay = true) => {
         const room = ltStore.roomState;
         const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
         const targetSeek = (room.seek_position || 0) + elapsed;
-        setSeek(targetSeek, true);
         if (room.is_playing) {
+          player?.once("play", () => {
+            const currentElapsed = (Date.now() - (room.receivedAt || Date.now())) / 1000;
+            const currentTargetSeek = (room.seek_position || 0) + currentElapsed;
+            console.log("[Player.js] room is playing, seeking inside play event to", currentTargetSeek);
+            setSeek(currentTargetSeek, true);
+          });
           fadePlayOrPause("play");
+        } else {
+          setSeek(targetSeek, true);
         }
       } else {
         // 自动播放
@@ -616,13 +656,19 @@ export const fadePlayOrPause = (type = "play") => {
       updateMediaSessionPosition();
     }
 
-    player?.fade(status.playVolume, 0, duration);
-    player?.once("fade", () => {
+    if (player?.state() === "loading") {
       player?.pause();
       cleanAllInterval();
-      // 再次确认状态
-      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
-    });
+      status.playState = false;
+    } else {
+      player?.fade(status.playVolume, 0, duration);
+      player?.once("fade", () => {
+        player?.pause();
+        cleanAllInterval();
+        // 再次确认状态
+        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+      });
+    }
   }
 };
 
@@ -636,7 +682,7 @@ export const playOrPause = async () => {
     return;
   }
   // --- 修改：兼容模拟播放 ---
-  const isPlaying = isSimulating ? status.playState : player?.playing();
+  const isPlaying = isSimulating ? status.playState : (player?.playing() || status.playState);
   fadePlayOrPause(isPlaying ? "pause" : "play");
   // --- 修改结束 ---
 };

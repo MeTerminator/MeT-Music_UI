@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import useSiteStatusStore from "./siteStatus";
 import useMusicDataStore from "./musicData";
 import useSiteDataStore from "./siteData";
+import { getAssetUrl } from "@/utils/helper";
 
 export const useListenTogetherStore = defineStore("listenTogether", {
   state: () => {
@@ -32,6 +33,7 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       userId: "", // Session ID
       lastSeekSentTime: 0, // Throttle seek sends to at most 1s once
       userInfo: null,
+      _expectingFirstState: false, // Flag to trigger syncPlayback on first room_state after joining
     };
   },
   actions: {
@@ -48,11 +50,12 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       this.userId = getSessionId();
 
       this.roomCode = code;
+      this._expectingFirstState = true; // Mark that the next room_state is the first after joining
 
       // Save userInfo explicitly
       this.userInfo = {
         nickname: isAnonymousVal ? "Anonymous" : (nickname || "").trim() || "Anonymous",
-        avatar: userAvatar || "/images/pic/avatar.jpg",
+        avatar: userAvatar || getAssetUrl("/images/pic/avatar.jpg"),
         qq: isAnonymousVal ? "" : String(qq || ""),
         is_anonymous: !!isAnonymousVal,
       };
@@ -87,11 +90,18 @@ export const useListenTogetherStore = defineStore("listenTogether", {
         try {
           const payload = JSON.parse(event.data);
           if (payload.type === "room_state") {
+            const isFirstState = this._expectingFirstState;
+            this._expectingFirstState = false;
             payload.room.receivedAt = Date.now();
             this.roomState = payload.room;
             this.roomUuid = payload.room.uuid;
             statusStore.roomUuid = payload.room.uuid;
-            this.syncPlayerState(payload.event);
+            if (isFirstState) {
+              // Short delay to allow the player to be ready before syncing
+              setTimeout(() => this.syncPlayback(), 300);
+            } else {
+              this.syncPlayerState(payload.event);
+            }
           } else if (payload.type === "error") {
             if (typeof $message !== "undefined") $message.error(payload.message);
           }
@@ -131,13 +141,10 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       if (currentRoomSong) {
         const localPlaySong = musicStore.getPlaySongData;
 
-        // Switch to the correct song if different
-        if (localPlaySong?.id !== currentRoomSong.id) {
+        // Switch to the correct song if different or if player is not initialized
+        if (localPlaySong?.id !== currentRoomSong.id || !window.$player) {
           musicStore.playSongData = currentRoomSong;
           await player.initPlayer(room.is_playing);
-          const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
-          const targetSeek = room.seek_position + elapsed;
-          player.setSeek(targetSeek, true);
         } else {
           // Play/Pause sync
           if (room.is_playing && !statusStore.playState) {
@@ -327,14 +334,21 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       if (currentRoomSong) {
         musicStore.playList = room.playlist;
         statusStore.playIndex = room.current_song_index;
-        musicStore.playSongData = currentRoomSong;
         
-        await player.initPlayer(true);
-        const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
-        const targetSeek = room.seek_position + elapsed;
-        player.setSeek(targetSeek, true);
-        if (room.is_playing) {
-          player.fadePlayOrPause("play");
+        const localPlaySong = musicStore.getPlaySongData;
+        // If already the same song and player is active, just force sync state and seek
+        if (localPlaySong?.id === currentRoomSong.id && window.$player) {
+          if (room.is_playing && !statusStore.playState) {
+            player.fadePlayOrPause("play");
+          } else if (!room.is_playing && statusStore.playState) {
+            player.fadePlayOrPause("pause");
+          }
+          const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
+          const targetSeek = (room.seek_position || 0) + elapsed;
+          player.setSeek(targetSeek, true);
+        } else {
+          musicStore.playSongData = currentRoomSong;
+          await player.initPlayer(true);
         }
       } else {
         if (typeof $message !== "undefined") $message.warning("共享播放列表为空，无可同步的歌曲");
@@ -424,10 +438,10 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       
       const loggedInQQ = siteDataStore.userData?.userId || "";
       const avatarUrl = isAnonymousVal 
-        ? "/images/pic/avatar.jpg" 
+        ? getAssetUrl("/images/pic/avatar.jpg") 
         : loggedInQQ 
           ? `https://q1.qlogo.cn/g?b=qq&nk=${loggedInQQ}&s=640`
-          : siteDataStore.userData?.detail?.profile?.avatarUrl || "/images/pic/avatar.jpg";
+          : siteDataStore.userData?.detail?.profile?.avatarUrl || getAssetUrl("/images/pic/avatar.jpg");
 
       return {
         nickname: isAnonymousVal ? "Anonymous" : nickname.trim() || "Anonymous",

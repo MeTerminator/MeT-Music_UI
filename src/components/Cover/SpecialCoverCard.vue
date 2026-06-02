@@ -18,7 +18,7 @@
           class: 'cover-img',
         }"
         class="cover-main-img"
-        fallback-src="/images/pic/default.jpg?assest"
+        :fallback-src="getAssetUrl('/images/pic/default.jpg?assest')"
         preview-disabled
         @load="
           (e) => {
@@ -85,6 +85,7 @@ const props = defineProps({
     default: "100px",
   },
 });
+import { getAssetUrl } from "@/utils/helper";
 </script>
 
 <style lang="scss" scoped>

@@ -18,7 +18,7 @@
           >
             <template #placeholder>
               <div class="cover-loading">
-                <img class="loading-img" src="/images/pic/avatar.jpg?assest" alt="avatar" />
+                <img class="loading-img" :src="getAssetUrl('/images/pic/avatar.jpg?assest')" alt="avatar" />
               </div>
             </template>
           </n-image>
@@ -120,6 +120,7 @@
 import { useRouter } from "vue-router";
 import { getArtistDetail } from "@/api/artist";
 import formatData from "@/utils/formatData";
+import { getAssetUrl } from "@/utils/helper";
 
 const router = useRouter();
 

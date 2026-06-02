@@ -113,7 +113,7 @@
             >
               <template #placeholder>
                 <div class="cover-loading">
-                  <img class="loading-img" src="/images/pic/avatar.jpg?assest" alt="song" />
+                  <img class="loading-img" :src="getAssetUrl('/images/pic/avatar.jpg?assest')" alt="song" />
                 </div>
               </template>
             </n-image>
@@ -154,7 +154,7 @@ import {
 import { fadePlayOrPause } from "@/utils/Player";
 import { siteStatus } from "@/stores";
 import { useRouter } from "vue-router";
-import { formatNumber } from "@/utils/helper";
+import { formatNumber, getAssetUrl } from "@/utils/helper";
 import SvgIcon from "@/components/Global/SvgIcon";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";

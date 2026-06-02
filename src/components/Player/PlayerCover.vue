@@ -13,7 +13,7 @@
     <img
       v-if="playCoverType === 'record' && !isCompressed"
       :class="{ pointer: true, play: playState }"
-      src="/images/pic/pointer.png?assest"
+      :src="getAssetUrl('/images/pic/pointer.png?assest')"
       alt="pointer"
     />
     <n-image
@@ -39,7 +39,7 @@
     >
       <template #placeholder>
         <div class="cover-loading">
-          <img class="loading-img" src="/images/pic/song.jpg?assest" alt="loading-img" />
+          <img class="loading-img" :src="getAssetUrl('/images/pic/song.jpg?assest')" alt="loading-img" />
         </div>
       </template>
     </n-image>
@@ -59,6 +59,7 @@
 <script setup>
 import { storeToRefs } from "pinia";
 import { musicData, siteStatus, siteSettings } from "@/stores";
+import { getAssetUrl } from "@/utils/helper";
 
 const music = musicData();
 const status = siteStatus();

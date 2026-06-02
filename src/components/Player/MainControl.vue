@@ -34,7 +34,7 @@
               ">
               <template #placeholder>
                 <div class="cover-loading">
-                  <img class="loading-img" src="/images/pic/song.jpg?assest" alt="loading-img" />
+                  <img class="loading-img" :src="getAssetUrl('/images/pic/song.jpg?assest')" alt="loading-img" />
                 </div>
               </template>
             </n-image>
@@ -147,7 +147,7 @@
             </n-icon>
           </n-dropdown>
           <!-- 倍速 -->
-          <n-popover :show-arrow="false" trigger="hover" placement="top-end" raw>
+          <n-popover v-if="!status.isInRoom" :show-arrow="false" trigger="hover" placement="top-end" raw>
             <template #trigger>
               <div class="speed hidden" @click.stop="(playRate = 1), setRate(1)" @dblclick.stop>
                 <n-icon v-if="playRate === 1" size="22">
@@ -219,7 +219,7 @@ import debounce from "@/utils/debounce";
 import SvgIcon from "@/components/Global/SvgIcon";
 import VueSlider from "vue-slider-component";
 import "vue-slider-component/theme/default.css";
-import { copyData } from "@/utils/helper";
+import { copyData, getAssetUrl } from "@/utils/helper";
 import useListenTogetherStore from "@/stores/listenTogether";
 
 const router = useRouter();
@@ -611,7 +611,7 @@ watch(
             justify-content: center;
             border-radius: 50%;
             animation: playerCoverRotate 18s linear infinite;
-            background: no-repeat url("/images/pic/record.png?assest") center;
+            background: no-repeat url("/app/images/pic/record.png?assest") center;
 
             :deep(img) {
               width: 40px;

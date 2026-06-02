@@ -53,12 +53,33 @@ export const getLocalCoverData = async (path, isAlbum = false) => {
       return lastCoverBlobUrl;
     } else {
       // 如果没有封面数据
-      return `/images/pic/${isAlbum ? "album" : "song"}.jpg?assest`;
+      return getAssetUrl(`/images/pic/${isAlbum ? "album" : "song"}.jpg?assest`);
     }
   } catch (error) {
     console.error("获取本地音乐封面出错：", error);
     throw error;
   }
+};
+
+/**
+ * 转换静态资源路径，支持 Vite 的 base 配置
+ * @param {string} path - 相对 public 根目录的路径，以 '/' 开头，如 '/images/pic/avatar.jpg'
+ * @returns {string} - 处理后的路径
+ */
+export const getAssetUrl = (path) => {
+  if (!path) return "";
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("blob:") ||
+    path.startsWith("data:")
+  ) {
+    return path;
+  }
+  const base = import.meta.env.BASE_URL || "/";
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  const cleanBase = base.endsWith("/") ? base : base + "/";
+  return cleanBase + cleanPath;
 };
 
 /**

@@ -13,7 +13,7 @@
   >
     <div class="login-content">
       <div class="title">
-        <img class="logo" src="/images/icons/favicon.png?asset" alt="logo" />
+        <img class="logo" :src="getAssetUrl('/images/icons/favicon.png?asset')" alt="logo" />
       </div>
       <!-- 登录方式 -->
       <n-tabs class="login-tabs" default-value="login" type="segment" animated>
@@ -43,6 +43,7 @@
 <script setup>
 import { siteData } from "@/stores";
 import { toLogout, isLogin } from "@/utils/auth";
+import { getAssetUrl } from "@/utils/helper";
 
 const data = siteData();
 

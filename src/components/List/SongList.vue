@@ -48,7 +48,7 @@
           ">
             <template #placeholder>
               <div class="cover-loading">
-                <img class="loading-img" src="/images/pic/song.jpg?assest" alt="song" />
+                <img class="loading-img" :src="getAssetUrl('/images/pic/song.jpg?assest')" alt="song" />
               </div>
             </template>
           </n-image>
@@ -155,6 +155,7 @@ import { useRouter } from "vue-router";
 import { siteData, siteSettings, musicData, siteStatus } from "@/stores";
 import { initPlayer, fadePlayOrPause, addSongToNext } from "@/utils/Player";
 import useListenTogetherStore from "@/stores/listenTogether";
+import { getAssetUrl } from "@/utils/helper";
 
 const router = useRouter();
 const music = musicData();

@@ -40,10 +40,10 @@
                     class="loading-img"
                     :src="
                       type === 'mv'
-                        ? '/images/pic/video.png?assest'
+                        ? getAssetUrl('/images/pic/video.png?assest')
                         : type === 'artist'
-                          ? '/images/pic/artist.jpg?assest'
-                          : '/images/pic/album.jpg?assest'
+                          ? getAssetUrl('/images/pic/artist.jpg?assest')
+                          : getAssetUrl('/images/pic/album.jpg?assest')
                     "
                     alt="song"
                   />
@@ -134,6 +134,7 @@
 <script setup>
 import { useRouter } from "vue-router";
 import { siteSettings } from "@/stores";
+import { getAssetUrl } from "@/utils/helper";
 
 const router = useRouter();
 const settings = siteSettings();

@@ -19,7 +19,7 @@
           >
             <template #placeholder>
               <div class="cover-loading">
-                <img class="loading-img" src="/images/pic/song.jpg?assest" alt="song" />
+                <img class="loading-img" :src="getAssetUrl('/images/pic/song.jpg?assest')" alt="song" />
               </div>
             </template>
           </n-image>
@@ -39,7 +39,7 @@
               :src="
                 (playListDetail.creator?.avatarUrl + '?param=300y$300').replace(/^http:/, 'https:')
               "
-              fallback-src="/images/pic/avatar.jpg?assest"
+              :fallback-src="getAssetUrl('/images/pic/avatar.jpg?assest')"
               round
             />
             <n-text class="nickname">{{ playListDetail.creator?.nickname || "未知创建者" }}</n-text>
@@ -202,7 +202,7 @@ import {
   getPlayListDetail,
   getAllPlayList,
 } from "@/api/playlist";
-import { formatNumber, fuzzySearch } from "@/utils/helper";
+import { formatNumber, fuzzySearch, getAssetUrl } from "@/utils/helper";
 import { getTimestampTime } from "@/utils/timeTools";
 import { playAllSongs } from "@/utils/Player";
 import debounce from "@/utils/debounce";

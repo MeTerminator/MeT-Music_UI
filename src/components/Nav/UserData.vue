@@ -269,13 +269,13 @@ function goToPlayer() {
 
 @keyframes pulse-border {
   0% {
-    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0.4);
+    box-shadow: 0 0 0 0 var(--main-second-color);
   }
   70% {
-    box-shadow: 0 0 0 8px rgba(24, 160, 88, 0);
+    box-shadow: 0 0 0 8px transparent;
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 </style>

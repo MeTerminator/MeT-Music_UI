@@ -1,4 +1,5 @@
 import { getSongTime } from "@/utils/timeTools";
+import { getAssetUrl } from "@/utils/helper";
 
 /**
  * 格式化原始数据
@@ -141,12 +142,12 @@ const formatData = (data, type = "playlist", noTracks = false) => {
  */
 const getCoverUrl = (url, size = 500) => {
   try {
-    if (!url) return "/images/pic/song.jpg?assest";
+    if (!url) return getAssetUrl("/images/pic/song.jpg?assest");
     const imageUrl = url?.replace(/^http:/, "https:");
     return imageUrl.replace("500x500", `${size}x${size}`)
   } catch (error) {
     console.error("图片链接处理出错：", error);
-    return "/images/pic/song.jpg?assest";
+    return getAssetUrl("/images/pic/song.jpg?assest");
   }
 };
 

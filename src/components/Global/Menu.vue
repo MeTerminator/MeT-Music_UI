@@ -15,6 +15,7 @@ import { NIcon, NText, NAvatar } from "naive-ui";
 import { useRouter, RouterLink } from "vue-router";
 import { isLogin } from "@/utils/auth";
 import SvgIcon from "@/components/Global/SvgIcon";
+import { getAssetUrl } from "@/utils/helper";
 
 const router = useRouter();
 const data = siteData();
@@ -140,7 +141,7 @@ const changeUserPlaylists = (data) => {
               },
             },
             [
-              h(NAvatar, { src: v.coverImgUrl, fallbackSrc: "/images/pic/album.jpg?assest" }),
+              h(NAvatar, { src: v.coverImgUrl, fallbackSrc: getAssetUrl("/images/pic/album.jpg?assest") }),
               h(NText, null, () => [v.name]),
             ],
           )

@@ -1,167 +1,217 @@
 <!-- 一起听歌 Listen Together View -->
 <template>
-  <div class="listen-together-container">
+  <div :class="['listen-together', themeType]">
+    <n-h1 class="title">
+      <n-text>一起听歌</n-text>
+    </n-h1>
+    
     <Transition name="fade" mode="out-in">
       <!-- 进房前的登录/配置面板 -->
-      <div v-if="!isInRoom" class="setup-panel-container">
-        <n-card class="setup-card" :bordered="false">
-          <div class="setup-header">
-            <n-icon size="48" class="music-icon">
-              <MusicalNotesOutline />
-            </n-icon>
-            <h2 class="title">一起听歌</h2>
-            <p class="subtitle">与好友实时分享音乐，心动旋律，实时传递</p>
-          </div>
+      <div v-if="!isInRoom" class="setup-panel">
+        <n-p class="subtitle-tip">与好友实时分享音乐，心动旋律，实时传递</n-p>
 
-          <!-- 用户设置项 -->
-          <div class="setup-form">
-            <div class="avatar-preview-section">
-              <n-avatar
-                round
-                :size="80"
-                :src="userAvatar"
-                fallback-src="/images/pic/avatar.jpg"
-                class="avatar-glow"
-              />
-              <div class="avatar-source-tip">
-                <n-text depth="3" v-if="isAnonymous">匿名头像</n-text>
-                <n-text depth="3" v-else-if="loggedInQQ">QQ 头像</n-text>
-                <n-text depth="3" v-else-if="userLoginStatus">账户头像</n-text>
-                <n-text depth="3" v-else>默认头像</n-text>
-              </div>
+        <div class="set-type">
+          <n-h3 prefix="bar"> 用户设置 </n-h3>
+
+          <!-- 个人头像 -->
+          <n-card class="set-item">
+            <div class="name">
+              个人头像
+              <n-text class="tip">
+                <template v-if="isAnonymous">匿名头像</template>
+                <template v-else-if="loggedInQQ">QQ 头像</template>
+                <template v-else-if="userLoginStatus">账户头像</template>
+                <template v-else>默认头像</template>
+              </n-text>
             </div>
+            <n-avatar
+              round
+              :size="48"
+              :src="userAvatar"
+              :fallback-src="getAssetUrl('/images/pic/avatar.jpg')"
+            />
+          </n-card>
 
-            <n-space vertical size="large">
+          <!-- 昵称 -->
+          <n-card class="set-item">
+            <div class="name">
+              昵称
+              <n-text class="tip">在房间中显示的昵称，匿名加入时该项被禁用</n-text>
+            </div>
+            <n-input
+              v-model:value="nickname"
+              type="text"
+              placeholder="请输入昵称"
+              class="set"
+              :disabled="isAnonymous"
+            />
+          </n-card>
+
+          <!-- 匿名加入 -->
+          <n-card class="set-item">
+            <div class="name">
+              匿名加入
+              <n-text class="tip">启用后将以“匿名”身份加入，隐藏您的昵称和头像</n-text>
+            </div>
+            <n-switch v-model:value="isAnonymous" :round="false" />
+          </n-card>
+        </div>
+
+        <div class="set-type">
+          <n-h3 prefix="bar"> 房间操作 </n-h3>
+
+          <!-- 加入房间 -->
+          <n-card class="set-item" :content-style="{ flexDirection: 'column', alignItems: 'flex-start' }">
+            <div class="name">
+              加入房间
+              <n-text class="tip">请输入 6 位数字的房间号加入好友的房间</n-text>
+            </div>
+            <n-flex align="center" style="width: 100%; margin-top: 15px; gap: 12px;">
               <n-input
-                v-model:value="nickname"
+                v-model:value="joinCode"
                 type="text"
-                placeholder="请输入昵称"
-                round
-                size="large"
-                :disabled="isAnonymous"
+                placeholder="请输入 6 位数房间号"
+                maxlength="6"
+                style="max-width: 250px;"
               >
                 <template #prefix>
-                  <n-icon><PersonOutline /></n-icon>
+                  <n-icon><EnterOutline /></n-icon>
                 </template>
               </n-input>
+              <n-button
+                type="primary"
+                :loading="joining"
+                :disabled="!joinCode || joinCode.length !== 6"
+                @click="handleJoinRoom"
+              >
+                立即加入
+              </n-button>
+            </n-flex>
+          </n-card>
 
-              <n-flex justify="space-between" align="center" class="anonymous-flex">
-                <n-text>匿名加入</n-text>
-                <n-switch v-model:value="isAnonymous" />
-              </n-flex>
-
-              <n-divider />
-
-              <!-- 房间操作项 -->
-              <div class="room-action-section">
-                <n-tabs type="segment" animated>
-                  <!-- 加入房间 -->
-                  <n-tab-pane name="join" tab="加入房间">
-                    <n-space vertical size="large" style="margin-top: 15px">
-                      <n-input
-                        v-model:value="joinCode"
-                        type="text"
-                        placeholder="请输入 6 位数房间号"
-                        round
-                        size="large"
-                        maxlength="6"
-                        class="code-input"
-                      >
-                        <template #prefix>
-                          <n-icon><EnterOutline /></n-icon>
-                        </template>
-                      </n-input>
-                      <n-button
-                        type="primary"
-                        round
-                        block
-                        size="large"
-                        :loading="joining"
-                        :disabled="!joinCode || joinCode.length !== 6"
-                        @click="handleJoinRoom"
-                      >
-                        立即加入
-                      </n-button>
-                    </n-space>
-                  </n-tab-pane>
-
-                  <!-- 创建房间 -->
-                  <n-tab-pane name="create" tab="创建新房间">
-                    <div style="margin-top: 15px">
-                      <p class="create-tip">创建一个听歌房间，您将成为房主并能邀请好友共同听歌。</p>
-                      <n-button
-                        type="primary"
-                        round
-                        block
-                        size="large"
-                        :loading="creating"
-                        @click="handleCreateRoom"
-                      >
-                        创建房间
-                      </n-button>
-                    </div>
-                  </n-tab-pane>
-                </n-tabs>
-              </div>
-            </n-space>
-          </div>
-        </n-card>
+          <!-- 创建房间 -->
+          <n-card class="set-item">
+            <div class="name">
+              创建房间
+              <n-text class="tip">创建一个新的房间，您将成为房主并可以添加共享播放歌曲</n-text>
+            </div>
+            <n-button
+              type="primary"
+              :loading="creating"
+              @click="handleCreateRoom"
+            >
+              创建新房间
+            </n-button>
+          </n-card>
+        </div>
       </div>
 
       <!-- 房间面板 -->
       <div v-else class="room-panel-container">
         <!-- 房间页眉 -->
-        <div class="room-header-section">
-          <div class="room-identity">
-            <n-badge color="#18a058" dot processing>
+        <n-card class="header-card">
+          <n-flex justify="space-between" align="center" wrap="wrap" :size="[20, 15]">
+            <!-- 左侧：房间标识与状态 -->
+            <n-flex align="center" :size="15" wrap="wrap">
+              <n-badge color="var(--main-color)" dot processing>
+                <n-tooltip trigger="hover">
+                  <template #trigger>
+                    <n-tag
+                      type="primary"
+                      round
+                      size="large"
+                      style="cursor: pointer; font-weight: bold;"
+                      @click="handleCopyCode"
+                    >
+                      房间号: {{ roomState.code }}
+                      <template #icon>
+                        <n-icon><CopyOutline /></n-icon>
+                      </template>
+                    </n-tag>
+                  </template>
+                  点击复制房间号
+                </n-tooltip>
+              </n-badge>
+
               <n-tooltip trigger="hover">
                 <template #trigger>
-                  <div class="room-code-tag clickable-code" @click="handleCopyCode">
-                    房间号: {{ roomState.code }}
-                    <n-icon class="copy-icon-inline"><CopyOutline /></n-icon>
-                  </div>
+                  <n-tag
+                    :bordered="false"
+                    round
+                    size="medium"
+                    class="room-uuid-tag"
+                    @click="handleCopyUuid"
+                  >
+                    ID: {{ roomState.uuid }}
+                    <template #icon>
+                      <n-icon><CopyOutline /></n-icon>
+                    </template>
+                  </n-tag>
                 </template>
-                点击复制房间号
+                点击复制房间 ID
               </n-tooltip>
-            </n-badge>
-            <n-text depth="3" class="room-uuid" @click="handleCopyUuid">
-              ID: {{ roomState.uuid }}
-              <n-icon class="copy-icon"><CopyOutline /></n-icon>
-            </n-text>
-          </div>
 
-          <!-- 房间时间与续期 -->
-          <div class="room-expiry-controls">
-            <n-text class="expiry-time" :type="remainingTime < 600 ? 'error' : 'default'">
-              <n-icon><TimeOutline /></n-icon>
-              剩余: {{ formattedRemainingTime }}
-            </n-text>
-            <n-button size="small" secondary round type="info" @click="ltStore.renewRoom">
-              手动续期
-            </n-button>
-            <n-flex align="center" size="small">
-              <n-text depth="3">自动续期</n-text>
-              <n-switch v-model:value="autoRenew" size="small" />
+              <n-tag :bordered="false" :type="remainingTime < 600 ? 'error' : 'warning'" round size="medium">
+                <template #icon>
+                  <n-icon><TimeOutline /></n-icon>
+                </template>
+                剩余: {{ formattedRemainingTime }}
+              </n-tag>
             </n-flex>
-            <n-button size="small" round type="primary" @click="ltStore.syncPlayback">
-              立即同步播放
-            </n-button>
-            <n-button size="small" secondary round type="success" @click="openAirplay">
-              打开隔空播放
-            </n-button>
-            <n-button size="small" round type="error" @click="handleDeleteRoom">
-              解散房间
-            </n-button>
-            <n-button size="small" secondary round @click="ltStore.leaveRoom">
-              退出
-            </n-button>
-          </div>
-        </div>
+
+            <!-- 右侧：控制与操作按钮 -->
+            <n-flex align="center" :size="15" wrap="wrap">
+              <!-- 自动续期 -->
+              <n-flex align="center" :size="8" style="margin-right: 5px;">
+                <n-text style="font-size: 13px; font-weight: 500;">自动续期</n-text>
+                <n-switch v-model:value="autoRenew" size="small" />
+              </n-flex>
+
+              <!-- 各种按钮 -->
+              <n-space :size="8" wrap>
+                <n-button size="small" secondary round type="info" @click="ltStore.renewRoom">
+                  <template #icon>
+                    <n-icon><RefreshOutline /></n-icon>
+                  </template>
+                  手动续期
+                </n-button>
+                
+                <n-button size="small" round type="primary" @click="ltStore.syncPlayback">
+                  <template #icon>
+                    <n-icon><PlayOutline /></n-icon>
+                  </template>
+                  立即同步播放
+                </n-button>
+
+                <n-button size="small" secondary round type="success" @click="openAirplay">
+                  <template #icon>
+                    <n-icon><PlayForwardOutline /></n-icon>
+                  </template>
+                  打开隔空播放
+                </n-button>
+
+                <n-button size="small" round type="error" @click="handleDeleteRoom">
+                  <template #icon>
+                    <n-icon><TrashOutline /></n-icon>
+                  </template>
+                  解散房间
+                </n-button>
+
+                <n-button size="small" secondary round @click="ltStore.leaveRoom">
+                  <template #icon>
+                    <n-icon><LogOutOutline /></n-icon>
+                  </template>
+                  退出
+                </n-button>
+              </n-space>
+            </n-flex>
+          </n-flex>
+        </n-card>
 
         <div class="room-main-layout">
           <!-- 左侧：共享播放列表 -->
           <div class="playlist-panel">
-            <n-card class="glass-card list-card" title="共享播放列表" :bordered="false">
+            <n-card class="list-card" title="共享播放列表">
               <div class="playlist-tab">
                 <div v-if="!roomState.playlist.length" class="empty-list">
                   <n-empty description="当前播放队列中没有歌曲。可在应用中右键歌曲 '添加到一起听歌'。" />
@@ -198,7 +248,7 @@
                         <!-- 序号/播放状态 -->
                         <div class="item-index">
                           <span v-if="idx !== roomState.current_song_index">{{ idx + 1 }}</span>
-                          <n-icon v-else color="#18a058" class="pulse-icon">
+                          <n-icon v-else color="var(--main-color)" class="pulse-icon">
                             <VolumeMediumOutline />
                           </n-icon>
                         </div>
@@ -206,8 +256,8 @@
                         <!-- 封面 -->
                         <n-avatar
                           size="small"
-                          :src="song.cover || '/images/pic/song.jpg'"
-                          fallback-src="/images/pic/song.jpg"
+                          :src="song.cover || getAssetUrl('/images/pic/song.jpg')"
+                          :fallback-src="getAssetUrl('/images/pic/song.jpg')"
                           style="margin-right: 10px"
                           draggable="false"
                         />
@@ -243,43 +293,51 @@
           <!-- 右侧：成员列表与房间设置 -->
           <div class="sidebar-panel">
             <n-space vertical size="large">
-              <!-- 房间设置 -->
-              <n-card class="glass-card settings-card" title="房间播放设置" :bordered="false">
-                <n-space vertical size="medium">
-                  <n-flex justify="space-between" align="center">
-                    <n-text depth="2">播放模式</n-text>
-                    <n-tabs
-                      v-model:value="roomState.play_mode"
-                      type="segment"
-                      size="small"
-                      @update:value="handleModeChange"
-                      style="width: 160px"
-                    >
-                      <n-tab name="normal">顺序</n-tab>
-                      <n-tab name="random">随机</n-tab>
-                    </n-tabs>
-                  </n-flex>
+              <!-- 房间播放设置 -->
+              <div class="set-type" style="padding-top: 0; margin-bottom: 0;">
+                <n-h3 prefix="bar">房间播放设置</n-h3>
+                <n-card class="set-item">
+                  <div class="name">
+                    播放模式
+                    <n-text class="tip">列表播放顺序</n-text>
+                  </div>
+                  <n-tabs
+                    v-model:value="roomState.play_mode"
+                    type="segment"
+                    size="small"
+                    @update:value="handleModeChange"
+                    style="width: 160px"
+                  >
+                    <n-tab name="normal">顺序</n-tab>
+                    <n-tab name="random">随机</n-tab>
+                  </n-tabs>
+                </n-card>
 
-                  <n-flex justify="space-between" align="center">
-                    <n-text depth="2">播放后自动删除</n-text>
-                    <n-switch
-                      v-model:value="roomState.delete_after_played"
-                      @update:value="handleSettingsChange"
-                    />
-                  </n-flex>
+                <n-card class="set-item">
+                  <div class="name">
+                    播放后自动删除
+                    <n-text class="tip">从队列播放后自动移出歌曲</n-text>
+                  </div>
+                  <n-switch
+                    v-model:value="roomState.delete_after_played"
+                    @update:value="handleSettingsChange"
+                  />
+                </n-card>
 
-                  <n-flex justify="space-between" align="center">
-                    <n-text depth="2">循环播放列表</n-text>
-                    <n-switch
-                      v-model:value="roomState.loop_playlist"
-                      @update:value="handleSettingsChange"
-                    />
-                  </n-flex>
-                </n-space>
-              </n-card>
+                <n-card class="set-item">
+                  <div class="name">
+                    循环播放列表
+                    <n-text class="tip">播放完队列最后一首是否循环</n-text>
+                  </div>
+                  <n-switch
+                    v-model:value="roomState.loop_playlist"
+                    @update:value="handleSettingsChange"
+                  />
+                </n-card>
+              </div>
 
               <!-- 房间控制抽屉 tabs -->
-              <n-card class="glass-card tab-card" :bordered="false">
+              <n-card class="tab-card">
                 <n-tabs type="line" animated justify-content="space-evenly">
                   <!-- 成员列表 -->
                   <n-tab-pane name="members" tab="在线成员">
@@ -295,13 +353,13 @@
                               <n-avatar
                                 round
                                 size="medium"
-                                :src="member.avatar || '/images/pic/avatar.jpg'"
-                                fallback-src="/images/pic/avatar.jpg"
+                                :src="member.avatar || getAssetUrl('/images/pic/avatar.jpg')"
+                                :fallback-src="getAssetUrl('/images/pic/avatar.jpg')"
                               />
                             </template>
                             <div class="member-nickname-container">
                               <span class="member-nickname-text" style="font-weight: bold;">{{ member.nickname }}</span>
-                              <span class="member-qq-text" style="color: rgba(255, 255, 255, 0.4); font-size: 13px; font-weight: normal; margin-left: 6px;">
+                              <span class="member-qq-text">
                                 <template v-if="member.is_anonymous">(匿名访问)</template>
                                 <template v-else-if="member.qq">({{ member.qq }})</template>
                                 <template v-else>(未绑定)</template>
@@ -350,8 +408,9 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { storeToRefs } from "pinia";
-import { siteData, siteStatus, listenTogether } from "@/stores";
-import { copyData } from "@/utils/helper";
+import { siteData, siteStatus, listenTogether, siteSettings } from "@/stores";
+import { copyData, getAssetUrl } from "@/utils/helper";
+import { Howler } from "howler";
 import {
   MusicalNotesOutline,
   PersonOutline,
@@ -364,17 +423,21 @@ import {
   TrashOutline,
   CopyOutline,
   MenuOutline,
-  VolumeMediumOutline
+  VolumeMediumOutline,
+  RefreshOutline,
+  LogOutOutline
 } from "@vicons/ionicons5";
 
 // Pinia stores
 const dataStore = siteData();
 const statusStore = siteStatus();
 const ltStore = listenTogether();
+const settingsStore = siteSettings();
 
 // Destructure reactive store states
 const { isInRoom, roomCode, roomUuid, roomState, remainingTime, autoRenew } = storeToRefs(ltStore);
 const { userLoginStatus, userData } = storeToRefs(dataStore);
+const { themeType } = storeToRefs(settingsStore);
 
 // Logged-in user QQ ID
 const loggedInQQ = computed(() => dataStore.userData?.userId || "");
@@ -396,7 +459,7 @@ const draggedItemIndex = ref(null);
 // Computes current avatar based on setup fields
 const userAvatar = computed(() => {
   if (isAnonymous.value) {
-    return "/images/pic/avatar.jpg";
+    return getAssetUrl("/images/pic/avatar.jpg");
   }
   if (loggedInQQ.value) {
     return `https://q1.qlogo.cn/g?b=qq&nk=${loggedInQQ.value}&s=640`;
@@ -404,7 +467,7 @@ const userAvatar = computed(() => {
   if (userLoginStatus.value && userData.value?.detail?.profile?.avatarUrl) {
     return userData.value.detail.profile.avatarUrl;
   }
-  return "/images/pic/avatar.jpg";
+  return getAssetUrl("/images/pic/avatar.jpg");
 });
 
 // Auto-fill logged in user info if fields are empty
@@ -477,6 +540,11 @@ const handleCreateRoom = async () => {
     return;
   }
 
+  // Unlock audio context on user interaction
+  if (Howler.ctx && Howler.ctx.state === "suspended") {
+    Howler.ctx.resume().catch(err => console.error("Failed to resume audio context:", err));
+  }
+
   try {
     creating.value = true;
     const response = await fetch("/api/room/create", { method: "POST" });
@@ -502,6 +570,11 @@ const handleJoinRoom = async () => {
   if (!joinCode.value || joinCode.value.length !== 6) {
     window.$message.warning("请输入6位数房间号");
     return;
+  }
+
+  // Unlock audio context on user interaction
+  if (Howler.ctx && Howler.ctx.state === "suspended") {
+    Howler.ctx.resume().catch(err => console.error("Failed to resume audio context:", err));
   }
 
   try {
@@ -603,103 +676,75 @@ const handleDeleteRoom = () => {
 </script>
 
 <style lang="scss" scoped>
-.listen-together-container {
-  position: relative;
-  min-height: calc(100vh - 60px);
+.listen-together {
+  max-width: 1200px;
+  margin: 0 auto;
   padding: 30px;
   box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 
-  // Setup / Entry Panel CSS
-  .setup-panel-container {
+  .title {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    height: 58px;
+    margin: 20px 0;
+    font-size: 36px;
+    font-weight: bold;
+  }
+
+  .subtitle-tip {
+    font-size: 14px;
+    opacity: 0.65;
+    margin-bottom: 24px;
+  }
+
+  .setup-panel {
     width: 100%;
-    max-width: 500px;
-    z-index: 1;
+  }
 
-    .setup-card {
-      background: rgba(25, 25, 25, 0.65);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-      padding: 10px;
+  .set-type {
+    padding-top: 20px;
+    margin-bottom: 20px;
 
-      .setup-header {
-        text-align: center;
-        margin-bottom: 25px;
+    &:first-of-type {
+      padding-top: 10px;
+    }
 
-        .music-icon {
-          color: var(--n-primary-color);
-          margin-bottom: 10px;
-          filter: drop-shadow(0 0 10px rgba(24, 160, 88, 0.4));
-        }
+    .set-item {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 12px;
 
-        .title {
-          font-size: 28px;
-          font-weight: 800;
-          letter-spacing: 1px;
-          margin: 10px 0 5px 0;
-          background: linear-gradient(135deg, #ffffff 0%, #a5a5a5 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
+      &:last-child {
+        margin-bottom: 0;
+      }
 
-        .subtitle {
-          font-size: 13px;
-          color: rgba(255, 255, 255, 0.5);
+      :deep(.n-card__content) {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .name {
+        font-size: 16px;
+        display: flex;
+        flex-direction: column;
+        padding-right: 20px;
+
+        .tip {
+          font-size: 12px;
+          opacity: 0.6;
+          margin-top: 4px;
         }
       }
 
-      .setup-form {
-        .avatar-preview-section {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          margin-bottom: 25px;
+      .set {
+        width: 200px;
 
-          .avatar-glow {
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 0 25px rgba(24, 160, 88, 0.35);
-            transition: all 0.3s ease;
-
-            &:hover {
-              transform: scale(1.05);
-              box-shadow: 0 0 35px rgba(24, 160, 88, 0.65);
-            }
-          }
-
-          .avatar-source-tip {
-            margin-top: 8px;
-            font-size: 11px;
-          }
-        }
-
-        .anonymous-flex {
-          padding: 8px 14px;
-          background: rgba(255, 255, 255, 0.03);
-          border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.04);
-        }
-
-        .create-tip {
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.4);
-          text-align: center;
-          margin-bottom: 20px;
-          line-height: 1.6;
-        }
-
-        .code-input {
-          :deep(input) {
-            text-align: center;
-            font-size: 18px;
-            letter-spacing: 4px;
-            font-weight: bold;
-          }
+        @media (max-width: 768px) {
+          width: 140px;
+          min-width: 140px;
         }
       }
     }
@@ -708,96 +753,15 @@ const handleDeleteRoom = () => {
   // Room Dashboard CSS
   .room-panel-container {
     width: 100%;
-    max-width: 1150px;
-    z-index: 1;
+    max-width: 1200px;
     display: flex;
     flex-direction: column;
     gap: 20px;
 
-    .room-header-section {
-      background: rgba(25, 25, 25, 0.6);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 15px 25px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 15px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
-
-      .room-identity {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-
-        .room-code-tag {
-          background: rgba(24, 160, 88, 0.15);
-          color: #18a058;
-          border: 1px solid rgba(24, 160, 88, 0.3);
-          padding: 6px 14px;
-          border-radius: 20px;
-          font-weight: 800;
-          font-size: 16px;
-          letter-spacing: 0.5px;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-
-          &.clickable-code {
-            cursor: pointer;
-            transition: all 0.2s;
-
-            &:hover {
-              background: rgba(24, 160, 88, 0.25);
-              border-color: rgba(24, 160, 88, 0.5);
-            }
-          }
-
-          .copy-icon-inline {
-            font-size: 14px;
-            opacity: 0.8;
-          }
-        }
-
-        .room-uuid {
-          font-size: 12px;
-          background: rgba(255, 255, 255, 0.04);
-          padding: 6px 12px;
-          border-radius: 20px;
-          cursor: pointer;
-          transition: all 0.2s;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          border: 1px solid rgba(255, 255, 255, 0.04);
-
-          &:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.15);
-          }
-
-          .copy-icon {
-            font-size: 14px;
-          }
-        }
-      }
-
-      .room-expiry-controls {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        flex-wrap: wrap;
-
-        .expiry-time {
-          font-weight: bold;
-          font-size: 13px;
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-        }
+    .header-card {
+      border-radius: 8px;
+      :deep(.n-card__content) {
+        padding: 12px 20px;
       }
     }
 
@@ -810,13 +774,8 @@ const handleDeleteRoom = () => {
         grid-template-columns: 1fr;
       }
 
-      .glass-card {
-        background: rgba(20, 20, 20, 0.55);
-        backdrop-filter: blur(25px);
-        -webkit-backdrop-filter: blur(25px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 20px;
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
+      .list-card, .tab-card {
+        border-radius: 8px;
         height: 100%;
         box-sizing: border-box;
       }
@@ -852,7 +811,7 @@ const handleDeleteRoom = () => {
               align-items: center;
               background: rgba(255, 255, 255, 0.02);
               border: 1px solid rgba(255, 255, 255, 0.03);
-              border-radius: 12px;
+              border-radius: 8px;
               padding: 10px 14px;
               box-sizing: border-box;
               cursor: grab;
@@ -862,7 +821,7 @@ const handleDeleteRoom = () => {
 
               &.is-dragging {
                 opacity: 0.4;
-                border: 1px dashed var(--n-primary-color);
+                border: 1px dashed var(--main-color);
               }
 
               &:hover {
@@ -879,11 +838,11 @@ const handleDeleteRoom = () => {
               }
 
               &.is-active {
-                background: rgba(24, 160, 88, 0.08);
-                border-color: rgba(24, 160, 88, 0.25);
+                background: var(--main-boxshadow-hover-color);
+                border-color: var(--main-second-color);
 
                 .item-name {
-                  color: var(--n-primary-color);
+                  color: var(--main-color);
                   font-weight: bold;
                 }
               }
@@ -960,13 +919,6 @@ const handleDeleteRoom = () => {
 
       // Sidebar column CSS (settings, members, logs)
       .sidebar-panel {
-        .settings-card {
-          padding: 10px 15px;
-          :deep(.n-card-header) {
-            padding: 15px 20px 10px 20px;
-          }
-        }
-
         .tab-card {
           padding: 5px;
 
@@ -979,7 +931,7 @@ const handleDeleteRoom = () => {
           // Members tab styles
           .members-tab {
             .member-list-item {
-              border-radius: 10px;
+              border-radius: 8px;
               margin-bottom: 5px;
               transition: all 0.2s;
 
@@ -1017,18 +969,18 @@ const handleDeleteRoom = () => {
               border: 1px solid rgba(255, 255, 255, 0.02);
 
               .log-time {
-                color: rgba(255, 255, 255, 0.35);
+                color: rgba(255, 255, 255, 0.5);
                 margin-right: 8px;
               }
 
               .log-user {
-                color: var(--n-primary-color);
+                color: var(--main-color);
                 font-weight: 500;
                 margin-right: 6px;
               }
 
               .log-action {
-                color: rgba(255, 255, 255, 0.7);
+                color: rgba(255, 255, 255, 0.75);
               }
             }
 
@@ -1039,6 +991,63 @@ const handleDeleteRoom = () => {
           }
         }
       }
+    }
+
+    .room-uuid-tag {
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .member-qq-text {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 13px;
+      font-weight: normal;
+      margin-left: 6px;
+    }
+  }
+
+  // Light Mode Style Overrides (must be at .listen-together level since .light is on the root)
+  &.light {
+    :deep(.playlist-item) {
+      background: rgba(0, 0, 0, 0.015) !important;
+      border: 1px solid rgba(0, 0, 0, 0.02) !important;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.03) !important;
+        border-color: rgba(0, 0, 0, 0.05) !important;
+      }
+
+      &.is-active {
+        background: var(--main-boxshadow-hover-color) !important;
+        border-color: var(--main-second-color) !important;
+      }
+
+      .item-index {
+        color: rgba(0, 0, 0, 0.35) !important;
+      }
+    }
+
+    :deep(.log-item) {
+      background: rgba(0, 0, 0, 0.015) !important;
+      border: 1px solid rgba(0, 0, 0, 0.02) !important;
+    }
+    :deep(.log-item .log-time) {
+      color: rgba(0, 0, 0, 0.6) !important;
+    }
+    :deep(.log-item .log-user) {
+      color: var(--main-color) !important;
+    }
+    :deep(.log-item .log-action) {
+      color: rgba(0, 0, 0, 0.85) !important;
+    }
+    :deep(.member-qq-text) {
+      color: rgba(0, 0, 0, 0.4) !important;
+    }
+    :deep(.item-index) {
+      color: rgba(0, 0, 0, 0.35) !important;
+    }
+    :deep(.empty-logs .n-text) {
+      color: rgba(0, 0, 0, 0.45) !important;
     }
   }
 }
