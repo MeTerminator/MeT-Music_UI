@@ -159,6 +159,15 @@ const routes = [
     },
     component: () => import("@/views/Comments.vue"),
   },
+  // 一起听歌
+  {
+    path: "/listen-together",
+    name: "listen-together",
+    meta: {
+      title: "一起听歌",
+    },
+    component: () => import("@/views/ListenTogether.vue"),
+  },
   // 测试页面
   {
     path: "/test",

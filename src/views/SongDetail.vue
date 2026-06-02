@@ -104,14 +104,16 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getMusicUrl } from '@/api/extra';
-import { addSongToNext, initPlayer } from '@/utils/Player';
-import { musicData } from '@/stores';
+import { addSongToNext, initPlayer, fadePlayOrPause } from '@/utils/Player';
+import { musicData, siteStatus } from '@/stores';
+import useListenTogetherStore from '@/stores/listenTogether';
 import { getSongPlayTime } from '@/utils/timeTools';
 import SvgIcon from '@/components/Global/SvgIcon';
 
 const route = useRoute();
 const router = useRouter();
 const music = musicData();
+const status = siteStatus();
 
 const mid = ref(route.query.mid);
 const songData = ref(null);
@@ -172,9 +174,17 @@ const handlePlay = async () => {
     }
   };
 
-  addSongToNext(song, true);
-  music.playSongData = song;
-  await initPlayer(true);
+  if (status.isInRoom) {
+    if (music.getPlaySongData?.id === song?.id) {
+      fadePlayOrPause();
+    } else {
+      useListenTogetherStore().addSong(song);
+    }
+  } else {
+    addSongToNext(song, true);
+    music.playSongData = song;
+    await initPlayer(true);
+  }
 };
 
 const handleDownload = () => {

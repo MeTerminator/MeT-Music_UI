@@ -234,7 +234,9 @@ const getYrcStyle = (wordData, lyricIndex) => {
 const jumpSeek = (time) => {
   if (!time) return false;
   setSeek(time);
-  fadePlayOrPause();
+  if (!status.isInRoom) {
+    fadePlayOrPause();
+  }
 };
 
 // 主进程调用歌词滚动

@@ -106,6 +106,7 @@ export default defineConfig(({ mode }) => {
         "/api": {
           target: `https://music.met6.top:444/api`,
           changeOrigin: true,
+          ws: true,
           rewrite: (path) => path.replace(/^\/api/, ""),
         },
       },

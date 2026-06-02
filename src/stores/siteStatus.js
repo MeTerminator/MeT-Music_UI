@@ -58,6 +58,10 @@ const useSiteStatusStore = defineStore("siteStatus", {
       playSongMode: "normal",
       // 是否为心动模式
       playHeartbeatMode: false,
+      // 一起听歌房间状态
+      isInRoom: false,
+      roomCode: "",
+      roomUuid: "",
     };
   },
   getters: {},

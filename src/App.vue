@@ -118,6 +118,10 @@ onMounted(async () => {
   window.$canNotConnect = canNotConnect;
   // 主播放器
   status.playState = false;
+  // 清除一起听歌状态以防缓存污染
+  status.isInRoom = false;
+  status.roomCode = "";
+  status.roomUuid = "";
   await initPlayer(autoPlay.value);
   // 键盘监听
   window.addEventListener("keyup", handleKeyUp);

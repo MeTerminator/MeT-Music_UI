@@ -433,13 +433,211 @@ function zclips(obj){
         }
     });
 
-    clipboard.on('success', function(e) {
+	clipboard.on('success', function(e) {
         loading("复制成功",3);
     });
 
-    clipboard.on('error', function(e) {
+	clipboard.on('error', function(e) {
         loading("复制失败",3);
     });
 }
+
+
+// --- 隔空播放 (Airplay Receiver) 逻辑 ---
+
+let airplaySongCache = {};
+let lastSongMid = null;
+
+function checkAndInitAirplayReceiver() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sid = urlParams.get('sid');
+    if (sid) {
+        console.log("[Airplay] Init airplay mode with SessionId:", sid);
+        initAirplayReceiver(sid);
+    }
+}
+
+function initAirplayReceiver(sid) {
+    let wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let wsUrl = `${wsProtocol}//${window.location.host}/api/ws/client`;
+    
+    let socket = new WebSocket(wsUrl);
+    
+    socket.onopen = function() {
+        console.log("[Airplay WS] Connected to airplay server");
+        // Subscribe to sid
+        socket.send(JSON.stringify({
+            "type": "listen",
+            "SessionId": [sid]
+        }));
+    };
+    
+    socket.onmessage = function(event) {
+        try {
+            let msg = JSON.parse(event.data);
+            if (msg.type === "feedback" && msg.SessionId === sid) {
+                let data = msg.data;
+                handleAirplayCommand(data);
+            }
+        } catch(e) {
+            console.error("[Airplay WS] Error parsing message", e);
+        }
+    };
+    
+    socket.onclose = function() {
+        console.log("[Airplay WS] Disconnected. Reconnecting in 3s...");
+        setTimeout(() => {
+            initAirplayReceiver(sid);
+        }, 3000);
+    };
+    
+    socket.onerror = function(err) {
+        console.error("[Airplay WS] Error", err);
+    };
+}
+
+function handleAirplayCommand(data) {
+    let songMid = data.songMid;
+    if (!songMid) return;
+    
+    let event = data.event;
+    let isPlaying = data.status;
+    let currentTime = data.currentTime;
+    let systemTime = data.systemTime;
+    
+    if (songMid !== lastSongMid) {
+        lastSongMid = songMid;
+        playAirplaySong(songMid, function() {
+            syncPlaybackState(isPlaying, currentTime, systemTime);
+        });
+    } else {
+        syncPlaybackState(isPlaying, currentTime, systemTime);
+    }
+}
+
+function syncPlaybackState(isPlaying, currentTime, systemTime) {
+    let latency = 0;
+    if (systemTime) {
+        latency = (Date.now() - systemTime) / 1000.0;
+        if (latency < 0 || latency > 5.0) latency = 0;
+    }
+    let targetTime = currentTime + latency;
+    
+    if (isPlaying) {
+        if (krAudio.audioDom.paused) {
+            krAudio.play();
+        }
+        let diff = Math.abs(krAudio.audioDom.currentTime - targetTime);
+        if (diff > 2.0) {
+            krAudio.audioDom.currentTime = targetTime;
+            if (typeof refreshLyric === "function") {
+                refreshLyric(targetTime);
+            }
+        }
+    } else {
+        if (!krAudio.audioDom.paused) {
+            krAudio.stop();
+        }
+        let diff = Math.abs(krAudio.audioDom.currentTime - currentTime);
+        if (diff > 1.0) {
+            krAudio.audioDom.currentTime = currentTime;
+            if (typeof refreshLyric === "function") {
+                refreshLyric(currentTime);
+            }
+        }
+    }
+}
+
+function playAirplaySong(songMid, onLoaded) {
+    let $existing = $(`#main-list .list-item[data-mid="${songMid}"]`);
+    if ($existing.length > 0) {
+        let idx = $("#main-list .list-item").index($existing) + 1;
+        krAudio.Currentplay = idx;
+        listMenuStyleChange(krAudio.Currentplay);
+        krAudio.changeURL = true;
+        
+        let url = $existing.data("url");
+        krAudio.audioDom.src = url;
+        
+        // Trigger page info updates
+        var pic = $existing.data("pic");
+        $("#music-cover").attr("src", pic);
+        blurImages(pic);
+        var music_title = $existing.find(".music-name").text();
+        var author = $existing.find(".auth-name").text();
+        $(".progress_msg .music_title").text(music_title + " - " + author);
+        $(document).attr("title", music_title + " - " + author);
+        var lrcSrc = $existing.data("lrc");
+        if (typeof lyricCallback === "function") {
+            lyricCallback(lrcSrc);
+        }
+
+        if (onLoaded) onLoaded();
+        return;
+    }
+
+    if (airplaySongCache[songMid]) {
+        addAirplaySongToDom(airplaySongCache[songMid]);
+        playAirplaySong(songMid, onLoaded);
+        return;
+    }
+
+    loading("同步切歌中...", 500);
+    $.ajax({
+        url: `/api/v1/song/url?mid=${songMid}`,
+        type: 'GET',
+        dataType: 'json',
+        success: function(res) {
+            if (res && res.data && res.data[0]) {
+                let track = res.data[0].track_info;
+                let singers = (track.singer || []).map(s => s.name || s.title || "").join(' / ');
+                let albumName = track.album ? (track.album.name || track.album.title || "") : "";
+                let pmid = track.album ? (track.album.pmid || track.album.mid || "") : "";
+                let pic = pmid ? `https://y.qq.com/music/photo_new/T002R300x300M000${pmid}.jpg` : "";
+                
+                let songObj = {
+                    mid: songMid,
+                    url: res.data[0].url,
+                    pic: pic,
+                    album: albumName,
+                    author: singers,
+                    title: track.title,
+                    lrc: `/api/v1/lrc?mid=${songMid}`
+                };
+                airplaySongCache[songMid] = songObj;
+                addAirplaySongToDom(songObj);
+                playAirplaySong(songMid, onLoaded);
+            }
+            tzUtil.animates($("#tzloading"), "slideUp");
+        },
+        error: function() {
+            console.error("Failed to load airplay song");
+            tzUtil.animates($("#tzloading"), "slideUp");
+        }
+    });
+}
+
+function addAirplaySongToDom(song) {
+    let count = $("#main-list .list-item").length;
+    $("#list-foot").remove();
+    
+    let html = `<div class="list-item" data-url="${song.url}" data-pic="${song.pic}" data-mid="${song.mid}" data-lrc="${song.lrc}">
+                    <span class="list-num">${count}</span>
+                    <span class="list-mobile-menu"></span>
+                    <span class="music-album">${song.album}</span>
+                    <span class="auth-name">${song.author}</span>
+                    <span class="music-name">${song.title}</span>
+                </div>`;
+    
+    $("#main-list").append(html);
+    $("#main-list").append(`<div class="list-item text-center" title="全部加载完了哦~" id="list-foot">全部加载完了哦~</div>`);
+    
+    krAudio.allItem = $("#main-list .list-item").length - 1;
+    appendlistMenu();
+    
+    $("#main-list .list-item").last().click(mobileClickPlay);
+    $("#main-list .list-item").last().find(".list-mobile-menu").click(mobileListMenu);
+}
+
 
 

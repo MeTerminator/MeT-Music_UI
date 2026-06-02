@@ -1,37 +1,57 @@
 <!-- 导航栏 - 用户数据 -->
 <template>
-  <n-dropdown
-    :key="userLoginStatus"
-    :show-arrow="true"
-    :show="userMenuShow"
-    :options="userMenuOptions"
-    placement="bottom-end"
-    @select="userMenuSelect"
-    @clickoutside="userMenuShow = false"
-  >
-    <div
-      class="user"
-      :style="{ pointerEvents: userMenuShow ? 'none' : 'auto' }"
-      @click="userMenuShow = !userMenuShow"
-    >
-      <div class="avatar">
-        <n-avatar v-if="userLoginStatus" :src="userData.detail?.profile?.avatarUrl" round />
-        <n-avatar v-else round>
-          <n-icon depth="3">
-            <SvgIcon icon="account-circle" />
+  <div class="user-data-wrapper">
+    <Transition name="fade">
+      <n-button
+        v-if="status.isInRoom"
+        class="quick-listen"
+        type="primary"
+        round
+        secondary
+        @click="router.push('/listen-together')"
+      >
+        <template #icon>
+          <n-icon>
+            <SvgIcon icon="headphones" />
           </n-icon>
-        </n-avatar>
+        </template>
+        一起听歌中
+      </n-button>
+    </Transition>
+
+    <n-dropdown
+      :key="userLoginStatus"
+      :show-arrow="true"
+      :show="userMenuShow"
+      :options="userMenuOptions"
+      placement="bottom-end"
+      @select="userMenuSelect"
+      @clickoutside="userMenuShow = false"
+    >
+      <div
+        class="user"
+        :style="{ pointerEvents: userMenuShow ? 'none' : 'auto' }"
+        @click="userMenuShow = !userMenuShow"
+      >
+        <div class="avatar">
+          <n-avatar v-if="userLoginStatus" :src="userData.detail?.profile?.avatarUrl" round />
+          <n-avatar v-else round>
+            <n-icon depth="3">
+              <SvgIcon icon="account-circle" />
+            </n-icon>
+          </n-avatar>
+        </div>
+        <div class="user-data">
+          <n-text :key="userLoginStatus" class="name">
+            {{ userLoginStatus ? userData.detail?.profile?.nickname || "未知用户名" : "未登录" }}
+          </n-text>
+          <n-icon depth="3" class="more">
+            <SvgIcon icon="menu-down" />
+          </n-icon>
+        </div>
       </div>
-      <div class="user-data">
-        <n-text :key="userLoginStatus" class="name">
-          {{ userLoginStatus ? userData.detail?.profile?.nickname || "未知用户名" : "未登录" }}
-        </n-text>
-        <n-icon depth="3" class="more">
-          <SvgIcon icon="menu-down" />
-        </n-icon>
-      </div>
-    </div>
-  </n-dropdown>
+    </n-dropdown>
+  </div>
   <!-- 登录弹窗 -->
   <Login ref="loginRef" />
 </template>
@@ -40,13 +60,14 @@
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import { NIcon, NText, NNumberAnimation } from "naive-ui";
-import { siteData, siteSettings, musicData } from "@/stores";
+import { siteData, siteSettings, musicData, siteStatus } from "@/stores";
 import SvgIcon from "@/components/Global/SvgIcon";
 import {
   getSessionId,
 } from "@/utils/helper";
 
 const data = siteData();
+const status = siteStatus();
 const router = useRouter();
 const settings = siteSettings();
 const music = musicData();
@@ -121,6 +142,11 @@ const userMenuOptions = computed(() => [
     icon: renderIcon("round-settings"),
   },
   {
+    label: "一起听歌",
+    key: "listen-together",
+    icon: renderIcon("account-music"),
+  },
+  {
     label: "隔空播放",
     key: "player",
     icon: renderIcon("play"),
@@ -137,6 +163,10 @@ const userMenuSelect = (key) => {
   console.log(key);
   userMenuShow.value = false;
   switch (key) {
+    // 一起听歌
+    case "listen-together":
+      router.push("/listen-together");
+      break;
     // 明暗切换
     case "darkOrlight":
       settings.setThemeType(themeType.value === "light" ? "dark" : "light");
@@ -218,6 +248,34 @@ function goToPlayer() {
     .user-data {
       display: none;
     }
+  }
+}
+.user-data-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+.quick-listen {
+  animation: pulse-border 2s infinite;
+  border-radius: 20px;
+  font-weight: 500;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  background-color: var(--main-second-color) !important;
+  color: var(--main-color) !important;
+}
+
+@keyframes pulse-border {
+  0% {
+    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(24, 160, 88, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(24, 160, 88, 0);
   }
 }
 </style>

@@ -152,7 +152,9 @@ const jumpSeek = (line) => {
   lyricPlayer.calcLayout(true, true); // 强制重新布局
   lyricPlayer.update();
 
-  fadePlayOrPause();
+  if (!status.isInRoom) {
+    fadePlayOrPause();
+  }
 };
 </script>
 

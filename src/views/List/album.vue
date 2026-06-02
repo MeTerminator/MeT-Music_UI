@@ -104,7 +104,7 @@
     <n-flex class="menu" justify="space-between">
       <n-flex class="left">
         <n-button
-          :disabled="albumData === 'empty'"
+          :disabled="albumData === 'empty' || status.isInRoom"
           :focusable="false"
           type="primary"
           class="play"
@@ -185,6 +185,7 @@
 <script setup>
 import { NIcon } from "naive-ui";
 import { useRouter } from "vue-router";
+import { siteStatus } from "@/stores";
 import { getAlbumDetail } from "@/api/album";
 import { formatNumber, fuzzySearch } from "@/utils/helper";
 import { getTimestampTime } from "@/utils/timeTools";
@@ -194,6 +195,7 @@ import formatData from "@/utils/formatData";
 import SvgIcon from "@/components/Global/SvgIcon";
 
 const router = useRouter();
+const status = siteStatus();
 
 // 专辑 ID
 const albumId = ref(router.currentRoute.value.query.id || null);

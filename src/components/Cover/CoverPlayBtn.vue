@@ -3,6 +3,7 @@
   <div class="play-btn" @click.stop>
     <n-button
       :loading="playLoading"
+      :disabled="status.isInRoom"
       color="#efefef"
       tag="div"
       type="primary"
@@ -96,6 +97,10 @@ const getPlaylistData = async () => {
 // 播放歌单
 const playAllSongs = async () => {
   try {
+    if (status.isInRoom) {
+      $message.warning("一起听歌模式下，不允许使用播放全部功能");
+      return false;
+    }
     if (!props.id) return false;
     // 开启加载状态
     if (props.type !== "mv") {

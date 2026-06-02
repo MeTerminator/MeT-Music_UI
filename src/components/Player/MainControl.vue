@@ -220,6 +220,7 @@ import SvgIcon from "@/components/Global/SvgIcon";
 import VueSlider from "vue-slider-component";
 import "vue-slider-component/theme/default.css";
 import { copyData } from "@/utils/helper";
+import useListenTogetherStore from "@/stores/listenTogether";
 
 const router = useRouter();
 const data = siteData();
@@ -382,7 +383,14 @@ const sliderTooltip = computed(() => {
 // 进度条拖拽结束
 const sliderDragEnd = () => {
   songTimeSliderUpdate(playTimeData.value?.bar);
-  playOrPause();
+  if (!status.isInRoom) {
+    playOrPause();
+  } else {
+    const ltStore = useListenTogetherStore();
+    if (ltStore.roomState?.is_playing) {
+      fadePlayOrPause("play");
+    }
+  }
 };
 
 // 进度条更新

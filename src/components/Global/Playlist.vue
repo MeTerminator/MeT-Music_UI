@@ -127,6 +127,7 @@ import { musicData, siteStatus, siteSettings } from "@/stores";
 import { initPlayer, fadePlayOrPause, changePlayIndex, soundStop } from "@/utils/Player";
 import SvgIcon from "@/components/Global/SvgIcon";
 import debounce from "@/utils/debounce";
+import useListenTogetherStore from "@/stores/listenTogether";
 
 const music = musicData();
 const status = siteStatus();
@@ -166,6 +167,14 @@ const playSong = debounce(async (song, index) => {
     $message.warning("歌曲正在缓冲中，请稍后");
     return false;
   }
+  if (status.isInRoom) {
+    if (playSongData.value?.id === song?.id) {
+      fadePlayOrPause();
+    } else {
+      useListenTogetherStore().playIndex(index);
+    }
+    return;
+  }
   // 更改模式
   if (playMode.value !== "dj") playMode.value = "normal";
   // 更改播放索引
@@ -184,6 +193,10 @@ const playSong = debounce(async (song, index) => {
 
 // 清空列表
 const cleanPlaylists = () => {
+  if (status.isInRoom) {
+    useListenTogetherStore().reorderPlaylist([]);
+    return;
+  }
   soundStop();
   playIndex.value = 0;
   playList.value = [];
@@ -195,6 +208,10 @@ const cleanPlaylists = () => {
 
 // 移除歌曲
 const removeSong = async (index) => {
+  if (status.isInRoom) {
+    useListenTogetherStore().removeSong(index);
+    return false;
+  }
   // 若删除时仅剩一首
   if (playList.value.length === 1) {
     cleanPlaylists();

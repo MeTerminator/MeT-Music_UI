@@ -111,7 +111,7 @@
       <n-flex :key="isUserPLayList" class="menu" justify="space-between">
         <n-flex class="left">
           <n-button
-            :disabled="playListData === null || playListData === 'empty' || loadingMsg !== null"
+            :disabled="playListData === null || playListData === 'empty' || loadingMsg !== null || status.isInRoom"
             :focusable="false"
             type="primary"
             class="play"
@@ -197,7 +197,7 @@
 import { NIcon } from "naive-ui";
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
-import { siteData } from "@/stores";
+import { siteData, siteStatus } from "@/stores";
 import {
   getPlayListDetail,
   getAllPlayList,
@@ -211,6 +211,7 @@ import SvgIcon from "@/components/Global/SvgIcon";
 
 const router = useRouter();
 const data = siteData();
+const status = siteStatus();
 const { userLikeData } = storeToRefs(data);
 
 // 歌单 ID

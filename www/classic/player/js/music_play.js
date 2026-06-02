@@ -381,5 +381,9 @@ window.onload = function () {
 	//列表小菜单初始化
 	appendlistMenu();
 
+	// 隔空播放 (Airplay Receiver) 检查与初始化
+	if (typeof checkAndInitAirplayReceiver === "function") {
+		checkAndInitAirplayReceiver();
+	}
 };
 

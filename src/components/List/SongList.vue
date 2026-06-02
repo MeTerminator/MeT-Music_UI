@@ -154,6 +154,7 @@ import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import { siteData, siteSettings, musicData, siteStatus } from "@/stores";
 import { initPlayer, fadePlayOrPause, addSongToNext } from "@/utils/Player";
+import useListenTogetherStore from "@/stores/listenTogether";
 
 const router = useRouter();
 const music = musicData();
@@ -255,29 +256,37 @@ const playSong = async (data, song, index) => {
   playMode.value = "normal";
   // 检查当前页面
   const isPage = router.currentRoute.value.matched?.[0].path || null;
-  // 是否为当前播放歌曲
-  if (music.getPlaySongData?.id === song?.id) {
-    // 继续播放
-    fadePlayOrPause();
-  } else {
-    // 若为特殊状态
-    if (
-      (isPage === "/search" && !playSearch.value) ||
-      isPage === "/history" ||
-      playHeartbeatMode.value
-    ) {
-      console.log("仅播放当前歌曲");
-      addSongToNext(song, true);
+  if (status.isInRoom) {
+    if (music.getPlaySongData?.id === song?.id) {
+      fadePlayOrPause();
     } else {
-      // 添加播放列表
-      playList.value = data.slice();
-      // 更改播放索引
-      playIndex.value = index;
+      useListenTogetherStore().addSong(song);
     }
-    console.log("与当前播放歌曲不一致");
-    playSongData.value = song;
-    // 初始化播放器
-    await initPlayer(true);
+  } else {
+    // 是否为当前播放歌曲
+    if (music.getPlaySongData?.id === song?.id) {
+      // 继续播放
+      fadePlayOrPause();
+    } else {
+      // 若为特殊状态
+      if (
+        (isPage === "/search" && !playSearch.value) ||
+        isPage === "/history" ||
+        playHeartbeatMode.value
+      ) {
+        console.log("仅播放当前歌曲");
+        addSongToNext(song, true);
+      } else {
+        // 添加播放列表
+        playList.value = data.slice();
+        // 更改播放索引
+        playIndex.value = index;
+      }
+      console.log("与当前播放歌曲不一致");
+      playSongData.value = song;
+      // 初始化播放器
+      await initPlayer(true);
+    }
   }
   // 附加来源
   playSongSource.value = Number(props.sourceId);

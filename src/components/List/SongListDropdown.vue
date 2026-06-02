@@ -23,6 +23,7 @@ import { useRouter } from "vue-router";
 import { addSongToNext } from "@/utils/Player";
 import { copyData } from "@/utils/helper";
 import SvgIcon from "@/components/Global/SvgIcon";
+import useListenTogetherStore from "@/stores/listenTogether";
 
 const emit = defineEmits(["playSong", "delLocalSong"]);
 const data = siteData();
@@ -139,6 +140,17 @@ const openDropdown = (e, data, song, index, sourceId, type) => {
             onClick: () => {
               playMode.value = "normal";
               addSongToNext(song);
+            },
+          },
+          icon: renderIcon("play-next"),
+        },
+        {
+          key: "add-listen-together",
+          label: "添加到一起听歌",
+          show: isSong && status.isInRoom,
+          props: {
+            onClick: () => {
+              useListenTogetherStore().addSong(song);
             },
           },
           icon: renderIcon("play-next"),

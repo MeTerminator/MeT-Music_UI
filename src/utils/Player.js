@@ -1,5 +1,6 @@
 import { Howl, Howler } from "howler";
 import { musicData, siteStatus, siteSettings, siteData } from "@/stores";
+import useListenTogetherStore from "@/stores/listenTogether";
 import { getSongUrl, getSongLyric, getAMttmlLyric } from "@/api/song";
 import {
   getLocalCoverData,
@@ -108,6 +109,7 @@ const reportPlaybackStatus = (eventType) => {
  * 初始化播放器
  */
 export const initPlayer = async (playNow = false) => {
+  console.log("[Player.js] initPlayer called with playNow =", playNow);
   try {
     // 停止播放器
     soundStop();
@@ -192,12 +194,18 @@ export const initPlayer = async (playNow = false) => {
       }
       // 下一曲
       else {
-        if (playIndex !== playList.length - 1) {
-          changePlayIndex();
-        } else {
+        if (status.isInRoom) {
           status.playLoading = false;
           status.playState = false;
-          $message.warning("列表中暂无可播放歌曲", { closable: true, duration: 5000 });
+          $message.error("获取歌曲播放链接失败，已暂停播放");
+        } else {
+          if (playIndex !== playList.length - 1) {
+            changePlayIndex();
+          } else {
+            status.playLoading = false;
+            status.playState = false;
+            $message.warning("列表中暂无可播放歌曲", { closable: true, duration: 5000 });
+          }
         }
       }
     }
@@ -209,7 +217,13 @@ export const initPlayer = async (playNow = false) => {
         // 创建播放器
         createPlayer(url);
       } else {
-        changePlayIndex("next", playNow);
+        if (status.isInRoom) {
+          status.playLoading = false;
+          status.playState = false;
+          $message.error("获取本地歌曲播放链接失败，已暂停播放");
+        } else {
+          changePlayIndex("next", playNow);
+        }
       }
     }
     // 获取歌词
@@ -269,6 +283,7 @@ const getNormalSongUrl = async (id, status, playNow) => {
  * @param {number} seek - 初始播放进度（ 默认为 0 ）
  */
 export const createPlayer = async (src, autoPlay = true) => {
+  console.log("[Player.js] createPlayer called with src =", src, "autoPlay =", autoPlay);
   try {
     // --- 新增：确保已退出模拟模式 ---
     isSimulating = false;
@@ -283,6 +298,7 @@ export const createPlayer = async (src, autoPlay = true) => {
     const { memorySeek, useMusicCache, html5Player } = settings;
     // 当前播放歌曲数据
     const playSongData = music.getPlaySongData;
+    console.log("[Player.js] createPlayer - playSongData id:", playSongData?.id, "playState:", status.playState);
     // 获取播放链接（非电台及云盘歌曲）
     const songUrl =
       useMusicCache && playMode !== "dj" && !playSongData.pc ? await getBlobUrlFromUrl(src) : src;
@@ -325,17 +341,29 @@ export const createPlayer = async (src, autoPlay = true) => {
         }
       }
 
-      // 自动播放
-      if (autoPlay && status.playState) {
-        setSeek();
-        fadePlayOrPause("play");
-      }
-      // 恢复进度（防止播放到结尾时触发 bug）
-      if (memorySeek && status.playTimeData?.duration - status.playTimeData?.currentTime > 2) {
-        setSeek(status.playTimeData?.currentTime ?? 0);
+      if (status.isInRoom) {
+        // Sync with the room's current seek position internally
+        const ltStore = useListenTogetherStore();
+        const room = ltStore.roomState;
+        const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
+        const targetSeek = (room.seek_position || 0) + elapsed;
+        setSeek(targetSeek, true);
+        if (room.is_playing) {
+          fadePlayOrPause("play");
+        }
       } else {
-        setSeek();
-        status.playTimeData.bar = "0";
+        // 自动播放
+        if (autoPlay && status.playState) {
+          setSeek();
+          fadePlayOrPause("play");
+        }
+        // 恢复进度（防止播放到结尾时触发 bug）
+        if (memorySeek && status.playTimeData?.duration - status.playTimeData?.currentTime > 2) {
+          setSeek(status.playTimeData?.currentTime ?? 0);
+        } else {
+          setSeek();
+          status.playTimeData.bar = "0";
+        }
       }
       // 取消加载状态
       status.playLoading = false;
@@ -376,7 +404,11 @@ export const createPlayer = async (src, autoPlay = true) => {
       // 停止定时器
       cleanAllInterval();
       // 下一曲
-      changePlayIndex();
+      if (status.isInRoom) {
+        useListenTogetherStore().sendNext();
+      } else {
+        changePlayIndex();
+      }
     });
     // 加载失败
     player?.on("loaderror", (id, errCode) => {
@@ -402,10 +434,14 @@ export const createPlayer = async (src, autoPlay = true) => {
           break;
       }
       // 下一曲
-      if (playList.length > 1) {
-        changePlayIndex();
-      } else {
+      if (status.isInRoom) {
         status.playState = false;
+      } else {
+        if (playList.length > 1) {
+          changePlayIndex();
+        } else {
+          status.playState = false;
+        }
       }
     });
     // 返回音频对象
@@ -422,9 +458,13 @@ export const createPlayer = async (src, autoPlay = true) => {
  * @param {string} type - 更改索引的类型  "next" / "prev"
  */
 export const changePlayIndex = async (type = "next", play = false) => {
+  const status = siteStatus();
+  if (status.isInRoom) {
+    useListenTogetherStore().sendChangeIndex(type);
+    return;
+  }
   // pinia
   const music = musicData();
-  const status = siteStatus();
   const settings = siteSettings();
   // 解构音乐数据
   const { playList } = music;
@@ -530,6 +570,7 @@ export const addSongToNext = (data, play = false) => {
  * @param {String} [type="play"] - 渐入渐出
  */
 export const fadePlayOrPause = (type = "play") => {
+  console.log("[Player.js] fadePlayOrPause called with type =", type);
   const status = siteStatus();
   const settings = siteSettings();
   const duration = settings.songVolumeFade ? 300 : 0;
@@ -589,8 +630,12 @@ export const fadePlayOrPause = (type = "play") => {
  * 播放或暂停
  */
 export const playOrPause = async () => {
-  // --- 修改：兼容模拟播放 ---
   const status = siteStatus();
+  if (status.isInRoom) {
+    useListenTogetherStore().sendPlayOrPause();
+    return;
+  }
+  // --- 修改：兼容模拟播放 ---
   const isPlaying = isSimulating ? status.playState : player?.playing();
   fadePlayOrPause(isPlaying ? "pause" : "play");
   // --- 修改结束 ---
@@ -616,13 +661,14 @@ export const setVolume = (volume) => {
  * 停止播放器
  */
 export const soundStop = () => {
+  console.log("[Player.js] soundStop called");
   // 清理 Howler
   const settings = siteSettings();
   const status = siteStatus();
 
   if (settings.html5Player) {
     player?.stop();
-    setSeek();
+    setSeek(0, status.isInRoom);
     player?.unload();
     Howler.unload();
   } else {
@@ -642,6 +688,9 @@ export const soundStop = () => {
   simulationStartTime = 0;
   simulationDuration = 0;
   cleanAllInterval();
+
+  player = null;
+  window.$player = null;
 };
 
 /**
@@ -662,7 +711,13 @@ export const setVolumeMute = () => {
  * 设置进度
  * @param {number} seek - 设置的进度值，0-1之间的浮点数
  */
-export const setSeek = (seek = 0) => {
+export const setSeek = (seek = 0, isInternal = false) => {
+  console.log("[Player.js] setSeek called with seek =", seek, "isInternal =", isInternal);
+  const status = siteStatus();
+  if (status.isInRoom && !isInternal) {
+    console.log("[Player.js] setSeek - sending seek to room");
+    useListenTogetherStore().sendSeek(seek);
+  }
   // ---
   //
   // 新增：模拟播放
@@ -677,12 +732,11 @@ export const setSeek = (seek = 0) => {
     reportPlaybackStatus("play");
     return;
   }
-  // --- 模拟播放结束 ---
+  console.log("[Player.js] setSeek - seeking player to", seek);
   player?.seek(seek);
+  setAudioTime(true);
+  justSetSeek(true);
   updateMediaSessionPosition();
-  reportPlaybackStatus("play");
-
-  // 上报播放状态
   reportPlaybackStatus("play");
 };
 
@@ -717,7 +771,7 @@ export const getSeek = () => {
 /**
  * 更改播放进度
  */
-const setAudioTime = () => {
+const setAudioTime = (force = false) => {
   // ---
   //
   // 新增：模拟播放
@@ -750,7 +804,11 @@ const setAudioTime = () => {
       status.playTimeData.bar = "100";
       isPlayEnd = true;
       cleanAllInterval();
-      changePlayIndex(); // 播放下一首
+      if (status.isInRoom) {
+        useListenTogetherStore().sendNext();
+      } else {
+        changePlayIndex(); // 播放下一首
+      }
       return;
     }
 
@@ -770,22 +828,23 @@ const setAudioTime = () => {
   }
   // --- 模拟播放结束 ---
 
-  if (player?.playing()) {
+  if (player && (player.playing() || force)) {
     const music = musicData();
     const status = siteStatus();
     const settings = siteSettings();
-    const currentTime = player?.seek();
-    const duration = player?._duration;
+    const currentTime = player.seek();
+    const seekVal = typeof currentTime === "number" ? currentTime : 0;
+    const duration = player.duration() || player._duration || 0;
     // 计算数据
-    const bar = duration ? ((currentTime / duration) * 100).toFixed(2) : 0;
-    const played = getSongPlayTime(currentTime);
+    const bar = duration ? ((seekVal / duration) * 100).toFixed(2) : 0;
+    const played = getSongPlayTime(seekVal);
     const durationTime = getSongPlayTime(duration);
     // 计算当前歌词播放索引
     const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
     const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-    const lyricsIndex = lyrics?.findIndex((v) => v?.time >= (currentTime + settings.lyricsOffset));
+    const lyricsIndex = lyrics?.findIndex((v) => v?.time >= (seekVal + settings.lyricsOffset));
     // 赋值数据
-    status.playTimeData = { currentTime, duration, bar, played, durationTime };
+    status.playTimeData = { currentTime: seekVal, duration, bar, played, durationTime };
     status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
     document.title = getPlaySongName();
     updateHookData();
@@ -799,7 +858,7 @@ const setAudioTime = () => {
 /**
  * 更改播放进度（频繁）
  */
-const justSetSeek = () => {
+const justSetSeek = (force = false) => {
   // ---
   //
   // 新增：模拟播放
@@ -824,11 +883,12 @@ const justSetSeek = () => {
   }
   // --- 模拟播放结束 ---
 
-  if (player?.playing()) {
+  if (player && (player.playing() || force)) {
     const status = siteStatus();
-    const currentTime = player?.seek() || 0;
-    status.playSeek = currentTime;
-    status.playSeekMs = Math.floor(currentTime * 1000);
+    const currentTime = player.seek();
+    const seekVal = typeof currentTime === "number" ? currentTime : 0;
+    status.playSeek = seekVal;
+    status.playSeekMs = Math.floor(seekVal * 1000);
   }
 
   // 及时更新逐字歌词信息
@@ -868,6 +928,9 @@ const getSongLyricData = async (islocal, data) => {
       console.log("该歌曲暂无歌词");
       setDefaults();
     }
+    // 歌词异步加载完成后，立即强制触发一次进度与歌词索引更新，防止不同步
+    setAudioTime(true);
+    justSetSeek(true);
 
   } catch (err) {
     $message.error("歌词处理出错");
@@ -1183,6 +1246,10 @@ export const playAllSongs = async (playlist, mode = "normal") => {
     // pinia
     const music = musicData();
     const status = siteStatus();
+    if (status.isInRoom) {
+      $message.warning("一起听歌模式下，不允许使用播放全部功能");
+      return false;
+    }
     if (!playlist) return false;
     // 关闭心动模式
     status.playHeartbeatMode = false;
@@ -1221,9 +1288,9 @@ const updateLoop = () => {
   setAudioTime();
   justSetSeek();
 
-  // 仅在播放状态下持续更新
+  // 仅在播放状态或应该播放的状态下持续更新（防止 seek 或加载时 player.playing() 临时为 false 导致 rAF 意外终止）
   const status = siteStatus();
-  if (isSimulating ? status.playState : player?.playing()) {
+  if (isSimulating ? status.playState : (player?.playing() || status.playState)) {
     rAF_Handle = requestAnimationFrame(updateLoop);
   }
 };

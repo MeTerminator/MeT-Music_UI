@@ -114,6 +114,7 @@ import {
 import debounce from "@/utils/debounce";
 import VueSlider from "vue-slider-component";
 import "vue-slider-component/theme/default.css";
+import useListenTogetherStore from "@/stores/listenTogether";
 
 const router = useRouter();
 const music = musicData();
@@ -153,7 +154,14 @@ const ShowComments = () => {
 // 进度条拖拽结束
 const sliderDragEnd = () => {
   songTimeSliderUpdate(playTimeData.value?.bar);
-  playOrPause();
+  if (!status.isInRoom) {
+    playOrPause();
+  } else {
+    const ltStore = useListenTogetherStore();
+    if (ltStore.roomState?.is_playing) {
+      fadePlayOrPause("play");
+    }
+  }
 };
 
 // 进度条更新
