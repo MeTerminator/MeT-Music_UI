@@ -444,7 +444,8 @@ const loggedInQQ = computed(() => dataStore.userData?.userId || "");
 
 // UI Configuration / Setup forms
 const nickname = ref(localStorage.getItem("listen_together_nickname") || "");
-const isAnonymous = ref(localStorage.getItem("listen_together_is_anonymous") === "true");
+const savedIsAnonymous = localStorage.getItem("listen_together_is_anonymous");
+const isAnonymous = ref(savedIsAnonymous !== null ? savedIsAnonymous === "true" : !userLoginStatus.value);
 const joinCode = ref("");
 
 const creating = ref(false);

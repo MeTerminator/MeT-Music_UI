@@ -20,7 +20,7 @@ export const useListenTogetherStore = defineStore("listenTogether", {
         seek_position: 0,
         play_mode: "normal",
         delete_after_played: false,
-        loop_playlist: false,
+        loop_playlist: true,
         expires_at: Date.now() + 3600000,
         logs: [],
       },
@@ -192,7 +192,8 @@ export const useListenTogetherStore = defineStore("listenTogether", {
     // WS send actions
     sendPlayOrPause() {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      const action = this.roomState.is_playing ? "pause" : "play";
+      const statusStore = useSiteStatusStore();
+      const action = statusStore.playState ? "pause" : "play";
       this.ws.send(
         JSON.stringify({
           action,

@@ -1021,8 +1021,8 @@ const initMediaSession = async (data, cover, islocal, isDj) => {
 
   // 绑定动作（建议只绑定一次，或者确保每次指向最新的 state）
   const actionHandlers = [
-    ['play', () => fadePlayOrPause("play")],
-    ['pause', () => fadePlayOrPause("pause")],
+    ['play', () => playOrPause()],
+    ['pause', () => playOrPause()],
     ['previoustrack', () => changePlayIndex("prev", true)],
     ['nexttrack', () => changePlayIndex("next", true)],
     ['stop', () => soundStop()],
