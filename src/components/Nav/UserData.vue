@@ -265,6 +265,10 @@ function goToPlayer() {
   cursor: pointer;
   background-color: var(--main-second-color) !important;
   color: var(--main-color) !important;
+
+  @media (max-width: 700px) {
+    display: none !important;
+  }
 }
 
 @keyframes pulse-border {

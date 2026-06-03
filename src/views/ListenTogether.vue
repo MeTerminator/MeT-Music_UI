@@ -168,7 +168,7 @@
               </n-flex>
 
               <!-- 各种按钮 -->
-              <n-space :size="8" wrap>
+              <n-space class="action-space" :size="8" wrap>
                 <n-button size="small" secondary round type="info" @click="ltStore.renewRoom">
                   <template #icon>
                     <n-icon><RefreshOutline /></n-icon>
@@ -1048,6 +1048,68 @@ const handleDeleteRoom = () => {
     }
     :deep(.empty-logs .n-text) {
       color: rgba(0, 0, 0, 0.45) !important;
+    }
+  }
+
+  // Mobile Portrait Adaptations
+  @media (max-width: 700px) {
+    padding: 15px !important;
+
+    .title {
+      font-size: 26px !important;
+      height: auto !important;
+      margin: 10px 0 !important;
+    }
+
+    .room-panel-container {
+      gap: 15px !important;
+
+      .header-card :deep(.n-card__content) {
+        padding: 12px 15px !important;
+      }
+
+      .room-uuid-tag {
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .action-space {
+      width: 100% !important;
+      :deep(> div) {
+        flex: 1 1 calc(50% - 8px) !important;
+        .n-button {
+          width: 100% !important;
+          justify-content: center !important;
+        }
+      }
+    }
+
+    .playlist-item {
+      padding: 8px 10px !important;
+      .item-meta {
+        margin-right: 5px !important;
+        .item-artist {
+          max-width: 140px !important;
+        }
+      }
+      .drag-handle {
+        margin-right: 6px !important;
+      }
+    }
+  }
+
+  @media (max-width: 500px) {
+    .setup-panel .set-item :deep(.n-card__content) {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 12px !important;
+    }
+    .setup-panel .set-item .set {
+      width: 100% !important;
+      max-width: 100% !important;
     }
   }
 }

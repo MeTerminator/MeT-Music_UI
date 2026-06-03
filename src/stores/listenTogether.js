@@ -33,6 +33,9 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       userId: "", // Session ID
       lastSeekSentTime: 0, // Throttle seek sends to at most 1s once
       userInfo: null,
+      serverTimeOffset: 0, // offset = server_time - local_time
+      syncTimeTimer: null, // Timer for system time sync
+      playbackSyncTimer: null, // Timer for 1s playback drift sync
       _expectingFirstState: false, // Flag to trigger syncPlayback on first room_state after joining
     };
   },
@@ -93,6 +96,7 @@ export const useListenTogetherStore = defineStore("listenTogether", {
             const isFirstState = this._expectingFirstState;
             this._expectingFirstState = false;
             payload.room.receivedAt = Date.now();
+            payload.room.serverTime = payload.server_time || (Date.now() + this.serverTimeOffset);
             this.roomState = payload.room;
             this.roomUuid = payload.room.uuid;
             statusStore.roomUuid = payload.room.uuid;
@@ -153,11 +157,19 @@ export const useListenTogetherStore = defineStore("listenTogether", {
             player.fadePlayOrPause("pause");
           }
 
-          // Seek sync if out of alignment by > 1.5s or if explicit seek event
-          const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
+          // Seek sync if out of alignment by configured threshold or if explicit seek event
+          const now = Date.now();
+          const serverNow = now + this.serverTimeOffset;
+          const serverTimeGen = room.serverTime || serverNow;
+          const elapsed = room.is_playing ? (serverNow - serverTimeGen) / 1000 : 0;
           const targetSeek = room.seek_position + elapsed;
           const localSeek = player.getSeek();
-          if (eventType === "seek" || Math.abs(localSeek - targetSeek) > 1.5) {
+
+          const settingsStore = (await import("@/stores")).siteSettings();
+          const threshold = settingsStore.listenTogetherSyncThreshold ?? 300;
+          const thresholdSec = threshold / 1000;
+
+          if (eventType === "seek" || Math.abs(localSeek - targetSeek) > thresholdSec) {
             player.setSeek(targetSeek, true);
           }
         }
@@ -343,7 +355,10 @@ export const useListenTogetherStore = defineStore("listenTogether", {
           } else if (!room.is_playing && statusStore.playState) {
             player.fadePlayOrPause("pause");
           }
-          const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
+          const now = Date.now();
+          const serverNow = now + this.serverTimeOffset;
+          const serverTimeGen = room.serverTime || serverNow;
+          const elapsed = room.is_playing ? (serverNow - serverTimeGen) / 1000 : 0;
           const targetSeek = (room.seek_position || 0) + elapsed;
           player.setSeek(targetSeek, true);
         } else {
@@ -401,6 +416,55 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       this.handleLocalExit();
     },
 
+    // Sync local client system time with server system time (every 10s)
+    async syncSystemTime() {
+      try {
+        const t0 = Date.now();
+        const response = await fetch("/api/room/time");
+        if (!response.ok) throw new Error("Fetch server time failed");
+        const data = await response.json();
+        const t1 = Date.now();
+        const serverTime = data.server_time;
+        // SNTP: offset = serverTime - (t0 + t1) / 2
+        this.serverTimeOffset = serverTime - (t0 + t1) / 2;
+        console.log(`[Listen Together] Time synced. RTT: ${t1 - t0}ms, Offset: ${this.serverTimeOffset.toFixed(1)}ms`);
+      } catch (err) {
+        console.error("[Listen Together] Failed to sync server time:", err);
+      }
+    },
+
+    // Every 1s playback check
+    async checkAndSyncPlayback() {
+      if (!this.isInRoom || !this.roomState || !this.roomState.is_playing) return;
+      
+      const player = await import("@/utils/Player");
+      if (!window.$player) return;
+
+      const musicStore = useMusicDataStore();
+      const currentRoomSong = this.roomState.playlist[this.roomState.current_song_index];
+      if (!currentRoomSong) return;
+
+      const localPlaySong = musicStore.getPlaySongData;
+      if (localPlaySong?.id !== currentRoomSong.id) return;
+
+      const now = Date.now();
+      const serverNow = now + this.serverTimeOffset;
+      const serverTimeGen = this.roomState.serverTime || serverNow;
+      const elapsed = (serverNow - serverTimeGen) / 1000;
+      const targetSeek = this.roomState.seek_position + elapsed;
+
+      const localSeek = player.getSeek();
+      const diffMs = Math.abs(localSeek - targetSeek) * 1000;
+
+      const settingsStore = (await import("@/stores")).siteSettings();
+      const threshold = settingsStore.listenTogetherSyncThreshold ?? 300;
+
+      if (diffMs > threshold) {
+        console.log(`[Listen Together] Playback drift: ${diffMs.toFixed(1)}ms > threshold: ${threshold}ms. Adjusting local seek from ${localSeek.toFixed(3)}s to target ${targetSeek.toFixed(3)}s.`);
+        player.setSeek(targetSeek, true);
+      }
+    },
+
     // Handle state cleaning
     async handleLocalExit() {
       const statusStore = useSiteStatusStore();
@@ -455,6 +519,17 @@ export const useListenTogetherStore = defineStore("listenTogether", {
     startTimers() {
       this.stopTimers();
 
+      // Sync system time immediately, then every 10 seconds
+      this.syncSystemTime();
+      this.syncTimeTimer = setInterval(() => {
+        this.syncSystemTime();
+      }, 10000);
+
+      // Check and sync playback drift every 1 second
+      this.playbackSyncTimer = setInterval(() => {
+        this.checkAndSyncPlayback();
+      }, 1000);
+
       this.countdownTimer = setInterval(() => {
         const now = Date.now();
         const expiresAt = this.roomState.expires_at || (now + 3600000);
@@ -489,6 +564,14 @@ export const useListenTogetherStore = defineStore("listenTogether", {
       if (this.heartbeatTimer) {
         clearInterval(this.heartbeatTimer);
         this.heartbeatTimer = null;
+      }
+      if (this.syncTimeTimer) {
+        clearInterval(this.syncTimeTimer);
+        this.syncTimeTimer = null;
+      }
+      if (this.playbackSyncTimer) {
+        clearInterval(this.playbackSyncTimer);
+        this.playbackSyncTimer = null;
       }
     },
   },

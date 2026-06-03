@@ -186,6 +186,22 @@
           <div class="name">音乐渐入渐出</div>
           <n-switch v-model:value="songVolumeFade" :round="false" />
         </n-card>
+        <n-card class="set-item" :content-style="{
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+        }">
+          <div class="name">
+            一起听歌同步阈值
+            <n-text class="tip">本地播放时间与服务器播放时间差值超过该设定时自动同步进度</n-text>
+            <n-text class="tip"> {{ listenTogetherSyncThreshold }} ms </n-text>
+          </div>
+          <n-slider v-model:value="listenTogetherSyncThreshold" :tooltip="false" :max="2000" :min="100" :step="50" :marks="{
+            100: '极小',
+            300: '默认',
+            1000: '1000ms',
+            2000: '2000ms',
+          }" />
+        </n-card>
         <n-card class="set-item">
           <div class="name">
             播放全部搜索歌曲
@@ -653,6 +669,7 @@ const {
   siteFont,
   lyricFont,
   html5Player,
+  listenTogetherSyncThreshold,
 } = storeToRefs(settings);
 
 const updateLyricFont = inject("updateLyricFont");

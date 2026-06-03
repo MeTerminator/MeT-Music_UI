@@ -36,6 +36,7 @@ const useSiteSettingsStore = defineStore("siteSettings", {
       showSpectrums: true, // 是否显示音乐频谱
       useMusicCache: false, // 是否采用音乐缓存
       simulationPlaying: false, // 模拟播放
+      listenTogetherSyncThreshold: 300, // 一起听歌同步阈值(ms)
       // 数量部分
       loadSize: 100, // 每页加载数量
       searchLoadSize: 30, // 搜索结果加载数量

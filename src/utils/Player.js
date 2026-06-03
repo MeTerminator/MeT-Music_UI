@@ -378,11 +378,17 @@ export const createPlayer = async (src, autoPlay = true, playId = null) => {
         // Sync with the room's current seek position internally
         const ltStore = useListenTogetherStore();
         const room = ltStore.roomState;
-        const elapsed = room.is_playing ? (Date.now() - (room.receivedAt || Date.now())) / 1000 : 0;
+        const now = Date.now();
+        const serverNow = now + ltStore.serverTimeOffset;
+        const serverTimeGen = room.serverTime || serverNow;
+        const elapsed = room.is_playing ? (serverNow - serverTimeGen) / 1000 : 0;
         const targetSeek = (room.seek_position || 0) + elapsed;
         if (room.is_playing) {
           player?.once("play", () => {
-            const currentElapsed = (Date.now() - (room.receivedAt || Date.now())) / 1000;
+            const playNow = Date.now();
+            const playServerNow = playNow + ltStore.serverTimeOffset;
+            const playServerTimeGen = room.serverTime || playServerNow;
+            const currentElapsed = (playServerNow - playServerTimeGen) / 1000;
             const currentTargetSeek = (room.seek_position || 0) + currentElapsed;
             console.log("[Player.js] room is playing, seeking inside play event to", currentTargetSeek);
             setSeek(currentTargetSeek, true);
