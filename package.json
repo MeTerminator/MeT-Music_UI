@@ -1,6 +1,6 @@
 {
   "name": "met-music",
-  "version": "5.1.2",
+  "version": "5.1.3",
   "description": "MeT-Music",
   "main": "./out/main/index.js",
   "author": "MeTerminator",

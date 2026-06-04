@@ -217,7 +217,7 @@ export const initPlayer = async (playNow = false) => {
           $message.error("获取歌曲播放链接失败，已暂停播放");
         } else {
           if (playIndex !== playList.length - 1) {
-            changePlayIndex();
+            changePlayIndex("next", playNow);
           } else {
             status.playLoading = false;
             status.playState = false;
@@ -453,7 +453,7 @@ export const createPlayer = async (src, autoPlay = true, playId = null) => {
       if (status.isInRoom) {
         useListenTogetherStore().sendNext();
       } else {
-        changePlayIndex();
+        changePlayIndex("next", true);
       }
     });
     // 加载失败
@@ -484,7 +484,7 @@ export const createPlayer = async (src, autoPlay = true, playId = null) => {
         status.playState = false;
       } else {
         if (playList.length > 1) {
-          changePlayIndex();
+          changePlayIndex("next", true);
         } else {
           status.playState = false;
         }
@@ -859,7 +859,7 @@ const setAudioTime = (force = false) => {
       if (status.isInRoom) {
         useListenTogetherStore().sendNext();
       } else {
-        changePlayIndex(); // 播放下一首
+        changePlayIndex("next", true); // 播放下一首
       }
       return;
     }
