@@ -1,0 +1,8 @@
+allowBuilds:
+  '@applemusic-like-lyrics/core': true
+  '@applemusic-like-lyrics/lyric': true
+  '@applemusic-like-lyrics/vue': true
+  '@parcel/watcher': true
+  core-js: true
+  esbuild: true
+  sharp: true

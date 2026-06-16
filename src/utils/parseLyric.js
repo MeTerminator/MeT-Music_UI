@@ -1,5 +1,5 @@
 // import { parseLrc, parseQrc } from "@applemusic-like-lyrics/lyric?init";
-import { parseLrc, parseQrc, parseTTML, waitForWasmReady } from "@/utils/lyric/amll_lyric.js";
+import { parseLrc, parseQrc, parseTTML } from "@applemusic-like-lyrics/lyric";
 import { siteSettings } from "@/stores";
 
 /* eslint-disable no-unused-vars */
@@ -9,7 +9,6 @@ import { siteSettings } from "@/stores";
  * @returns {Array} 对应数据
  */
 export const parseLyric = async (data, ttmlLyric = null) => {
-  await waitForWasmReady();
 
   const settings = siteSettings();
 
