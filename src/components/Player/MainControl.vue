@@ -405,7 +405,13 @@ const songTimeSliderUpdate = (val) => {
 
 // 开启播放器
 const openFullPlayer = () => {
-  if (showSpectrums.value && typeof $player !== "undefined") processSpectrum($player);
+  // 修复 Mac 下 Chrome 连接 AirPlay 时，调用 createMediaElementSource 导致 audio.currentTime 失去延迟补偿从而与音频不同步的 bug
+  const isMac = /macintosh|mac os x/i.test(navigator.userAgent);
+  if (showSpectrums.value && typeof $player !== "undefined") {
+    if (!(settings.html5Player && isMac)) {
+      processSpectrum($player);
+    }
+  }
   showFullPlayer.value = true;
 };
 
