@@ -851,13 +851,16 @@ onUnmounted(() => {
 
           .left-cover {
             height: 100%;
-            min-width: 50px;
+            width: 64px;
+            min-width: 64px;
+            flex: 0 0 64px;
             margin-right: 12px;
             flex-shrink: 0;
 
             :deep(.cover) {
-              width: 100%;
-              height: 100%;
+              width: 64px;
+              height: 64px;
+              flex: 0 0 64px;
             }
           }
 

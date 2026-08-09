@@ -92,10 +92,16 @@ const props = defineProps({
   
   // 压缩模式样式 (主要用于移动端顶部小封面)
   &.compressed {
-    width: 100%;
-    height: 100%;
+    // Safari 26/27 can resolve percentage height against the n-image
+    // wrapper instead of the square cover box, which stretches the image
+    // into a horizontal strip. Keep this variant an explicit square.
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
     max-width: none;
-    aspect-ratio: 1/1;
+    aspect-ratio: auto;
+    min-width: 0;
+    min-height: 0;
     
     .cover-img {
       width: 100%;
@@ -105,15 +111,21 @@ const props = defineProps({
   }
   
   .cover-img {
+    display: block;
     width: 100%;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
     z-index: 1;
     box-shadow: 0 0 10px 6px #00000008;
     transition: opacity 0.1s ease-in-out;
     :deep(img) {
+      display: block;
       width: 100%;
       height: 100%;
+      min-width: 0;
+      min-height: 0;
       opacity: 0;
       transition: opacity 0.3s ease-in-out;
       object-fit: cover; // 确保图片能填满容器
