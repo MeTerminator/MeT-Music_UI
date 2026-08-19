@@ -11,6 +11,13 @@ import {
 import { getSongPlayTime } from "@/utils/timeTools";
 import { getCoverGradient } from "@/utils/cover-color";
 import { parseLyric } from "@/utils/parseLyric";
+import {
+  bindMediaSessionActions,
+  setMediaSessionMetadata,
+  setMediaSessionPlaybackState,
+  updateMediaSessionPosition,
+  clearMediaSession,
+} from "@/utils/mediaSession";
 
 // 全局播放器
 let player;
@@ -630,14 +637,14 @@ export const fadePlayOrPause = (type = "play") => {
       simulationStartTime = performance.now();
       setAllInterval();
       reportPlaybackStatus("play");
-      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+      setMediaSessionPlaybackState(true);
     } else {
       if (!status.playState) return;
       simulationPausedSeek = (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
       status.playState = false;
       cleanAllInterval();
       reportPlaybackStatus("pause");
-      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+      setMediaSessionPlaybackState(false);
     }
     return;
   }
@@ -647,20 +654,17 @@ export const fadePlayOrPause = (type = "play") => {
     if (player?.playing()) return;
     player?.play();
     setAllInterval();
-    // 立即告诉系统我在播放，防止被回收
-    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+    // Tell the OS immediately so the system session is not recycled.
+    setMediaSessionPlaybackState(true);
 
     player?.once("play", () => {
-      updateMediaSessionPosition();
+      syncMediaSessionPosition(true);
       player?.fade(0, status.playVolume, duration);
     });
   }
   else if (type === "pause") {
-    // 1. 立即同步状态，这是防止 Media Session 消失的关键
-    if ("mediaSession" in navigator) {
-      navigator.mediaSession.playbackState = "paused";
-      updateMediaSessionPosition();
-    }
+    setMediaSessionPlaybackState(false);
+    syncMediaSessionPosition(true);
 
     if (player?.state() === "loading") {
       player?.pause();
@@ -671,8 +675,7 @@ export const fadePlayOrPause = (type = "play") => {
       player?.once("fade", () => {
         player?.pause();
         cleanAllInterval();
-        // 再次确认状态
-        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+        setMediaSessionPlaybackState(false);
       });
     }
   }
@@ -699,6 +702,7 @@ export const playOrPause = async () => {
  */
 export const setRate = (rate) => {
   player?.rate(Number(rate));
+  syncMediaSessionPosition(true);
 };
 
 /**
@@ -743,6 +747,7 @@ export const soundStop = () => {
 
   player = null;
   window.$player = null;
+  clearMediaSession();
 };
 
 /**
@@ -781,6 +786,7 @@ export const setSeek = (seek = 0, isInternal = false) => {
     // 立即更新时间显示
     setAudioTime();
     justSetSeek();
+    syncMediaSessionPosition(true);
     reportPlaybackStatus("play");
     return;
   }
@@ -788,7 +794,7 @@ export const setSeek = (seek = 0, isInternal = false) => {
   player?.seek(seek);
   setAudioTime(true);
   justSetSeek(true);
-  updateMediaSessionPosition();
+  syncMediaSessionPosition(true);
   reportPlaybackStatus("play");
 };
 
@@ -876,6 +882,7 @@ const setAudioTime = (force = false) => {
     status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
     document.title = getPlaySongName();
     updateHookData();
+    syncMediaSessionPosition();
     return; // 结束函数
   }
   // --- 模拟播放结束 ---
@@ -900,6 +907,7 @@ const setAudioTime = (force = false) => {
     status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
     document.title = getPlaySongName();
     updateHookData();
+    syncMediaSessionPosition();
   } else {
     // 未播放时清空数据
     document.title = getPlaySongName();
@@ -990,74 +998,83 @@ const getSongLyricData = async (islocal, data) => {
   }
 };
 
-/**
- * 初始化媒体会话控制
- * 如果浏览器支持媒体会话控制（ Media Session API ），则关联各类操作
- * @param {object} data - 当前播放数据
- * @param {string} islocal - 是否为本地歌曲
- * @param {string} cover - 封面图像的URL或数据
- */
-const initMediaSession = async (data, cover, islocal, isDj) => {
-  if (!("mediaSession" in navigator)) return;
+const formatSessionText = (value) => {
+  if (!value) return "";
+  if (Array.isArray(value)) {
+    return value.map((item) => item?.name || item).filter(Boolean).join(" / ");
+  }
+  if (typeof value === "object") return value.name || "";
+  return String(value);
+};
 
-  const status = siteStatus();
-
-  // 更新元数据
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: data.name,
-    artist: isDj ? "电台节目" : (islocal ? data.artists : data.artists?.map((a) => a.name)?.join(" & ")),
-    album: isDj ? "电台节目" : (islocal ? data.album : data.album.name),
-    artwork: islocal
-      ? [{ src: cover, sizes: "512x512", type: "image/png" }]
-      : [
-        { src: cover?.s, sizes: "96x96", type: "image/jpg" },
-        { src: cover?.m, sizes: "256x256", type: "image/jpg" },
-        { src: cover?.l, sizes: "512x512", type: "image/jpg" },
-      ],
-  });
-
-  // 必须明确指定状态
-  navigator.mediaSession.playbackState = status.playState ? "playing" : "paused";
-
-  // 绑定动作（建议只绑定一次，或者确保每次指向最新的 state）
-  const actionHandlers = [
-    ['play', () => playOrPause()],
-    ['pause', () => playOrPause()],
-    ['previoustrack', () => changePlayIndex("prev", true)],
-    ['nexttrack', () => changePlayIndex("next", true)],
-    ['stop', () => soundStop()],
-    ['seekto', (details) => setSeek(details.seekTime)]
-  ];
-
-  for (const [action, handler] of actionHandlers) {
-    try {
-      navigator.mediaSession.setActionHandler(action, handler);
-    } catch (error) {
-      console.warn(`Media Session action "${action}" is not supported.`);
-    }
+const buildSessionArtwork = (cover, isLocal) => {
+  if (!cover) return [];
+  if (isLocal || typeof cover === "string") {
+    return [{ src: cover, sizes: "512x512", type: "image/png" }];
   }
 
-  updateMediaSessionPosition();
+  return [
+    cover.s && { src: cover.s, sizes: "96x96", type: "image/jpeg" },
+    cover.m && { src: cover.m, sizes: "256x256", type: "image/jpeg" },
+    cover.l && { src: cover.l, sizes: "512x512", type: "image/jpeg" },
+  ].filter(Boolean);
+};
+
+const bindPlayerMediaSession = () => {
+  bindMediaSessionActions({
+    play: () => {
+      if (!siteStatus().playState) playOrPause();
+    },
+    pause: () => {
+      if (siteStatus().playState) playOrPause();
+    },
+    previoustrack: () => changePlayIndex("prev", true),
+    nexttrack: () => changePlayIndex("next", true),
+    stop: () => {
+      if (siteStatus().playState) playOrPause();
+    },
+    seekto: (details) => {
+      if (typeof details?.seekTime === "number") setSeek(details.seekTime);
+    },
+    seekbackward: (details) => {
+      setSeek(Math.max(0, getSeek() - (details?.seekOffset || 10)));
+    },
+    seekforward: (details) => {
+      const duration = isSimulating ? simulationDuration : (player?.duration() || 0);
+      setSeek(Math.min(duration || 0, getSeek() + (details?.seekOffset || 10)));
+    },
+    visibilitychange: () => {
+      setMediaSessionPlaybackState(siteStatus().playState);
+    },
+  });
+};
+
+const syncMediaSessionPosition = (force = false) => {
+  const status = siteStatus();
+  const duration = isSimulating ? simulationDuration : (player?.duration() || player?._duration || 0);
+  updateMediaSessionPosition(
+    {
+      duration,
+      position: getSeek(),
+      playbackRate: status.playRate || 1,
+    },
+    force,
+  );
 };
 
 /**
- * 更新 Media Session 的进度状态
+ * 初始化媒体会话控制
  */
-export const updateMediaSessionPosition = () => {
-  if ("mediaSession" in navigator && "setPositionState" in navigator.mediaSession) {
-    const status = siteStatus();
-    const duration = isSimulating ? simulationDuration : (player?.duration() || 0);
-    const currentTime = getSeek();
-
-    // 必须确保 duration > 0 且 currentTime 不超过 duration
-    if (duration > 0 && currentTime <= duration) {
-      navigator.mediaSession.setPositionState({
-        duration: duration,
-        playbackRate: status.playRate || 1,
-        position: currentTime,
-      });
-    }
-  }
+const initMediaSession = (data, cover, isLocal, isDj) => {
+  bindPlayerMediaSession();
+  setMediaSessionMetadata({
+    title: data?.name || "MeT-Music",
+    artist: isDj ? "电台节目" : formatSessionText(data?.artists),
+    album: isDj ? "电台节目" : formatSessionText(data?.album),
+    artwork: buildSessionArtwork(cover, isLocal),
+  });
+  setMediaSessionPlaybackState(siteStatus().playState);
+  syncMediaSessionPosition(true);
 };
 
 /**
