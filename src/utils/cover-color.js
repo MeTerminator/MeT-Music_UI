@@ -7,7 +7,7 @@ import {
 import { siteSettings, siteStatus } from "@/stores";
 import { getGradientFromPalette, argb2Rgb, rgb2Argb } from "@/utils/color-utils";
 import { chunk } from "@/utils/helper";
-import ColorThief from "colorthief";
+import { getColorSync, getPaletteSync } from "colorthief";
 
 /**
  * 根据图像的主色获取渐变色
@@ -24,19 +24,19 @@ export const getCoverGradient = (coverSrc) => {
         newCoverSrc = `/api/web/album/cover/pic?pic=${coverSrc.replace("https://y.qq.com/music/photo_new/", "").replace("?param=100y100", "")}`;
       }
       
-      const colorThief = new ColorThief();
       const image = new Image();
       image.crossOrigin = "Anonymous";
       image.src = newCoverSrc;
 
       image.onload = async () => {
         try {
-          let palette = await colorThief.getPalette(image);
-          if (!palette || palette.length === 0) {
+          let paletteColors = getPaletteSync(image);
+          if (!paletteColors || paletteColors.length === 0) {
             console.warn("getPalette 失败，尝试 getColor");
-            const dominantColor = await colorThief.getColor(image);
-            palette = [dominantColor]; // 用主色填充调色板
+            const dominantColor = getColorSync(image);
+            paletteColors = [dominantColor];
           }
+          const palette = paletteColors.map((color) => color.array());
           const gradient = getGradientFromPalette(palette);
           console.log("图片加载完成，渐变色：", gradient);
           calcAccentColor(image, palette[0]);
