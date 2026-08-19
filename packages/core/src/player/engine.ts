@@ -1085,10 +1085,9 @@ export const processSpectrum = (sound: Howl): void => {
     if (settings.html5Player) {
       // HTML5 播放器模式
       if (!spectrumsData.audioCtx) {
-        // 断开之前的连接(源码原样保留;此分支内 audioCtx 必为 null,该 close 实为死代码)
+        // 断开之前的连接(重写修正:移除旧实现中 audioCtx 必为 null 时的死代码 close 调用)
         spectrumsData.audio?.disconnect();
         spectrumsData.analyser?.disconnect();
-        (spectrumsData.audioCtx as AudioContext | null)?.close();
         // 创建新的连接
         spectrumsData.audioCtx = new AudioContext();
         // 获取音频元素

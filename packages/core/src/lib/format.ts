@@ -42,45 +42,26 @@ export const chunk = <T>(input: readonly T[], size: number): T[][] => {
 };
 
 /**
- * 将字符串转换为小驼峰形式(Camel Case)
- * @param str - 需要转换的字符串
- * @returns 转换后的小驼峰形式字符串
- */
-export const toCamelCase = (str: string): string => {
-  // 使用正则表达式将字符串中每个单词的首字母大写
-  return str.replace(/(\w)(\w*)/g, (_, firstChar: string, rest: string) => {
-    // 对第一个单词的首字母进行小写转换
-    return firstChar.toLowerCase() + rest.toLowerCase();
-  });
-};
-
-/**
  * 模糊搜索工具函数(支持深度搜索)
+ * 重写修正:旧实现传入单个对象时返回 boolean(与 JSDoc 不符);
+ * 现仅接受数组并恒返回数组(现有调用方均传数组)。
  * @param keyword - 要搜索的关键词
- * @param data - 要搜索的数据,可以是对象或对象数组
- * @returns 包含关键词的对象数组(传入单个对象时返回是否匹配的布尔值,与旧实现一致)
+ * @param data - 要搜索的对象数组
+ * @returns 包含关键词的对象数组
  */
-export function fuzzySearch<T>(keyword: string, data: readonly T[] | null | undefined): T[];
-export function fuzzySearch(keyword: string, data: unknown): unknown[] | boolean;
-export function fuzzySearch(keyword: string, data: unknown): unknown[] | boolean {
+export const fuzzySearch = <T>(keyword: string, data: readonly T[] | null | undefined): T[] => {
   try {
-    /**
-     * 递归函数:遍历对象及其嵌套属性,过滤包含关键词的对象
-     * @param obj - 要检查的对象
-     * @returns 如果找到匹配的属性值,返回 true;否则返回 false
-     */
+    // 递归遍历对象及其嵌套属性,任一字符串属性包含关键词即命中
     const searchInObject = (obj: unknown): boolean => {
       const record = obj as Record<string, unknown>;
       for (const key in record) {
         if (Object.prototype.hasOwnProperty.call(record, key)) {
           const value = record[key];
-          // 如果属性值是对象,则递归调用
           if (typeof value === "object" && value !== null) {
             if (searchInObject(value)) {
               return true;
             }
           }
-          // 检查属性值是否是字符串并包含关键词
           if (value && typeof value === "string" && value.includes(keyword)) {
             return true;
           }
@@ -89,46 +70,26 @@ export function fuzzySearch(keyword: string, data: unknown): unknown[] | boolean
       return false;
     };
     if (!data) return [];
-    // 如果传入的是数组,遍历数组
-    if (Array.isArray(data)) {
-      return data.filter(searchInObject);
-    }
-    // 如果传入的是对象,直接调用递归函数
-    return searchInObject(data);
+    return data.filter(searchInObject);
   } catch (error) {
     console.error("模糊搜索出现错误：", error);
     return [];
   }
-}
-
-/**
- * 从文件名生成数字 ID
- * @param fileName - 文件名
- * @returns 生成的数字ID
- */
-export const generateId = (fileName: string): number => {
-  if (!fileName) return 1000000000;
-  // 将文件名转换为哈希值
-  let hash = 0;
-  for (let i = 0; i < fileName.length; i++) {
-    hash = (hash << 5) - hash + fileName.charCodeAt(i);
-  }
-  // 将哈希值转换为正整数
-  const numericId = Math.abs(hash % 10000000000);
-  return numericId;
 };
 
 /**
  * 将字节数格式化为可读的大小字符串。
+ * 重写修正:旧实现单位表以 "K" 起始导致整体偏移一档(500 字节显示 "500 K");
+ * 现使用标准单位表,0 与 <1024 字节显示为 "N B"。
  * @param bytes - 要格式化的字节数
  * @param decimals - 小数点位数(默认 2)
  * @returns 格式化后的大小字符串("10 KB")
  */
 export const formatBytes = (bytes: number, decimals = 2): string => {
-  if (bytes === 0) return "0 K";
+  if (bytes === 0) return "0 B";
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["K", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+  const sizes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 };

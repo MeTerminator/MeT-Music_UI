@@ -10,7 +10,6 @@ import {
 import {
   formatNumber,
   chunk,
-  generateId,
   formatBytes,
   fuzzySearch,
   parseDurationToSeconds,
@@ -95,35 +94,13 @@ describe("chunk", () => {
   });
 });
 
-describe("generateId", () => {
-  it("同输入同输出(稳定性)", () => {
-    expect(generateId("track01.mp3")).toBe(generateId("track01.mp3"));
-    expect(generateId("周杰伦 - 晴天.flac")).toBe(generateId("周杰伦 - 晴天.flac"));
-  });
-
-  it("已知哈希值保持不变", () => {
-    expect(generateId("a")).toBe(97);
-    expect(generateId("abc")).toBe(96354);
-  });
-
-  it("空文件名返回默认 ID", () => {
-    expect(generateId("")).toBe(1000000000);
-  });
-
-  it("返回非负整数", () => {
-    const id = generateId("some/very/long/path/file.mp3");
-    expect(Number.isInteger(id)).toBe(true);
-    expect(id).toBeGreaterThanOrEqual(0);
-  });
-});
-
 describe("formatBytes", () => {
-  it("零字节返回 0 K", () => {
-    expect(formatBytes(0)).toBe("0 K");
+  it("零字节返回 0 B", () => {
+    expect(formatBytes(0)).toBe("0 B");
   });
 
-  it("按 1024 进制换算单位", () => {
-    expect(formatBytes(500)).toBe("500 K");
+  it("按 1024 进制换算标准单位(重写修正:旧实现单位偏移一档)", () => {
+    expect(formatBytes(500)).toBe("500 B");
     expect(formatBytes(1024)).toBe("1 KB");
     expect(formatBytes(1536)).toBe("1.5 KB");
     expect(formatBytes(1048576)).toBe("1 MB");

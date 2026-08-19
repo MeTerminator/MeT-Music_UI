@@ -59,7 +59,7 @@ export const parseLyric = async (
     // 以下逻辑保持不变
 
     // 判断是否具有内容
-    const checkLyric = (lyric: unknown): boolean => (lyric ? (lyric ? true : false) : false);
+    const checkLyric = (lyric: unknown): boolean => Boolean(lyric);
     // 初始化数据
     const { lrc, lrctrans, qrc, qrctrans, qrcroma } = data;
     const lrcData = {
@@ -134,7 +134,9 @@ export const parseLyric = async (
         result.yrc = parseOtherLrc(result.yrc, parseLrcData(lrcData.ytlrc), "tran");
       }
       if (lrcData.yromalrc) {
-        romalrcParseData = yromalrcParseData = parseQrc(lrcData.yromalrc);
+        // lrcAM 与 yrcAM 共用同一份 QRC 音译解析结果
+        yromalrcParseData = parseQrc(lrcData.yromalrc);
+        romalrcParseData = yromalrcParseData;
         result.yrc = parseOtherYrc(
           result.yrc,
           parseYrcData(lrcData.yromalrc, options.removeInfo),
@@ -152,7 +154,9 @@ export const parseLyric = async (
       });
     }
 
-    let lrcAM = parseAMData(lrcParseData, tlyricParseData, romalrcParseData);
+    // 重写修正:旧实现此处无视 removeAMInfo 设置恒用默认值 true,
+    // 导致关闭"去除 AM 歌词歌曲信息"设置时 lrcAM 仍被过滤
+    let lrcAM = parseAMData(lrcParseData, tlyricParseData, romalrcParseData, options.removeAMInfo);
     // 去除 lrcAM 中的空行
     lrcAM = lrcAM.filter((v) => v.words?.[0]?.word !== "");
     result.lrcAM = lrcAM;
@@ -358,9 +362,11 @@ export const parseYrcData = (
   if (!qrcSource) return [];
   try {
     // qrc -> yrc
-    let qrc = qrcSource.replace(/\r\n/g, "\n");
-    // 源码怪癖:直接取 [offset:0] 后的部分,不存在时后续调用抛错并被 catch 返回 []
+    let qrc: string | undefined = qrcSource.replace(/\r\n/g, "\n");
+    // 重写修正:旧实现无 [offset:0] 前缀时靠 undefined 上抛 TypeError 被 catch 吞掉;
+    // 行为不变(仍返回 []),改为显式判断
     qrc = qrc.split("[offset:0]\n")[1];
+    if (qrc === undefined) return [];
     qrc = qrc.replace(/\n\"\/>\n<\/LyricInfo>\n<\/QrcInfos>/g, "");
     qrc = qrc.replace(/\((\d+,\d+)\)/g, "{$1}");
 

@@ -104,11 +104,12 @@ export const getCommentTime = (t: number): string => {
     return `${pastTime.getMinutes()} 分钟前`;
   } else if (todayLast - t > 3600000 && todayLast - t <= 86400000) {
     return `${UH}:${Um}`;
+  } else if (todayLast - t <= 172800000) {
+    // 重写修正:旧实现把"同年"分支排在"昨天"之前,导致昨天分支永不可达
+    return `昨天 ${UH}:${Um}`;
   } else if (nowDate.getFullYear() === userDate.getFullYear()) {
     // 如果在今年,不显示年份
     return `${userDate.getMonth() + 1}月${userDate.getDate()}日 ${UH}:${Um}`;
-  } else if (todayLast - t <= 172800000) {
-    return `昨天 ${UH}:${Um}`;
   } else {
     return `${userDate.getFullYear()}年${
       userDate.getMonth() + 1
