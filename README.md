@@ -2,6 +2,23 @@
 
 > 仅供个人学习研究使用，禁止用于商业及非法用途
 
+## 本地开发
+
+需要 [Node.js](https://nodejs.org/) LTS 和 [pnpm](https://pnpm.io/)。
+
+```bash
+git clone https://github.com/MeTerminator/MeT-Music_UI.git
+cd MeT-Music_UI
+pnpm install
+pnpm dev
+```
+
+生产构建：
+
+```bash
+pnpm build
+```
+
 ## ⚠️ 使用须知
 
 本项目所使用的 API 均有跨越限制，且含有防护机制，如需在别处使用请联系作者获得开放 API 接口。

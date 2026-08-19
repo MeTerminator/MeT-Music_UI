@@ -1,5 +1,8 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
-import { resolve } from "path";
+
+const rootDir = import.meta.dirname ?? dirname(fileURLToPath(import.meta.url));
 import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 import { VitePWA } from "vite-plugin-pwa";
 import vue from "@vitejs/plugin-vue";
@@ -20,7 +23,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       extensions: [".js", ".vue", ".json"],
       alias: {
-        "@": resolve(__dirname, "src"),
+        "@": resolve(rootDir, "src"),
       },
     },
 
@@ -117,7 +120,7 @@ export default defineConfig(({ mode }) => {
       minify: "terser",
       rollupOptions: {
         input: {
-          index: resolve(__dirname, "index.html"),
+          index: resolve(rootDir, "index.html"),
         },
       },
       terserOptions: {
