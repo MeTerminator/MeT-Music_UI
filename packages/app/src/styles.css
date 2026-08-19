@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* 设计 token(U3 全量视觉阶段再扩展;暗色为默认,与旧 UI 一致) */
+:root {
+  --met-bg: #16161a;
+  --met-bg-elevated: #1f1f24;
+  --met-fg: #e6e6ea;
+  --met-fg-dim: #9a9aa3;
+  --met-primary: #6dd48c;
+  --met-border: #2c2c33;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--met-bg);
+  color: var(--met-fg);
+  font-family:
+    "HarmonyOS Sans SC",
+    "PingFang SC",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
