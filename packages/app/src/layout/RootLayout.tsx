@@ -19,6 +19,14 @@
  * - <768px:侧栏隐藏,顶栏汉堡开左侧抽屉(遮罩 + 复用 nav 项与 UserPanel),
  *   任意导航后自动关(对旧 <900px 汉堡下拉意图的现代化实现;
  *   asideMenuCollapsed 字段保持不动,留待 U3)。
+ *
+ * P2 布局/全局平台细节:
+ * - 回顶按钮:main 滚动超 400px 右下浮现,点击平滑回顶,bottom 90px 避让播放条
+ *   (对照旧 n-back-top 110/50 避让);
+ * - no-sider:settings.showSider=false 时隐藏桌面侧栏,内容区 max-w 1200 居中窄版
+ *   (对照旧 .main-layout.no-sider;窄屏汉堡抽屉不受影响);
+ * - 顶部 2px 路由加载进度条(旧 $loadingBar 的简版替代,
+ *   router.subscribe onBeforeLoad/onResolved 驱动)。
  */
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router";
@@ -26,6 +34,7 @@ import {
   Airplay,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   History,
   Home,
   Menu,
@@ -69,6 +78,78 @@ const toggleThemeType = () => {
 /** 隔空播放房外入口(旧 UserData goToPlayer:任意时刻可开,sid 用本地 sessionId) */
 const openRemotePlayer = () => {
   window.open(`/player/?sid=${getSessionId()}`, "_blank");
+};
+
+/**
+ * 顶部 2px 路由加载进度条(旧 Provider $loadingBar 的简版替代):
+ * onBeforeLoad 从 0 缓慢爬向 80%,onResolved 冲至 100% 后淡出。
+ */
+const RouteProgress = () => {
+  const router = useRouter();
+  const [visible, setVisible] = useState(false);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    let hideTimer: number | undefined;
+    let failsafeTimer: number | undefined;
+    let pending = false;
+    const hide = () => {
+      setVisible(false);
+      setWidth(0);
+    };
+    const unsubStart = router.subscribe("onBeforeLoad", () => {
+      window.clearTimeout(hideTimer);
+      window.clearTimeout(failsafeTimer);
+      pending = true;
+      setVisible(true);
+      setWidth(0);
+      // 双 RAF:先渲染宽度 0,再进入缓爬过渡
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (pending) setWidth(80);
+        });
+      });
+      // 兜底:导航异常未触发 onResolved 时 10s 后自行隐藏
+      failsafeTimer = window.setTimeout(() => {
+        pending = false;
+        hide();
+      }, 10_000);
+    });
+    const unsubDone = router.subscribe("onResolved", () => {
+      if (!pending) return; // 忽略初始化等非导航触发
+      pending = false;
+      window.clearTimeout(failsafeTimer);
+      setWidth(100);
+      hideTimer = window.setTimeout(hide, 400);
+    });
+    return () => {
+      window.clearTimeout(hideTimer);
+      window.clearTimeout(failsafeTimer);
+      unsubStart();
+      unsubDone();
+    };
+  }, [router]);
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5"
+      style={{ opacity: visible ? 1 : 0, transition: "opacity 0.3s ease" }}
+    >
+      <div
+        className="h-full bg-[var(--met-primary)]"
+        style={{
+          width: `${width}%`,
+          transition:
+            width === 0
+              ? "none"
+              : width === 100
+                ? "width 0.2s ease"
+                : "width 6s cubic-bezier(0.1, 0.6, 0.2, 1)",
+        }}
+      />
+    </div>
+  );
 };
 
 /**
@@ -155,6 +236,7 @@ const RootLayout = () => {
   const isHosted = useHostStore((s) => s.isHosted);
   const callbacks = useHostStore((s) => s.callbacks);
   const themeType = useSettingsStore((s) => s.themeType);
+  const showSider = useSettingsStore((s) => s.showSider);
   const isInRoom = useStatusStore((s) => s.isInRoom);
 
   // 窄屏抽屉
@@ -166,6 +248,16 @@ const RootLayout = () => {
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
+
+  // 回顶按钮:main 滚动超过 400px 时浮现(对照旧 n-back-top)
+  const [showBackTop, setShowBackTop] = useState(false);
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const onScroll = () => setShowBackTop(el.scrollTop > 400);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   // 任意导航(含仅 search 变化,如侧栏切换另一歌单)后关闭抽屉
   const locationHref = useRouterState({ select: (s) => s.location.href });
@@ -272,17 +364,40 @@ const RootLayout = () => {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* 左侧窄侧边栏:<768px 隐藏(改走抽屉);
+        {/* 左侧窄侧边栏:<768px 隐藏(改走抽屉);showSider=false 时桌面亦隐藏
+            (no-sider,窄屏汉堡抽屉不受影响);
             asideMenuCollapsed 的完整宽度联动留待 U3,此处固定窄栏 */}
-        <aside className="hidden w-16 shrink-0 flex-col border-r border-[var(--met-border)] py-3 md:flex">
-          <SidebarContent variant="rail" />
-        </aside>
+        {showSider ? (
+          <aside className="hidden w-16 shrink-0 flex-col border-r border-[var(--met-border)] py-3 md:flex">
+            <SidebarContent variant="rail" />
+          </aside>
+        ) : null}
 
-        {/* 主内容区(底部预留 72px 给播放条) */}
+        {/* 主内容区(底部预留 72px 给播放条);
+            no-sider 时内容居中窄版(对照旧 .no-sider .main-router max-width) */}
         <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto pb-[72px]">
-          <Outlet />
+          <div className={showSider ? undefined : "mx-auto w-full max-w-[1200px]"}>
+            <Outlet />
+          </div>
         </main>
       </div>
+
+      {/* 回顶按钮(滚动超 400px 浮现;bottom 90px 避让播放条) */}
+      <button
+        type="button"
+        title="回到顶部"
+        aria-label="回到顶部"
+        tabIndex={showBackTop ? 0 : -1}
+        onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+        className={`fixed right-6 bottom-[90px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
+          showBackTop ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0"
+        }`}
+      >
+        <ChevronUp className="h-6 w-6" aria-hidden />
+      </button>
+
+      {/* 顶部路由加载进度条 */}
+      <RouteProgress />
 
       {/* 窄屏左侧抽屉(遮罩 + 侧栏内容复用) */}
       {drawerOpen ? (

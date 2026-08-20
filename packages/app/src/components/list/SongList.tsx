@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Ellipsis, ListEnd, Play } from "lucide-react";
+import { ContextMenu as BaseContextMenu } from "@base-ui-components/react/context-menu";
+import { Ellipsis, ListEnd, Locate, Play } from "lucide-react";
 import { toast } from "sonner";
 import {
   addSongToNext,
@@ -17,12 +18,18 @@ import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
 import { useSiteDataStore } from "@/stores/siteData";
 import { addSong as ltAddSong } from "@/stores/listenTogether";
-import { ContextMenu } from "@/components/ui/context-menu";
-import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
+import {
+  DropdownMenu,
+  MenuItems,
+  menuPopupClassName,
+  type MenuItemDef,
+} from "@/components/ui/menu";
 
 interface SongListProps {
   songs: Song[];
   loading?: boolean;
+  /** 列表获取出错(true 时显示错误占位,对照旧 SongList 的 data === "error" 分支) */
+  error?: boolean;
   onPlayAll?: () => void;
   /** 是否显示专辑列(默认 true;专辑页内可关闭) */
   showAlbum?: boolean;
@@ -83,6 +90,12 @@ const getFee = (song: Song): number | null => {
 /** 歌曲是否带 TTML 逐词歌词标记(对照旧 tags-wrap 的 item.ttml === 1 判定) */
 const hasTtml = (song: Song): boolean => (song as { ttml?: unknown }).ttml === 1;
 
+/** 歌曲别名(formatData 的 song.alia 字段;对照旧 .alia 副行) */
+const getAlia = (song: Song): string | null => {
+  const alia = (song as { alia?: unknown }).alia;
+  return typeof alia === "string" && alia !== "" ? alia : null;
+};
+
 /** 专辑 id(album 为对象且带 id 时可点击跳转专辑页) */
 const getAlbumId = (album: Song["album"]): string | null => {
   if (album && typeof album === "object" && album.id != null) return String(album.id);
@@ -106,6 +119,11 @@ const playFromList = async (
   index: number,
   behavior: PlayBehavior = "replace",
 ): Promise<void> => {
+  // 若开启了缓存且正在加载(对照旧 playSong 首行):提示缓冲中并中止
+  if (useSettingsStore.getState().useMusicCache && useStatusStore.getState().playLoading) {
+    toast.warning("歌曲正在缓冲中,请稍后");
+    return;
+  }
   const playingId = useMusicStore.getState().playSongData?.id;
   if (playingId != null && playingId === song.id) {
     // 与旧实现一致:双击当前播放歌曲 → 播放/暂停切换(房内同样走此分支)
@@ -143,6 +161,7 @@ const addNext = (song: Song): void => {
 export default function SongList({
   songs,
   loading = false,
+  error = false,
   onPlayAll,
   showAlbum = true,
   showCover = true,
@@ -160,6 +179,7 @@ export default function SongList({
   });
   const navigate = useNavigate();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
   const reachEndRef = useRef<SongListProps["onReachEnd"]>(onReachEnd);
   reachEndRef.current = onReachEnd;
 
@@ -169,6 +189,36 @@ export default function SongList({
     () => (keyword ? fuzzySearch(keyword, songs) : songs),
     [keyword, songs],
   );
+
+  // 「定位歌曲」浮动按钮(对照旧 scroll-to-song):
+  // 列表内含当前播放曲且其行不在视口内时显示,点击滚动至该行
+  const hasPlayingRow =
+    playingId != null && displaySongs.some((s) => s.id === playingId);
+  const [playingRowVisible, setPlayingRowVisible] = useState(true);
+
+  useEffect(() => {
+    if (!hasPlayingRow) {
+      setPlayingRowVisible(true);
+      return;
+    }
+    const row = listRef.current?.querySelector<HTMLElement>('[data-playing="true"]');
+    if (!row) {
+      setPlayingRowVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => setPlayingRowVisible(entries.some((e) => e.isIntersecting)),
+      { threshold: 0.1 },
+    );
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [hasPlayingRow, playingId, displaySongs]);
+
+  const scrollToPlaying = (): void => {
+    listRef.current
+      ?.querySelector('[data-playing="true"]')
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   /**
    * 行操作菜单项(右键菜单与窄屏「⋯」按钮共用;对照旧 SongListDropdown 选项)。
@@ -237,6 +287,11 @@ export default function SongList({
           label: "复制歌曲链接",
           onSelect: () => void copySongLink(song),
         },
+        {
+          key: "copy-id",
+          label: "复制歌曲 ID",
+          onSelect: () => void copyText(songId, "复制歌曲 ID 成功"),
+        },
       );
     }
     // 同名搜索(对照旧 SongListDropdown,本地歌曲同样可用)
@@ -261,6 +316,14 @@ export default function SongList({
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
   }, [onReachEnd, displaySongs.length]);
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-[var(--met-fg-dim)]">
+        <span className="text-sm">列表获取出错,请重试</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -321,7 +384,20 @@ export default function SongList({
         </div>
       ) : null}
 
-      <ul className="flex flex-col">
+      {/* 表头(对照旧 song-list-header;列宽/间距与行布局一致) */}
+      <div className="flex items-center gap-3 border border-transparent px-3 pb-2 text-xs text-[var(--met-fg-dim)]">
+        <span className="w-8 shrink-0 text-center">#</span>
+        {showCover ? <span className="w-10 shrink-0" aria-hidden="true" /> : null}
+        <span className="min-w-0 flex-1">歌曲</span>
+        {showAlbum ? <span className="hidden w-1/4 min-w-0 sm:block">专辑</span> : null}
+        {/* 悬停操作列占位(md+ 显示,与两个 h-8 w-8 按钮 + gap-0.5 等宽) */}
+        <span className="hidden w-[66px] shrink-0 md:block" aria-hidden="true" />
+        <span className="w-12 shrink-0 text-right">时长</span>
+        {/* 窄屏「⋯」按钮占位 */}
+        <span className="w-8 shrink-0 md:hidden" aria-hidden="true" />
+      </div>
+
+      <ul ref={listRef} className="flex flex-col">
         {displaySongs.map((song, index) => {
           const isPlaying = playingId != null && playingId === song.id;
           const menuItems = rowMenuItems(song, index);
@@ -329,20 +405,20 @@ export default function SongList({
           const fee = getFee(song);
           const albumId = getAlbumId(song.album);
           return (
-            <ContextMenu
-              key={`${song.id}-${index}`}
-              items={menuItems}
-              render={
-                <li
-                  onDoubleClick={() =>
-                    void playFromList(displaySongs, song, index, playBehavior)
-                  }
-                  className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
-                    isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
-                  }`}
-                />
-              }
-            >
+            <BaseContextMenu.Root key={`${song.id}-${index}`}>
+              <BaseContextMenu.Trigger
+                render={
+                  <li
+                    data-playing={isPlaying ? "true" : undefined}
+                    onDoubleClick={() =>
+                      void playFromList(displaySongs, song, index, playBehavior)
+                    }
+                    className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
+                      isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
+                    }`}
+                  />
+                }
+              >
               {/* 序号 */}
               <span
                 className={`w-8 shrink-0 text-center text-sm tabular-nums ${
@@ -446,6 +522,15 @@ export default function SongList({
                     artistsText(song.artists)
                   )}
                 </div>
+                {/* 别名副行(对照旧 .alia:song.alia 存在时歌名下灰色小字) */}
+                {getAlia(song) ? (
+                  <div
+                    className="truncate text-[11px] text-[var(--met-fg-dim)] opacity-70"
+                    title={getAlia(song) ?? undefined}
+                  >
+                    {getAlia(song)}
+                  </div>
+                ) : null}
               </div>
               {/* 专辑(对照旧 .album:album 为对象且带 id 时可点跳转 /album?id=) */}
               {showAlbum ? (
@@ -506,10 +591,55 @@ export default function SongList({
               >
                 <Ellipsis size={18} aria-hidden="true" />
               </DropdownMenu>
-            </ContextMenu>
+              </BaseContextMenu.Trigger>
+              <BaseContextMenu.Portal>
+                <BaseContextMenu.Positioner className="z-50 outline-none">
+                  <BaseContextMenu.Popup className={menuPopupClassName}>
+                    {/* 顶部歌曲信息头(对照旧 SongListDropdown renderSong;不可点,本地歌曲不显示) */}
+                    {!song.path ? (
+                      <>
+                        <div className="flex max-w-64 items-center gap-2.5 px-3 py-2">
+                          {song.coverSize?.s || song.cover ? (
+                            <img
+                              src={song.coverSize?.s || song.cover}
+                              alt=""
+                              loading="lazy"
+                              className="h-10 w-10 shrink-0 rounded-md bg-[var(--met-bg)] object-cover"
+                            />
+                          ) : null}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-[var(--met-fg)]">
+                              {song.name || "未知曲目"}
+                            </div>
+                            <div className="truncate text-xs text-[var(--met-fg-dim)]">
+                              {artistsText(song.artists)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mx-2 mb-1 h-px bg-[var(--met-border)]" aria-hidden="true" />
+                      </>
+                    ) : null}
+                    <MenuItems items={menuItems} />
+                  </BaseContextMenu.Popup>
+                </BaseContextMenu.Positioner>
+              </BaseContextMenu.Portal>
+            </BaseContextMenu.Root>
           );
         })}
       </ul>
+
+      {/* 「定位歌曲」浮动按钮(对照旧 scroll-to-song:当前播放行不在视口时显示) */}
+      {hasPlayingRow && !playingRowVisible ? (
+        <button
+          type="button"
+          aria-label="定位歌曲"
+          title="定位歌曲"
+          onClick={scrollToPlaying}
+          className="fixed right-6 bottom-[144px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-colors hover:text-[var(--met-primary)] active:scale-95"
+        >
+          <Locate size={20} aria-hidden="true" />
+        </button>
+      ) : null}
 
       {/* 触底哨兵 */}
       {onReachEnd ? <div ref={sentinelRef} className="h-px w-full" /> : null}

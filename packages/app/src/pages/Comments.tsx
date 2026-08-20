@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { api } from "@met/core";
@@ -11,6 +11,9 @@ const PAGE_SIZE = 25;
 export default function Comments() {
   const search = useSearch({ strict: false }) as { id?: number | string };
   const id = search.id;
+
+  // 页面根节点(翻页回顶时向上查找可滚动祖先)
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   // 游标栈:第 page 页的起始游标为 cursorStack[page-1](第一页为空串)
   const [page, setPage] = useState(1);
@@ -65,11 +68,17 @@ export default function Comments() {
         // 接口若带当前用户点赞态则透传(QQ 评论字段 IsPraised;缺省视为未点赞)
         liked: Boolean(c.IsPraised),
         location: c.Location || undefined,
+        // VIP 图标与评论配图(QQ 评论字段 VipIcon / Pic,对照旧 Comments.vue)
+        vipIcon: c.VipIcon || undefined,
+        pic: c.Pic || undefined,
         replies: Array.isArray(c.SubComments)
           ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
             c.SubComments.map((sub: any) => ({
               nick: sub.Nick || "未知用户",
               content: sub.Content || "",
+              // 子评论赞数与作者赞标记(QQ 字段 PraiseNum / AuthorPraise)
+              praiseNum: typeof sub.PraiseNum === "number" ? sub.PraiseNum : Number(sub.PraiseNum) || 0,
+              authorPraise: Boolean(sub.AuthorPraise),
             }))
           : undefined,
       })),
@@ -77,6 +86,32 @@ export default function Comments() {
   );
 
   const loading = infoQuery.isLoading || commentsQuery.isLoading;
+
+  /**
+   * 翻页回顶:页面滚动容器是 RootLayout 的 <main>(window 不滚动,
+   * window.scrollTo 无效),从页面根节点向上找最近可滚动祖先,
+   * 兜底 document.querySelector("main") 与 window。
+   */
+  const scrollToTop = (): void => {
+    let node: HTMLElement | null = rootRef.current?.parentElement ?? null;
+    while (node) {
+      const { overflowY } = getComputedStyle(node);
+      if (
+        (overflowY === "auto" || overflowY === "scroll") &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        node.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      node = node.parentElement;
+    }
+    const main = document.querySelector("main");
+    if (main) {
+      main.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const handleNextPage = (): void => {
     const lastSeqNo = rawComments[rawComments.length - 1]?.SeqNo;
@@ -87,13 +122,13 @@ export default function Comments() {
       return next;
     });
     setPage((p) => p + 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToTop();
   };
 
   const handlePrevPage = (): void => {
     if (page <= 1) return;
     setPage((p) => p - 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToTop();
   };
 
   if (id == null || id === "") {
@@ -120,7 +155,10 @@ export default function Comments() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col px-4 py-6">
+    <div
+      ref={rootRef}
+      className="mx-auto flex w-full max-w-3xl flex-col px-4 py-6 min-[1200px]:max-w-6xl"
+    >
       {/* 歌曲信息卡 */}
       {infoQuery.isLoading ? (
         <div className="animate-pulse rounded-xl bg-[var(--met-bg-elevated)] p-5">

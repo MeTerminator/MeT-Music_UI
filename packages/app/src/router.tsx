@@ -86,6 +86,11 @@ const keywordsSearch = (search: Record<string, unknown>): { keywords?: string } 
   keywords: search.keywords as string | undefined,
 });
 
+/** 分页子路由:?page= 透传(旧 query.page 契约;字符串宽松,页面侧 parseInt 容错) */
+const pageSearch = (search: Record<string, unknown>): { page?: string } => ({
+  page: search.page as string | undefined,
+});
+
 // __root
 const rootRoute = createRootRoute({
   component: RootLayout,
@@ -116,26 +121,31 @@ const searchSongsRoute = createRoute({
   getParentRoute: () => searchRoute,
   path: "songs",
   component: SearchSongs,
+  validateSearch: pageSearch,
 });
 const searchArtistsRoute = createRoute({
   getParentRoute: () => searchRoute,
   path: "artists",
   component: SearchArtists,
+  validateSearch: pageSearch,
 });
 const searchAlbumsRoute = createRoute({
   getParentRoute: () => searchRoute,
   path: "albums",
   component: SearchAlbums,
+  validateSearch: pageSearch,
 });
 const searchVideosRoute = createRoute({
   getParentRoute: () => searchRoute,
   path: "videos",
   component: SearchVideos,
+  validateSearch: pageSearch,
 });
 const searchPlaylistsRoute = createRoute({
   getParentRoute: () => searchRoute,
   path: "playlists",
   component: SearchPlaylists,
+  validateSearch: pageSearch,
 });
 
 // 视频播放 /videos-player
@@ -200,16 +210,19 @@ const artistSongsRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "songs",
   component: ArtistSongs,
+  validateSearch: pageSearch,
 });
 const artistAlbumsRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "albums",
   component: ArtistAlbums,
+  validateSearch: pageSearch,
 });
 const artistVideosRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "videos",
   component: ArtistVideos,
+  validateSearch: pageSearch,
 });
 
 // 全局设置 /setting

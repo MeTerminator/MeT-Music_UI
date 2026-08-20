@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Heart } from "lucide-react";
 import { toast } from "sonner";
 import { formatNumber, getCommentTime } from "@met/core";
+import { replaceEmoji } from "@/lib/emoji";
 import { useSiteDataStore } from "@/stores/siteData";
 
 /** 规范化后的评论项(由页面从原始接口数据映射) */
@@ -22,8 +23,19 @@ export interface CommentItem {
   liked?: boolean;
   /** IP / 地理位置 */
   location?: string;
+  /** VIP 图标地址(QQ 评论字段 VipIcon,存在时昵称旁小标) */
+  vipIcon?: string;
+  /** 评论配图地址(QQ 评论字段 Pic,存在时渲染并可点击查看大图) */
+  pic?: string;
   /** 子回复 */
-  replies?: { nick: string; content: string }[];
+  replies?: {
+    nick: string;
+    content: string;
+    /** 子评论点赞数(QQ 字段 PraiseNum) */
+    praiseNum?: number;
+    /** 作者赞过标记(QQ 字段 AuthorPraise,红心展示) */
+    authorPraise?: boolean;
+  }[];
 }
 
 /** 点赞本地覆盖(乐观切换后的 liked / 计数) */
@@ -49,10 +61,23 @@ export default function CommentList({
   // 点赞乐观覆盖(key: comment.id);列表数据变化(翻页/换歌)时清空
   const [likeOverrides, setLikeOverrides] = useState<Record<string, LikeOverride>>({});
   const lastLikeAtRef = useRef(0);
+  // 评论配图大图预览(点击配图打开,点击遮罩/Esc 关闭)
+  const [previewPic, setPreviewPic] = useState<string | null>(null);
 
   useEffect(() => {
     setLikeOverrides({});
+    setPreviewPic(null);
   }, [comments]);
+
+  // Esc 关闭大图预览
+  useEffect(() => {
+    if (!previewPic) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setPreviewPic(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [previewPic]);
 
   /**
    * 点赞/取消点赞(对照旧 CommentList.vue toLikeComment:登录门槛 + 3s 节流 +
@@ -118,7 +143,9 @@ export default function CommentList({
   }
 
   return (
-    <ul className="flex flex-col gap-3">
+    <>
+    {/* ≥1200px 双列栅格(对照旧 n-grid cols="1 1200:2") */}
+    <ul className="grid grid-cols-1 items-start gap-3 min-[1200px]:grid-cols-2">
       {comments.map((comment) => {
         const override = likeOverrides[String(comment.id)];
         const liked = override?.liked ?? comment.liked ?? false;
@@ -144,23 +171,67 @@ export default function CommentList({
               <span className="truncate text-sm font-medium text-[var(--met-fg)]">
                 {comment.nick || "未知用户"}
               </span>
+              {/* VIP 图标(QQ 评论字段 VipIcon,对照旧 Comments.vue header-extra) */}
+              {comment.vipIcon ? (
+                <img
+                  src={comment.vipIcon}
+                  alt="VIP"
+                  title="VIP"
+                  loading="lazy"
+                  className="h-4 w-auto shrink-0"
+                />
+              ) : null}
               {comment.location ? (
                 <span className="shrink-0 text-xs text-[var(--met-fg-dim)]">
                   {comment.location}
                 </span>
               ) : null}
             </div>
-            {/* 内容 */}
+            {/* 内容([表情名] 替换为 emoji 字符) */}
             <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-[var(--met-fg)]">
-              {comment.content}
+              {replaceEmoji(comment.content)}
             </p>
+            {/* 评论配图(QQ 评论字段 Pic,点击查看大图) */}
+            {comment.pic ? (
+              <button
+                type="button"
+                aria-label="查看评论配图大图"
+                title="查看大图"
+                onClick={() => setPreviewPic(comment.pic ?? null)}
+                className="mt-2 block cursor-zoom-in"
+              >
+                <img
+                  src={comment.pic}
+                  alt="评论配图"
+                  loading="lazy"
+                  className="max-h-48 max-w-[200px] rounded-lg object-cover"
+                />
+              </button>
+            ) : null}
             {/* 子回复 */}
             {comment.replies?.length ? (
               <div className="mt-2 rounded-lg border border-[var(--met-border)] px-3 py-2">
                 {comment.replies.map((reply, i) => (
                   <p key={i} className="py-0.5 text-xs text-[var(--met-fg-dim)]">
                     <span className="font-medium text-[var(--met-fg)]">@{reply.nick}:</span>{" "}
-                    {reply.content}
+                    {replaceEmoji(reply.content)}
+                    {/* 子评论作者赞标记 + 赞数(对照旧 Comments.vue sub.AuthorPraise / sub.PraiseNum) */}
+                    <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                      <Heart
+                        size={12}
+                        aria-hidden="true"
+                        className={
+                          reply.authorPraise
+                            ? "text-[var(--met-danger)]"
+                            : "text-[var(--met-fg-dim)]"
+                        }
+                        fill={reply.authorPraise ? "currentColor" : "none"}
+                      />
+                      {reply.authorPraise ? (
+                        <span className="sr-only">作者赞过</span>
+                      ) : null}
+                      <span className="tabular-nums">{reply.praiseNum ?? 0}</span>
+                    </span>
                   </p>
                 ))}
               </div>
@@ -193,5 +264,26 @@ export default function CommentList({
         );
       })}
     </ul>
+
+    {/* 配图大图预览遮罩 */}
+    {previewPic ? (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="关闭大图预览"
+        onClick={() => setPreviewPic(null)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setPreviewPic(null);
+        }}
+        className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/70 p-6"
+      >
+        <img
+          src={previewPic}
+          alt="评论配图大图"
+          className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+        />
+      </div>
+    ) : null}
+    </>
   );
 }

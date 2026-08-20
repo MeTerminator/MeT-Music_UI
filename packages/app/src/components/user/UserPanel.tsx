@@ -5,6 +5,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { getCoverUrl } from "@/lib/formatData";
 import { logout, setUserProfile, useSiteDataStore } from "@/stores/siteData";
+import { useMusicStore } from "@/stores/music";
+import { useSettingsStore } from "@/stores/settings";
 import LoginDialog from "./LoginDialog";
 
 /** 用户歌单原始字段(对照旧 Menu.vue 的消费:id / name / coverImgUrl) */
@@ -20,6 +22,31 @@ interface UserDetail {
     nickname?: string;
     avatarUrl?: string;
   };
+}
+
+/**
+ * 数字滚动动画(mount 时 0→N,300ms;对照旧 Nav/UserData.vue 的
+ * NNumberAnimation 意图的 requestAnimationFrame 简版)。
+ */
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    if (value <= 0) {
+      setDisplay(0);
+      return;
+    }
+    const duration = 300;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      setDisplay(Math.round(value * t));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <span className="text-sm font-semibold tabular-nums text-[var(--met-fg)]">{display}</span>;
 }
 
 /** 歌单行样式;active = 当前路由正在展示该歌单(高亮) */
@@ -43,6 +70,10 @@ export default function UserPanel() {
   const playlists = useSiteDataStore(
     (s) => s.userLikeData.playlists,
   ) as RawUserPlaylist[];
+  // 统计:最近播放数(对照旧 Nav/UserData.vue 统计区的 historyPlaylist)
+  const historyCount = useMusicStore((s) => s.historyPlaylist.length);
+  // 歌单行封面/图标双模式(对照旧 Menu.vue 消费 siderShowCover)
+  const siderShowCover = useSettingsStore((s) => s.siderShowCover);
 
   // 当前路由高亮:/playlist?id=xx 高亮对应歌单行,/like-songs 高亮「喜欢的音乐」
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -107,6 +138,18 @@ export default function UserPanel() {
         </Button>
       </div>
 
+      {/* 数量统计(对照旧 Nav/UserData.vue 统计区:歌单 / 播放) */}
+      <div className="mb-1 flex items-center gap-5 px-2 py-1">
+        <div className="flex flex-col">
+          <AnimatedNumber value={playlists.length} />
+          <span className="text-xs text-[var(--met-fg-dim)]">歌单</span>
+        </div>
+        <div className="flex flex-col">
+          <AnimatedNumber value={historyCount} />
+          <span className="text-xs text-[var(--met-fg-dim)]">播放</span>
+        </div>
+      </div>
+
       {/* 喜欢的音乐(置顶,跳 /like-songs) */}
       {likePlaylist ? (
         <button
@@ -144,7 +187,7 @@ export default function UserPanel() {
                   void navigate({ to: "/playlist", search: { id: String(pl.id) } })
                 }
               >
-                {pl.coverImgUrl ? (
+                {siderShowCover && pl.coverImgUrl ? (
                   <img
                     src={getCoverUrl(pl.coverImgUrl, 100)}
                     alt=""

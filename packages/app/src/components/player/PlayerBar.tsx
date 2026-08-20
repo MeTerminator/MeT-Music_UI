@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type WheelEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Ellipsis,
+  Gauge,
   ListMusic,
   Loader2,
   Pause,
@@ -11,6 +12,8 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  Volume,
+  Volume1,
   Volume2,
   VolumeX,
   type LucideIcon,
@@ -25,6 +28,7 @@ import {
   setVolumeMute,
 } from "@met/core";
 import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
+import { Slider } from "@/components/ui/slider";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
@@ -53,8 +57,28 @@ const SONG_MODE_META: Record<
   repeat: { icon: Repeat1, label: "单曲循环" },
 };
 
-/** 倍速可选项(对照旧倍速滑块 0.1-2,改为常用档位菜单) */
-const RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+/** 播放模式列表(hover 弹层直接选,顺序对齐 NEXT_SONG_MODE 循环) */
+const SONG_MODE_ORDER: readonly StatusStoreState["playSongMode"][] = [
+  "normal",
+  "random",
+  "repeat",
+];
+
+/**
+ * 音量四档图标(对照旧 MainControl.vue:
+ * 0 静音 / (0,0.4) 低 / [0.4,0.7) 中 / [0.7,1] 高)。
+ */
+const getVolumeIcon = (volume: number): LucideIcon =>
+  volume === 0 ? VolumeX : volume < 0.4 ? Volume : volume < 0.7 ? Volume1 : Volume2;
+
+/** 音量滚轮 ±5%(对照旧 changeVolume:clamp 0-1,写 store 并同步播放器) */
+const handleVolumeWheel = (e: WheelEvent) => {
+  const cur = useStatusStore.getState().playVolume;
+  const next =
+    Math.round(Math.min(1, Math.max(0, cur + (e.deltaY > 0 ? -0.05 : 0.05))) * 100) / 100;
+  useStatusStore.setState({ playVolume: next });
+  setVolume(next);
+};
 
 /**
  * 底部播放条(U3:对齐旧 MainControl.vue 功能)。
@@ -81,14 +105,19 @@ export default function PlayerBar() {
 
   const navigate = useNavigate();
 
+  const showPlayBar = useStatusStore((s) => s.showPlayBar);
+
   /** 拖动中的进度值(0-100);null 表示未在拖动,由 playTimeData.bar 驱动 */
   const [dragBar, setDragBar] = useState<number | null>(null);
-  /** 倍速菜单开关 */
-  const [rateMenuOpen, setRateMenuOpen] = useState(false);
+  /** 倍速滑块 hover 弹层开关 */
+  const [rateOpen, setRateOpen] = useState(false);
+  /** 播放模式 hover 弹层开关 */
+  const [modeOpen, setModeOpen] = useState(false);
 
   const coverUrl = getCoverUrl(playSongData, "s");
   const artistsText = formatArtists(playSongData.artists);
   const modeMeta = SONG_MODE_META[playSongMode];
+  const VolumeIcon = getVolumeIcon(playVolume);
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
 
   // 底栏歌词:当前逐字行(showYrc 时优先)与整行文本回退
@@ -125,11 +154,18 @@ export default function PlayerBar() {
     toast(SONG_MODE_META[next].label);
   };
 
-  /** 倍速切换 */
+  /** hover 弹层直接选择播放模式(对照旧 n-dropdown trigger=hover) */
+  const selectSongMode = (mode: StatusStoreState["playSongMode"]) => {
+    useStatusStore.setState({ playSongMode: mode });
+    toast(SONG_MODE_META[mode].label);
+    setModeOpen(false);
+  };
+
+  /** 倍速调整(连续滑块 0.1-2;写 store 并同步播放器) */
   const changeRate = (rate: number) => {
-    setRate(rate);
-    useStatusStore.setState({ playRate: rate });
-    setRateMenuOpen(false);
+    const next = Math.round(rate * 100) / 100;
+    setRate(next);
+    useStatusStore.setState({ playRate: next });
   };
 
   // 「更多操作」菜单(对照旧 MainControl.vue 的 songMoreOptions)
@@ -161,6 +197,13 @@ export default function PlayerBar() {
       onSelect: () => void navigate({ to: "/comments", search: { id: String(currentSongId) } }),
     },
     {
+      key: "original-page",
+      label: "查看原始页面",
+      onSelect: () => {
+        window.open(`https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`);
+      },
+    },
+    {
       key: "song-detail",
       label: "查看单曲详情",
       onSelect: () => void navigate({ to: "/song", search: { id: String(currentSongId) } }),
@@ -175,6 +218,11 @@ export default function PlayerBar() {
       label: "复制歌曲链接",
       onSelect: () => void copySongLink(),
     },
+    {
+      key: "copy-id",
+      label: "复制歌曲 ID",
+      onSelect: () => void copyText(String(currentSongId), "复制歌曲 ID 成功"),
+    },
   ];
   // 观看 MV(对照旧 SongListDropdown 的「观看 MV」;有 MV 时插入到「查看评论」之后)
   if (mvId) {
@@ -186,8 +234,14 @@ export default function PlayerBar() {
   }
 
   return (
+    <>
+    {/* showPlayBar=false 时向下平移全隐(对照旧 bottom -90 动画;
+        transform 会让 fixed 后代以其为包含块,故 PlaylistDrawer 置于本节点之外) */}
     <div
-      className="flex h-[72px] w-full items-center gap-4 border-t px-4"
+      className={`flex h-[72px] w-full items-center gap-4 border-t px-4 transition-transform duration-300 ${
+        showPlayBar ? "translate-y-0" : "pointer-events-none translate-y-full"
+      }`}
+      aria-hidden={!showPlayBar}
       style={{
         background: "var(--met-bg-elevated)",
         borderColor: "var(--met-border)",
@@ -323,79 +377,118 @@ export default function PlayerBar() {
 
       {/* 右区:播放模式 + 倍速 + 音量 + 播放列表 */}
       <div className="flex flex-1 items-center justify-end gap-3">
-        {/* 播放模式 */}
-        <button
-          type="button"
-          className="cursor-pointer bg-transparent"
-          style={{ color: "var(--met-fg)" }}
-          title={modeMeta.label}
-          onClick={changeSongMode}
+        {/* 播放模式(点击循环切换;hover 弹出三项直接选,对照旧 n-dropdown) */}
+        <div
+          className="relative flex items-center"
+          onMouseEnter={() => setModeOpen(true)}
+          onMouseLeave={() => setModeOpen(false)}
         >
-          <modeMeta.icon size={18} aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            className="cursor-pointer bg-transparent"
+            style={{ color: "var(--met-fg)" }}
+            title={modeMeta.label}
+            onClick={changeSongMode}
+          >
+            <modeMeta.icon size={18} aria-hidden="true" />
+          </button>
+          {modeOpen && (
+            /* 外层 pb-2 补住按钮与弹层间隙,避免 hover 穿越间隙时闪关 */
+            <div className="absolute bottom-full right-0 z-20 pb-2">
+              <div
+                className="w-28 rounded-lg border py-1 shadow-xl"
+                style={{
+                  background: "var(--met-bg-elevated)",
+                  borderColor: "var(--met-border)",
+                }}
+                role="menu"
+                aria-label="播放模式"
+              >
+                {SONG_MODE_ORDER.map((mode) => {
+                  const meta = SONG_MODE_META[mode];
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full cursor-pointer items-center gap-2 bg-transparent px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--met-bg-hover)]"
+                      style={{
+                        color: mode === playSongMode ? "var(--met-primary)" : "var(--met-fg)",
+                      }}
+                      onClick={() => selectSongMode(mode)}
+                    >
+                      <meta.icon size={14} aria-hidden="true" />
+                      {meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
-        {/* 倍速(对齐旧行为:一起听房间内隐藏) */}
+        {/* 倍速(对齐旧行为:一起听房间内隐藏;hover 弹出连续滑块,点击一键重置 1x) */}
         {!isInRoom && (
-          <div className="relative">
+          <div
+            className="relative flex items-center"
+            onMouseEnter={() => setRateOpen(true)}
+            onMouseLeave={() => setRateOpen(false)}
+          >
             <button
               type="button"
-              className="cursor-pointer bg-transparent text-xs tabular-nums"
+              className="flex cursor-pointer items-center bg-transparent text-xs tabular-nums"
               style={{ color: playRate === 1 ? "var(--met-fg)" : "var(--met-primary)" }}
-              title="播放倍速"
-              onClick={() => setRateMenuOpen((open) => !open)}
+              title="播放倍速(点击重置 1x)"
+              onClick={() => changeRate(1)}
             >
-              {playRate === 1 ? "倍速" : `${playRate}x`}
+              {playRate === 1 ? (
+                <Gauge size={18} aria-hidden="true" />
+              ) : (
+                `${playRate.toFixed(2)}x`
+              )}
             </button>
-            {rateMenuOpen && (
-              <>
-                {/* 点击外部关闭 */}
+            {rateOpen && (
+              /* 外层 pb-2 补住按钮与弹层间隙,避免 hover 穿越间隙时闪关 */
+              <div className="absolute bottom-full right-0 z-20 pb-2">
                 <div
-                  className="fixed inset-0 z-20"
-                  aria-hidden="true"
-                  onClick={() => setRateMenuOpen(false)}
-                />
-                <div
-                  className="absolute bottom-full right-0 z-20 mb-2 w-20 rounded-lg border py-1 shadow-xl"
+                  className="flex w-56 items-center gap-3 rounded-lg border px-3 py-2 shadow-xl"
                   style={{
                     background: "var(--met-bg-elevated)",
                     borderColor: "var(--met-border)",
                   }}
-                  role="menu"
-                  aria-label="播放倍速"
+                  aria-label="播放倍速调整"
                 >
-                  {RATE_OPTIONS.map((rate) => (
-                    <button
-                      key={rate}
-                      type="button"
-                      role="menuitem"
-                      className="block w-full cursor-pointer bg-transparent px-3 py-1.5 text-left text-xs tabular-nums transition-colors hover:bg-[var(--met-bg-hover)]"
-                      style={{
-                        color: rate === playRate ? "var(--met-primary)" : "var(--met-fg)",
-                      }}
-                      onClick={() => changeRate(rate)}
-                    >
-                      {rate}x
-                    </button>
-                  ))}
+                  <div className="min-w-0 flex-1">
+                    <Slider
+                      value={playRate}
+                      min={0.1}
+                      max={2}
+                      step={0.05}
+                      onValueChange={changeRate}
+                    />
+                  </div>
+                  <span
+                    className="w-11 shrink-0 text-right text-xs tabular-nums"
+                    style={{ color: "var(--met-fg-dim)" }}
+                  >
+                    {playRate.toFixed(2)}x
+                  </span>
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}
 
-        {/* 音量 */}
+        {/* 音量(图标四档;图标与滑杆滚轮 ±5%;滑杆旁百分比读数) */}
         <button
           type="button"
           className="cursor-pointer bg-transparent"
           style={{ color: "var(--met-fg)" }}
           title={playVolume > 0 ? "静音" : "取消静音"}
           onClick={() => setVolumeMute()}
+          onWheel={handleVolumeWheel}
         >
-          {playVolume > 0 ? (
-            <Volume2 size={18} aria-hidden="true" />
-          ) : (
-            <VolumeX size={18} aria-hidden="true" />
-          )}
+          <VolumeIcon size={18} aria-hidden="true" />
         </button>
         <input
           type="range"
@@ -406,12 +499,19 @@ export default function PlayerBar() {
           step={0.01}
           value={playVolume}
           aria-label="音量"
+          onWheel={handleVolumeWheel}
           onChange={(e) => {
             const v = Number(e.target.value);
             useStatusStore.setState({ playVolume: v });
             setVolume(v);
           }}
         />
+        <span
+          className="w-9 shrink-0 text-right text-xs tabular-nums"
+          style={{ color: "var(--met-fg-dim)" }}
+        >
+          {Math.round(playVolume * 100)}%
+        </span>
 
         {/* 更多操作(当前歌曲的评论/详情/下载/复制链接;无当前歌曲或本地歌曲时禁用) */}
         <DropdownMenu
@@ -449,8 +549,10 @@ export default function PlayerBar() {
         </button>
       </div>
 
-      {/* 播放列表抽屉 */}
-      <PlaylistDrawer />
     </div>
+
+    {/* 播放列表抽屉(fixed 定位,须置于带 transform 的播放条节点之外) */}
+    <PlaylistDrawer />
+    </>
   );
 }

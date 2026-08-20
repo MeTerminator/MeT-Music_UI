@@ -6,6 +6,10 @@
  *   - settings.themeTypeName → 主题色预设(platform/theme-colors.ts,
  *     仅在「封面跟随」未生效时应用,优先级对照旧 Provider.vue)
  *   - 字体(settings.siteFont/lyricFont)由 platform/fonts.ts 负责,initTheme 内接入
+ *   - <meta name="theme-color"> 随主题同步为 --met-bg 实际色(对照旧 Provider.vue
+ *     changeTheme 写死 #ffffff/#18181c,此处改读 CSS 变量计算值)
+ *   - settings.themeAuto 开启时监听 OS 明暗变化实时跟随(对照旧 Provider.vue
+ *     osThemeRef watch;themeAuto 关闭时移除监听)
  */
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
@@ -21,6 +25,19 @@ interface CoverThemeSide {
 }
 
 const COVER_VARS = ["--met-cover-primary", "--met-cover-bg", "--met-cover-shade"] as const;
+
+/** 同步 <meta name="theme-color"> 为当前 --met-bg 计算值(不存在则创建) */
+const syncMetaThemeColor = (): void => {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--met-bg").trim();
+  if (!bg) return;
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = "theme-color";
+    document.head.appendChild(meta);
+  }
+  meta.content = bg;
+};
 
 const applyTheme = (): void => {
   const { themeType, themeAutoCover, themeTypeName } = useSettingsStore.getState();
@@ -54,6 +71,48 @@ const applyTheme = (): void => {
     }
     for (const v of COVER_VARS) style.removeProperty(v);
   }
+
+  // 主题(含明暗)落地后同步 PWA 状态栏色
+  syncMetaThemeColor();
+};
+
+/**
+ * OS 明暗实时跟随(旧 Provider.vue 的 osThemeRef watch):
+ * themeAuto 开启时监听 prefers-color-scheme 变化写回 themeType,
+ * 关闭时移除监听(含清理)。
+ */
+const initOsThemeFollow = (): void => {
+  if (typeof window.matchMedia !== "function") return;
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+
+  const onChange = (e: MediaQueryListEvent): void => {
+    useSettingsStore.setState({ themeType: e.matches ? "dark" : "light" });
+  };
+
+  let listening = false;
+  const sync = (themeAuto: boolean): void => {
+    if (themeAuto && !listening) {
+      mql.addEventListener("change", onChange);
+      listening = true;
+      // 开启(或启动)时先对齐一次当前 OS 主题
+      const osType = mql.matches ? "dark" : "light";
+      if (useSettingsStore.getState().themeType !== osType) {
+        useSettingsStore.setState({ themeType: osType });
+      }
+    } else if (!themeAuto && listening) {
+      mql.removeEventListener("change", onChange);
+      listening = false;
+    }
+  };
+
+  let lastThemeAuto = useSettingsStore.getState().themeAuto;
+  useSettingsStore.subscribe((s) => {
+    if (s.themeAuto !== lastThemeAuto) {
+      lastThemeAuto = s.themeAuto;
+      sync(s.themeAuto);
+    }
+  });
+  sync(lastThemeAuto);
 };
 
 /** 应用启动时调用一次;此后随 store 变化自动生效 */
@@ -82,6 +141,8 @@ export const initTheme = (): void => {
     }
   });
   applyTheme();
+  // OS 明暗实时跟随(themeAuto)
+  initOsThemeFollow();
   // 字体设置(siteFont/lyricFont → CSS 变量)
   initFonts();
 };

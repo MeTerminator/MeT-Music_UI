@@ -183,6 +183,16 @@ function FullPlayerInner() {
   // 播放器打开且播放中时保持屏幕常亮
   useWakeLock(playState);
 
+  // 浏览器全屏状态:全屏时隐藏顶部关闭钮(对照旧 FullPlayer.vue v-if="!screenfullStatus")
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() =>
+    Boolean(document.fullscreenElement),
+  );
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
   // Esc 关闭全屏;打开期间锁定 body 滚动
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -335,6 +345,9 @@ function FullPlayerInner() {
   const amLyricColor = `rgba(${mainRgb}, 0.95)`; // 对照旧 AMLyric.vue 109-112
 
   // ===== 全屏歌手/专辑跳转(对照旧 FullPlayer.vue 66-99 行) =====
+  // record 唱片模式下歌词区高度 70vh(对照旧 AMLyric.vue getDynamicHeight)
+  const lyricHeightCls = playCoverType === "record" ? "h-[70vh]" : "h-[86%]";
+
   const navigate = useNavigate();
   const gotoArtist = useCallback(
     (id: number | string) => {
@@ -441,14 +454,17 @@ function FullPlayerInner() {
             </button>
           )}
         </div>
-        <button
-          type="button"
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg text-[rgba(var(--fp-main-rgb),0.7)] transition-all hover:scale-105 hover:bg-[rgba(var(--fp-main-rgb),0.14)] hover:text-[rgb(var(--fp-main-rgb))]"
-          title="关闭播放器 (Esc)"
-          onClick={() => useStatusStore.setState({ showFullPlayer: false })}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
+        {/* 浏览器全屏时隐藏(对照旧 FullPlayer.vue 顶部 n-icon v-if="!screenfullStatus") */}
+        {!isFullscreen && (
+          <button
+            type="button"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg text-[rgba(var(--fp-main-rgb),0.7)] transition-all hover:scale-105 hover:bg-[rgba(var(--fp-main-rgb),0.14)] hover:text-[rgb(var(--fp-main-rgb))]"
+            title="关闭播放器 (Esc)"
+            onClick={() => useStatusStore.setState({ showFullPlayer: false })}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {/* ===== 主体(窄屏/竖屏 max-md 时上下堆叠,对齐旧页 700px 断点) ===== */}
@@ -551,6 +567,7 @@ function FullPlayerInner() {
         )}
 
         {/* 右半:歌词区(纯净模式下占满居中;窄屏堆叠时占据剩余高度) */}
+        {/* record 唱片模式歌词区高度 70vh(对照旧 AMLyric.vue getDynamicHeight 76-84) */}
         {hasLyric && (
           <div
             className={`flex h-full min-w-0 flex-col justify-center ${
@@ -561,7 +578,7 @@ function FullPlayerInner() {
           >
             {useAM ? (
               <div
-                className="relative h-[86%] w-full overflow-hidden max-md:h-full"
+                className={`relative ${lyricHeightCls} w-full overflow-hidden max-md:h-full`}
                 style={{
                   maskImage: LYRIC_MASK,
                   WebkitMaskImage: LYRIC_MASK,
@@ -594,7 +611,7 @@ function FullPlayerInner() {
                 )}
               </div>
             ) : (
-              <div className="h-[86%] w-full max-md:h-full">
+              <div className={`${lyricHeightCls} w-full max-md:h-full`}>
                 <LyricScroll />
               </div>
             )}

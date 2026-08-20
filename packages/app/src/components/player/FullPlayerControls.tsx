@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type WheelEvent } from "react";
 import {
   ChevronDown,
   ListMusic,
@@ -12,6 +12,7 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
+  Volume,
   Volume1,
   Volume2,
   VolumeX,
@@ -41,6 +42,22 @@ const SONG_MODE_META: Record<
   repeat: { icon: Repeat1, label: "单曲循环" },
 };
 
+/**
+ * 音量四档图标(与 PlayerBar 一致,对照旧 MainControl.vue:
+ * 0 静音 / (0,0.4) 低 / [0.4,0.7) 中 / [0.7,1] 高)。
+ */
+const getVolumeIcon = (volume: number): LucideIcon =>
+  volume === 0 ? VolumeX : volume < 0.4 ? Volume : volume < 0.7 ? Volume1 : Volume2;
+
+/** 音量滚轮 ±5%(与 PlayerBar 一致,对照旧 changeVolume:clamp 0-1) */
+const handleVolumeWheel = (e: WheelEvent) => {
+  const cur = useStatusStore.getState().playVolume;
+  const next =
+    Math.round(Math.min(1, Math.max(0, cur + (e.deltaY > 0 ? -0.05 : 0.05))) * 100) / 100;
+  useStatusStore.setState({ playVolume: next });
+  setVolume(next);
+};
+
 export interface FullPlayerControlsProps {
   /** 悬停控制条时保持其可见(清除父级 2 秒隐藏计时器) */
   onKeepVisible: () => void;
@@ -66,7 +83,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
   const modeMeta = SONG_MODE_META[playSongMode];
   const ModeIcon = modeMeta.icon;
-  const VolumeIcon: LucideIcon = playVolume === 0 ? VolumeX : playVolume < 0.5 ? Volume1 : Volume2;
+  const VolumeIcon = getVolumeIcon(playVolume);
 
   // ===== 浏览器全屏(原生 Fullscreen API,对齐旧 screenfullChange 职责) =====
   const [isFullscreen, setIsFullscreen] = useState<boolean>(
@@ -200,10 +217,11 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               className={`${iconBtnCls} max-md:hidden`}
               title={playVolume > 0 ? "静音" : "取消静音"}
               onClick={() => setVolumeMute()}
+              onWheel={handleVolumeWheel}
             >
               <VolumeIcon size={20} aria-hidden="true" />
             </button>
-            <div className="w-24 max-md:hidden">
+            <div className="w-24 max-md:hidden" onWheel={handleVolumeWheel}>
               <Slider
                 value={playVolume}
                 min={0}
@@ -215,6 +233,9 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
                 }}
               />
             </div>
+            <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/60 max-md:hidden">
+              {Math.round(playVolume * 100)}%
+            </span>
             <button
               type="button"
               className={iconBtnCls}
@@ -236,14 +257,17 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
                 <Maximize2 size={20} aria-hidden="true" />
               )}
             </button>
-            <button
-              type="button"
-              className={iconBtnCls}
-              title="关闭播放器"
-              onClick={() => useStatusStore.setState({ showFullPlayer: false })}
-            >
-              <ChevronDown size={20} aria-hidden="true" />
-            </button>
+            {/* 浏览器全屏时隐藏收起钮(对照旧 PlayerControl:全屏下先退全屏) */}
+            {!isFullscreen && (
+              <button
+                type="button"
+                className={iconBtnCls}
+                title="关闭播放器"
+                onClick={() => useStatusStore.setState({ showFullPlayer: false })}
+              >
+                <ChevronDown size={20} aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
       </div>

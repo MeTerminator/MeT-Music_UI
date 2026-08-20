@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
@@ -9,17 +9,22 @@ import { useSettingsStore } from "@/stores/settings";
 
 /** 搜索结果 - 单曲(type=1,分页对齐同目录 Videos.tsx 模式) */
 export default function Songs() {
-  const search = useSearch({ strict: false }) as { keywords?: string };
+  const search = useSearch({ strict: false }) as { keywords?: string; page?: string };
   const keywords = search.keywords ?? "";
+  const navigate = useNavigate();
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
   // 对照旧 playSong:search 页且未开启 playSearch 时「仅播放当前歌曲」(insert)
   const playSearch = useSettingsStore((s) => s.playSearch);
 
-  const [page, setPage] = useState(1);
-  // 关键词变化时回到第一页
-  useEffect(() => {
-    setPage(1);
-  }, [keywords]);
+  // 页码以 URL 为准(旧契约 Number(query.page) || 1,parseInt 容错)
+  const parsedPage = Number.parseInt(search.page ?? "", 10);
+  const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
+  const setPage = (next: number) =>
+    void navigate({ to: ".", search: (prev) => ({ ...prev, page: String(next) }), replace: true });
+
+  // 关键词变化时回到第一页:站内所有更改 keywords 的导航均显式传 search
+  // (不携带 page),URL 天然回到第一页;不做 effect 重置(替代原 setPage(1)),
+  // 以保证浏览器回退/前进能按历史还原页码。
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["search", "songs", keywords, page, searchLoadSize],

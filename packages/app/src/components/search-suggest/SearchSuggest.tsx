@@ -12,6 +12,12 @@
  *   (settings.showSearchHistory 开启且非空时,带「清空」二次确认)+ 热搜榜
  *   (api.getSearchHot,10 分钟缓存对齐旧 getCacheData("searchHot", 10)),
  *   点击任意条目即整词搜索。
+ *
+ * P2 补齐(对照旧 SearchInp.vue):
+ * - 聚焦展宽动画(260 → 360px,transition;窄屏由外层 flex 收缩自适应);
+ * - 聚焦时全屏半透明模糊遮罩(z 低于下拉面板,点击遮罩收起;
+ *   <640px 遮罩透明无模糊,对齐旧 <512px 媒体查询意图);
+ * - 提交词为 114514 时跳转 /test 彩蛋(旧 toSearch 110 行)。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -184,6 +190,12 @@ const SearchSuggest = () => {
   const goDirectSearch = (value: string) => {
     const target = value.trim();
     if (!target) return;
+    // 114514 彩蛋(旧 toSearch:Number(val) === 114514 → /test,不写入历史)
+    if (Number(target) === 114514) {
+      close();
+      void navigate({ to: "/test" });
+      return;
+    }
     setSearchHistory(target);
     close();
     void navigate({ to: "/search/songs", search: { keywords: target } });
@@ -247,9 +259,23 @@ const SearchSuggest = () => {
     open && kw.length === 0 && (historyVisible || hotItems.length > 0);
 
   return (
-    <div ref={rootRef} className="relative w-full max-w-md">
-      {/* 搜索输入框 */}
-      <div className="relative">
+    <div
+      ref={rootRef}
+      className={`relative w-full transition-[max-width] duration-300 ${
+        open ? "max-w-[360px]" : "max-w-[260px]"
+      }`}
+    >
+      {/* 聚焦遮罩(旧 .search-mask:全屏半透明 + 模糊,点击收起;
+          z 低于输入框与下拉面板;<640px 透明无模糊) */}
+      {open && (
+        <div
+          aria-hidden
+          onClick={close}
+          className="fixed inset-0 z-30 bg-black/25 backdrop-blur-xl max-sm:bg-transparent max-sm:backdrop-blur-none"
+        />
+      )}
+      {/* 搜索输入框(z 高于遮罩) */}
+      <div className="relative z-40">
         <Search
           className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[var(--met-fg-dim)]"
           aria-hidden

@@ -30,8 +30,22 @@ export default function PlaylistDrawer() {
   const playListShow = useStatusStore((s) => s.playListShow);
   const playIndex = useStatusStore((s) => s.playIndex);
   const isInRoom = useStatusStore((s) => s.isInRoom);
+  const showFullPlayer = useStatusStore((s) => s.showFullPlayer);
+  const coverTheme = useStatusStore((s) => s.coverTheme);
+  const themeType = useSettingsStore((s) => s.themeType);
   const playList = useMusicStore((s) => s.playList);
   const playSongData = useMusicStore((s) => s.playSongData);
+
+  // ===== 全屏播放器态配色(对照旧 .full-player 透明抽屉 + --cover-main-color 体系) =====
+  // 全屏态下抽屉背景改用封面主题当前明暗侧 shade("r, g, b" 字符串)的半透明色
+  // 并叠加 backdrop-blur;无封面主题时回退现有面板色。
+  const coverShade = (
+    coverTheme as { light?: { shade?: string }; dark?: { shade?: string } } | undefined
+  )?.[themeType]?.shade;
+  const useCoverBg = showFullPlayer && Boolean(coverShade);
+  const drawerBackground = useCoverBg
+    ? `rgba(${coverShade}, 0.85)`
+    : "var(--met-bg-elevated)";
 
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -250,10 +264,10 @@ export default function PlaylistDrawer() {
       <aside
         className={`fixed inset-y-0 right-0 z-50 flex w-[380px] max-w-[92vw] flex-col border-l transition-transform duration-300 ${
           playListShow ? "translate-x-0" : "translate-x-full"
-        }`}
+        } ${useCoverBg ? "backdrop-blur-xl" : ""}`}
         style={{
-          background: "var(--met-bg-elevated)",
-          borderColor: "var(--met-border)",
+          background: drawerBackground,
+          borderColor: useCoverBg ? "transparent" : "var(--met-border)",
         }}
         role="dialog"
         aria-label="播放列表"

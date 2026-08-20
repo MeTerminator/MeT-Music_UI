@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fadePlayOrPause, setSeek, type YrcLine } from "@met/core";
 import { useMusicStore } from "../../stores/music";
 import { useStatusStore } from "../../stores/status";
@@ -19,30 +19,57 @@ interface DisplayLine {
 const LYRIC_MASK =
   "linear-gradient(180deg, hsla(0,0%,100%,0) 0, hsla(0,0%,100%,0.6) 5%, #fff 10%, #fff 75%, hsla(0,0%,100%,0.6) 85%, hsla(0,0%,100%,0))";
 
+/** 倒计时点呼吸动画(对照旧 CountDown.vue @keyframes breathe:scale 0.95↔1.1) */
+const COUNT_DOWN_CSS = `
+@keyframes met-cd-breathe {
+  0% { transform: scale(0.95); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(0.95); }
+}
+`;
+
 /**
- * 倒计时/前奏等待点(简版,对齐旧 CountDown.vue 的职责):
- * 当前进度早于第一句歌词时显示三个圆点,随前奏推进依次点亮,临近首句整体渐隐。
+ * 倒计时/前奏等待点(对齐旧 CountDown.vue):
+ * 当前进度早于第一句歌词时显示三个圆点,随前奏推进逐个变暗消退(0.8→0.1),
+ * 主题色圆点 + 呼吸动画(暂停时冻结),临近首句整体渐隐。
  * 独立组件订阅 playSeek,避免每帧刷新整份歌词列表。
  */
 function CountDownDots({ firstTime }: { firstTime: number }) {
   const playSeek = useStatusStore((s) => s.playSeek);
+  const playState = useStatusStore((s) => s.playState);
 
   // 前奏不足 1 秒无需倒计时;已唱到首句后隐藏
   if (firstTime < 1 || playSeek >= firstTime) return null;
 
-  const progress = Math.min(playSeek / firstTime, 1);
+  // 每个点的透明度(对照旧 CountDown.vue pointOpacity):
+  // 前奏均分三段,所在段内 0.8 → 0.1 线性消退,已过段保持 0.1
+  const perPointTime = firstTime / 3;
+  const pointOpacity = (index: number): number => {
+    if (playSeek <= 0) return 0;
+    if (playSeek < perPointTime * (index + 1)) {
+      const percentage = Math.max((playSeek - perPointTime * index) / perPointTime, 0);
+      return 0.1 + 0.7 * (1 - percentage);
+    }
+    return 0.1;
+  };
+
   return (
     <div
-      className="flex items-center gap-2 px-4 pb-3 transition-opacity duration-500"
+      className="flex items-center px-4 pb-3 transition-opacity duration-500"
       style={{ opacity: firstTime - playSeek < 0.6 ? 0 : 1 }}
     >
+      <style>{COUNT_DOWN_CSS}</style>
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="h-3 w-3 rounded-full transition-opacity duration-300"
+          className="mr-3 h-7 w-7 rounded-full transition-opacity duration-300 last:mr-0 max-md:h-5 max-md:w-5"
           style={{
-            background: "#fff",
-            opacity: progress >= (i + 1) / 3 ? 0.9 : 0.25,
+            background: "rgb(var(--fp-primary-rgb, 255, 255, 255))",
+            opacity: pointOpacity(i),
+            // 呼吸动画,三点交错相位;暂停时冻结
+            animation: "met-cd-breathe 4s ease-in-out infinite",
+            animationDelay: `${i * -1.33}s`,
+            animationPlayState: playState ? "running" : "paused",
           }}
         />
       ))}
@@ -66,12 +93,21 @@ export default function LyricScroll() {
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
   const lyricsPosition = useSettingsStore((s) => s.lyricsPosition);
   const lyricsBlur = useSettingsStore((s) => s.lyricsBlur);
+  const lyricsBlock = useSettingsStore((s) => s.lyricsBlock);
   const lrcMousePause = useSettingsStore((s) => s.lrcMousePause);
   const countDownShow = useSettingsStore((s) => s.countDownShow);
 
   const containerRef = useRef<HTMLDivElement>(null);
   /** 鼠标悬停时暂停自动滚动(lrcMousePause) */
   const hoverPausedRef = useRef(false);
+
+  // 视口宽度(移动端响应式字号用,对照旧 Lyric.vue 700px 断点的 vw 字号)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const useYrc = showYrc && playSongLyric.hasYrc && playSongLyric.yrc.length > 0;
 
@@ -96,22 +132,47 @@ export default function LyricScroll() {
     }));
   }, [playSongLyric, useYrc]);
 
-  /** 滚动当前行至容器居中 */
+  /**
+   * 滚动当前行(对照旧 Lyric.vue lyricsScroll 167-180):
+   * lyricsBlock === "center" 时居中,否则("start")滚动到偏上位置
+   * (容器 scrollTop = 行相对容器 offsetTop - 80)。
+   */
   const scrollToLine = (index: number) => {
     if (hoverPausedRef.current) return;
-    const el = containerRef.current?.querySelector(`[data-lrc-index="${index}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const container = containerRef.current;
+    const el = container?.querySelector<HTMLElement>(`[data-lrc-index="${index}"]`);
+    if (!container || !el) return;
+    if (lyricsBlock === "center") {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const scrollDistance =
+      container.scrollTop +
+      el.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      80;
+    container.scrollTo({ top: scrollDistance, behavior: "smooth" });
   };
 
   // 行切换 / 歌词或布局变化时滚动(纯净模式切换会改变布局)
   useEffect(() => {
     scrollToLine(playSongLyricIndex);
-  }, [playSongLyricIndex, lines, pureLyricMode]);
+  }, [playSongLyricIndex, lines, pureLyricMode, lyricsBlock]);
 
   // 翻译/音译对应旧规则:hasLrcTran / hasLrcRoma(yrc 与 lrc 共用该标记)
   const showTranLine = showTransl && playSongLyric.hasLrcTran;
   const showRomaLine = showRoma && playSongLyric.hasLrcRoma;
   const tranFontSize = lyricsFontSize - (lyricsFontSize < 40 ? 10 : 16);
+  // 移动端响应式字号(对照旧 Lyric.vue 窄屏 6.5vw / 4.5vw):
+  // <768px 时主行取 min(lyricsFontSize, 6.5vw)、翻译取 min(tranFontSize, 4.5vw),
+  // 以数值计算保证 KtvLine(仅接受 number)同样生效
+  const isNarrow = viewportWidth < 768;
+  const mainFontSize = isNarrow
+    ? Math.min(lyricsFontSize, viewportWidth * 0.065)
+    : lyricsFontSize;
+  const tranLineFontSize = isNarrow
+    ? Math.min(tranFontSize, viewportWidth * 0.045)
+    : tranFontSize;
 
   const align = pureLyricMode ? "center" : lyricsPosition;
   const alignCls =
@@ -151,7 +212,7 @@ export default function LyricScroll() {
           <div
             key={`${index}-${line.time}`}
             data-lrc-index={index}
-            className={`my-1 flex cursor-pointer flex-col rounded-lg px-4 py-2.5 transition-all duration-300 hover:bg-white/10 hover:opacity-100 hover:![filter:blur(0)] ${alignCls}`}
+            className={`my-1 flex cursor-pointer flex-col rounded-lg px-4 py-2.5 transition-all duration-300 hover:bg-[rgba(var(--fp-main-rgb,255,255,255),0.08)] hover:opacity-100 hover:![filter:blur(0)] ${alignCls}`}
             style={{
               opacity: active ? 1 : 0.32,
               transform: active ? "scale(1)" : "scale(0.86)",
@@ -171,7 +232,7 @@ export default function LyricScroll() {
             {active && showYrcAnimation && line.yrc ? (
               <KtvLine
                 line={line.yrc}
-                fontSize={lyricsFontSize}
+                fontSize={mainFontSize}
                 activeColor="#fff"
                 inactiveColor="rgba(255,255,255,0.35)"
                 className="break-words font-bold"
@@ -180,13 +241,13 @@ export default function LyricScroll() {
             ) : (
               <span
                 className="break-words font-bold"
-                style={{ fontSize: lyricsFontSize, color: "#fff" }}
+                style={{ fontSize: mainFontSize, color: "#fff" }}
               >
                 {line.text}
               </span>
             )}
             {showTranLine && line.tran && (
-              <span className="mt-2 text-white/60" style={{ fontSize: tranFontSize }}>
+              <span className="mt-2 text-white/60" style={{ fontSize: tranLineFontSize }}>
                 {line.tran}
               </span>
             )}

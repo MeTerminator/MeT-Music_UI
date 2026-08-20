@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, formatNumber } from "@met/core";
@@ -25,15 +25,20 @@ const mvArtistsText = (artists: MvCard["artists"]): string => {
 
 /** 歌手 - 视频(卡片栅格 + 分页,对照旧 views/Artist/videos.vue) */
 export default function Videos() {
-  const search = useSearch({ strict: false }) as { id?: number | string };
+  const search = useSearch({ strict: false }) as { id?: number | string; page?: string };
   const id = search.id;
   const navigate = useNavigate();
   const loadSize = useSettingsStore((s) => s.loadSize);
   const pageSize = loadSize > 0 ? loadSize : 50;
-  const [page, setPage] = useState(1);
+  // 页码以 URL 为准(旧契约 Number(query.page) || 1,parseInt 容错)
+  const parsedPage = Number.parseInt(search.page ?? "", 10);
+  const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
+  const setPage = (next: number) =>
+    void navigate({ to: ".", search: (prev) => ({ ...prev, page: String(next) }), replace: true });
 
-  // 切换歌手(id 变化)时回到第一页
-  useEffect(() => setPage(1), [id]);
+  // 切换歌手(id 变化)时回到第一页:站内所有更改 id 的导航均显式传 search
+  // (不携带 page),URL 天然回到第一页;不做 effect 重置(替代原 setPage(1)),
+  // 以保证浏览器回退/前进能按历史还原页码(对照旧 songs.vue 亦无重置逻辑)。
 
   // 视频总数取自歌手详情(与旧实现的 mvSize prop 一致;query key 与布局层共享缓存)
   const detailQuery = useQuery({
@@ -134,8 +139,8 @@ export default function Videos() {
           label={`${page} / ${totalPages} 页`}
           prevDisabled={page <= 1 || isFetching}
           nextDisabled={page >= totalPages || isFetching}
-          onPrev={() => setPage((p) => Math.max(1, p - 1))}
-          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+          onPrev={() => setPage(Math.max(1, page - 1))}
+          onNext={() => setPage(Math.min(totalPages, page + 1))}
         />
       ) : null}
     </div>

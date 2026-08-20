@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { Toaster } from "sonner";
+import { toast, Toaster } from "sonner";
 import { initPlayer } from "@met/core";
 import { initHostGlobals } from "./host";
 import { initOfflineHandler } from "./platform/offline";
@@ -13,6 +13,7 @@ import { router } from "./router";
 import { useMusicStore } from "./stores/music";
 import { useSettingsStore } from "./stores/settings";
 import { useStatusStore } from "./stores/status";
+import packageJson from "../package.json";
 import "./styles.css";
 
 /**
@@ -34,8 +35,47 @@ const bootstrapPlayback = (): void => {
   }
 };
 
+/**
+ * 版权声明 console banner(对照旧 main.js 56-68;
+ * 版本取自 package.json,作者对齐旧根 package.json 的 author 字段)
+ */
+const printCopyright = (): void => {
+  console.info(
+    `%cMeT-Music %c \n\n版本: ${packageJson.version}\n作者: MeTerminator`,
+    "color:#f55e55;font-size:26px;font-weight:bold;",
+    "font-size:16px",
+  );
+  console.info(
+    "若站点出现异常，可尝试在下方输入 %c$cleanAll()%c 然后按回车来重置",
+    "background: #eaeffd;color:#f55e55;padding: 4px 6px;border-radius:8px;",
+    "background:unset;color:unset;",
+  );
+};
+
+/**
+ * PWA 更新提示(对照旧 App.vue 77-94):
+ * registerType 保持 autoUpdate(skipWaiting + clientsClaim),
+ * 新 Service Worker 接管(controllerchange)后弹常驻 toast,点击刷新应用。
+ */
+const initPwaUpdateToast = (): void => {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    console.info("站点资源有更新，请刷新以应用更新");
+    toast.info("站点已更新，点击刷新以应用", {
+      duration: Infinity,
+      closeButton: true,
+      action: {
+        label: "刷新",
+        onClick: () => window.location.reload(),
+      },
+    });
+  });
+};
+
 // 宿主契约全局与播放引擎装配(必须先于任何 UI 交互)
+printCopyright();
 initHostGlobals();
+initPwaUpdateToast();
 initOfflineHandler();
 setupPlayer();
 initTheme();

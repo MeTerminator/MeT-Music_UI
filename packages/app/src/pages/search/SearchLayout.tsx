@@ -1,11 +1,12 @@
 import { Link, Outlet, useSearch } from "@tanstack/react-router";
 
+// tab 顺序对齐旧 Search/index.vue:单曲 / 歌手 / 专辑 / 歌单 / 视频
 const TABS = [
   { to: "/search/songs", label: "单曲" },
   { to: "/search/artists", label: "歌手" },
   { to: "/search/albums", label: "专辑" },
-  { to: "/search/videos", label: "视频" },
   { to: "/search/playlists", label: "歌单" },
+  { to: "/search/videos", label: "视频" },
 ] as const;
 
 /** 搜索页布局:标题 + tab 导航 + 子路由出口 */

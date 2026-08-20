@@ -7,7 +7,7 @@
  * - SettingsOverlay 悬浮层(内部滚动容器渲染)。
  * sticky 分段导航依赖最近的可滚动祖先(路由页为 <main>,悬浮层为其内部滚动 div),两处均可用。
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
@@ -51,6 +51,73 @@ const SettingsContent = () => {
   const [activeTab, setActiveTab] = useState<SectionName>("常规");
   const [resetOpen, setResetOpen] = useState(false);
   const sectionRefs = useRef<Partial<Record<SectionName, HTMLDivElement | null>>>({});
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // ===== 滚动反向联动(对照旧 allSetScroll:滚动时按分组 offsetTop 高亮当前 tab) =====
+  // 滚动容器不固定:路由页为 <main>,悬浮层为其内部滚动 div,取最近可滚动祖先。
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    /** 最近可滚动祖先(overflow-y 可滚且内容溢出);找不到则回退 window */
+    const findScrollParent = (el: HTMLElement): HTMLElement | null => {
+      let node: HTMLElement | null = el.parentElement;
+      while (node) {
+        const { overflowY } = getComputedStyle(node);
+        if (
+          (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+          node.scrollHeight > node.clientHeight
+        ) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    };
+
+    const container = findScrollParent(root);
+
+    const onScroll = (): void => {
+      // 对照旧 allSetScroll:distance = scrollTop + 偏移,逐组比较 offsetTop
+      // (偏移取 80,消化 sticky 分区导航自身高度)
+      const scrollTop = container ? container.scrollTop : window.scrollY;
+      const containerTop = container ? container.getBoundingClientRect().top : 0;
+      const distance = scrollTop + 80;
+      let current: SectionName = sections[0];
+      for (const name of sections) {
+        const el = sectionRefs.current[name];
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top - containerTop + scrollTop;
+        if (distance >= top) current = name;
+      }
+      setActiveTab(current);
+    };
+
+    // 节流 150ms(带尾调用,保证停止滚动后落在最终分组)
+    let last = 0;
+    let trailing: number | null = null;
+    const throttled = (): void => {
+      const now = Date.now();
+      const remain = 150 - (now - last);
+      if (remain <= 0) {
+        last = now;
+        onScroll();
+      } else if (trailing === null) {
+        trailing = window.setTimeout(() => {
+          trailing = null;
+          last = Date.now();
+          onScroll();
+        }, remain);
+      }
+    };
+
+    const target: HTMLElement | Window = container ?? window;
+    target.addEventListener("scroll", throttled, { passive: true });
+    return () => {
+      target.removeEventListener("scroll", throttled);
+      if (trailing !== null) window.clearTimeout(trailing);
+    };
+  }, []);
 
   const sessionId = getSessionId();
 
@@ -97,7 +164,7 @@ const SettingsContent = () => {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div ref={rootRef} className="mx-auto max-w-5xl px-8 py-8">
       {/* 标题(对齐旧页:标题 + 版本号) */}
       <div className="mb-5 flex items-end gap-3">
         <h1 className="text-3xl font-bold text-[var(--met-fg)]">全局设置</h1>
