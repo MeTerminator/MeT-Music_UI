@@ -383,7 +383,11 @@ const RootLayout = () => {
         {/* 主内容区(底部预留 72px 给播放条);
             no-sider 时内容居中窄版(对照旧 .no-sider .main-router max-width) */}
         <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto pb-[72px]">
-          <div className={showSider ? undefined : "mx-auto w-full max-w-[1200px]"}>
+          {/* key=pathname:路由切换时重放淡入动画(search 变化不触发,避免翻页闪动) */}
+          <div
+            key={pathname}
+            className={`met-page-in ${showSider ? "" : "mx-auto w-full max-w-[1200px]"}`}
+          >
             <Outlet />
           </div>
         </main>

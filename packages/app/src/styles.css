@@ -63,3 +63,14 @@ body {
   );
   font-weight: var(--met-lyric-font-weight, bold);
 }
+
+/* 路由切换过渡:内容淡入 + 轻微上移(包裹层以 pathname 为 key 重放) */
+@keyframes met-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.met-page-in {
+  animation: met-page-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
