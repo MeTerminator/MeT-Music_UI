@@ -273,7 +273,7 @@ const RootLayout = () => {
   return (
     <div className="flex h-full flex-col bg-[var(--met-bg)] text-[var(--met-fg)]">
       {/* 顶栏 */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--met-border)] px-4">
+      <header className="relative flex h-14 shrink-0 items-center gap-2 border-b border-[var(--met-border)] px-4">
         {/* 窄屏:汉堡开抽屉 */}
         <button
           type="button"
@@ -309,8 +309,11 @@ const RootLayout = () => {
             <ChevronRight className="h-5 w-5" aria-hidden />
           </button>
         </div>
-        {/* 搜索框 + 搜索建议下拉 */}
-        <div className="flex min-w-0 flex-1 justify-center">
+        {/* 中部占位:md+ 时搜索框脱流绝对居中,由它撑开左右两组 */}
+        <div className="hidden min-w-0 flex-1 md:block" aria-hidden />
+        {/* 搜索框 + 搜索建议下拉:相对顶栏几何居中(左右两组宽度不等,
+            流内居中会随剩余空间偏移);窄屏保持流内布局 */}
+        <div className="flex min-w-0 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
           <SearchSuggest />
         </div>
         <div className="flex shrink-0 items-center gap-1">
