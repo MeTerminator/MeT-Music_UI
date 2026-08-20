@@ -70,6 +70,12 @@ export default function SearchDiscover() {
               <div key={c} className="flex flex-col">
                 {col.map((item, i) => {
                   const rank = c * half + i;
+                  // content 常为 searchWord 的小写重复(QQ 接口),同文时不显示
+                  const desc = item.content?.trim();
+                  const showDesc =
+                    desc &&
+                    desc.toLowerCase() !==
+                      (item.searchWord ?? "").trim().toLowerCase();
                   return (
                     <button
                       key={`${item.searchWord}-${rank}`}
@@ -99,9 +105,9 @@ export default function SearchDiscover() {
                           {item.iconType === 1 ? "HOT" : "UP"}
                         </span>
                       ) : null}
-                      {item.content ? (
+                      {showDesc ? (
                         <span className="min-w-0 flex-1 truncate text-right text-[11px] text-[var(--met-fg-dim)]">
-                          {item.content}
+                          {desc}
                         </span>
                       ) : null}
                     </button>
