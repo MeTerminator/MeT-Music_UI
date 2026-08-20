@@ -23,7 +23,7 @@ export default function SearchLayout() {
             「<span className="text-[var(--met-primary)]">{keywords}</span>」的搜索结果
           </>
         ) : (
-          "搜索"
+          "发现"
         )}
       </h1>
 

@@ -520,20 +520,15 @@ export default function PlayerBar() {
         {/* 播放列表 */}
         <button
           type="button"
-          className="relative cursor-pointer bg-transparent"
+          className="flex cursor-pointer items-center gap-1 bg-transparent"
           style={{ color: playListShow ? "var(--met-primary)" : "var(--met-fg)" }}
           title="播放列表"
           onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
         >
           <ListMusic size={18} aria-hidden="true" />
+          {/* 数量与图标并排(角标形式会盖住图标本体) */}
           {showPlaylistCount && playList.length > 0 && (
-            <span
-              className="absolute -top-1.5 -right-3 rounded-full px-1.5 py-px text-[10px] leading-4 tabular-nums"
-              style={{
-                background: "var(--met-bg-hover)",
-                color: "var(--met-primary)",
-              }}
-            >
+            <span className="text-[11px] leading-4 tabular-nums" style={{ color: "var(--met-fg-dim)" }}>
               {playList.length > 999 ? "999+" : playList.length}
             </span>
           )}

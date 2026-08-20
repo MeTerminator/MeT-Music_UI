@@ -39,7 +39,7 @@ import {
   Home,
   Menu,
   Moon,
-  Search,
+  Compass,
   Settings,
   Sun,
   Users,
@@ -59,7 +59,7 @@ import { Logo } from "@/components/Logo";
 
 const NAV_LINKS = [
   { to: "/", label: "主页", icon: Home },
-  { to: "/search/songs", label: "搜索", icon: Search },
+  { to: "/search/songs", label: "发现", icon: Compass },
   { to: "/history", label: "最近播放", icon: History },
   { to: "/listen-together", label: "一起听", icon: Users },
 ] as const;
