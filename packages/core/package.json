@@ -17,6 +17,7 @@
     "@applemusic-like-lyrics/lyric": "^1.0.2",
     "axios": "^1.19.0",
     "howler": "^2.2.4",
+    "ky": "^2.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {

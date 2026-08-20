@@ -35,6 +35,53 @@ const toAmllAlbumUrl = (src: string | undefined): string | undefined => {
 };
 
 /**
+ * 屏幕常亮(对齐旧 FullPlayer.vue 的 wakeLock 用法):
+ * active(全屏播放器打开且播放中)时请求 screen wake lock,
+ * 关闭/暂停时释放;页面隐藏时浏览器会自动释放,
+ * visibilitychange 恢复可见且仍需常亮时重新请求。API 不可用或被拒绝时静默。
+ */
+function useWakeLock(active: boolean) {
+  const sentinelRef = useRef<WakeLockSentinel | null>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
+  useEffect(() => {
+    if (!active || !("wakeLock" in navigator)) return;
+    let disposed = false;
+
+    const request = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (sentinelRef.current && !sentinelRef.current.released) return;
+      try {
+        const sentinel = await navigator.wakeLock.request("screen");
+        // 等待期间已暂停/关闭则立即释放,避免悬挂的锁
+        if (disposed || !activeRef.current) {
+          void sentinel.release().catch(() => undefined);
+          return;
+        }
+        sentinelRef.current = sentinel;
+      } catch {
+        // 低电量模式 / 权限策略等原因请求失败时静默
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && activeRef.current) void request();
+    };
+
+    void request();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      const sentinel = sentinelRef.current;
+      sentinelRef.current = null;
+      if (sentinel) void sentinel.release().catch(() => undefined);
+    };
+  }, [active]);
+}
+
+/**
  * 全屏播放器(U3:对齐旧 FullPlayer.vue 功能)。
  * showFullPlayer 为 true 时挂载,覆盖于 PlayerBar 之上(z-40)。
  */
@@ -93,10 +140,16 @@ function FullPlayerInner() {
     };
   }, []);
 
+  // 播放器打开且播放中时保持屏幕常亮
+  useWakeLock(playState);
+
   // Esc 关闭全屏;打开期间锁定 body 滚动
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") useStatusStore.setState({ showFullPlayer: false });
+      // 处于浏览器全屏时 Esc 由浏览器消费(退出全屏),不连带关闭播放器
+      if (e.key === "Escape" && !document.fullscreenElement) {
+        useStatusStore.setState({ showFullPlayer: false });
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     const prevOverflow = document.body.style.overflow;
@@ -268,54 +321,66 @@ function FullPlayerInner() {
         </button>
       </div>
 
-      {/* ===== 主体 ===== */}
-      <div className="relative z-10 flex h-full w-full items-center">
-        {/* 左半:大封面 + 歌曲信息(纯净歌词模式下隐藏) */}
+      {/* ===== 主体(窄屏/竖屏 max-md 时上下堆叠,对齐旧页 700px 断点) ===== */}
+      <div className="relative z-10 flex h-full w-full items-center max-md:flex-col max-md:items-stretch">
+        {/* 左半:大封面 + 歌曲信息(纯净歌词模式下隐藏;窄屏有歌词时缩小并置顶) */}
         {!purelyLyric && (
           <div
             className={`flex h-full flex-col items-center justify-center gap-6 px-10 ${
-              hasLyric ? "w-[45%]" : "w-full"
+              hasLyric
+                ? "w-[45%] max-md:h-auto max-md:w-full max-md:shrink-0 max-md:justify-start max-md:gap-3 max-md:px-6 max-md:pb-1 max-md:pt-20"
+                : "w-full max-md:px-6"
             }`}
           >
             {coverLarge ? (
               <img
                 src={coverLarge}
                 alt="封面"
-                className="aspect-square w-full max-w-[420px] rounded-xl object-cover shadow-2xl"
+                className={`aspect-square w-full max-w-[420px] rounded-xl object-cover shadow-2xl ${
+                  hasLyric ? "max-md:max-w-[min(200px,32vh)]" : "max-md:max-w-[70vw]"
+                }`}
               />
             ) : (
               <div
-                className="aspect-square w-full max-w-[420px] rounded-xl"
+                className={`aspect-square w-full max-w-[420px] rounded-xl ${
+                  hasLyric ? "max-md:max-w-[min(200px,32vh)]" : "max-md:max-w-[70vw]"
+                }`}
                 style={{ background: "rgba(255, 255, 255, 0.08)" }}
               />
             )}
             <div className="w-full max-w-[420px] text-center">
-              <div className="truncate text-2xl font-bold text-white">
+              <div className="truncate text-2xl font-bold text-white max-md:text-lg">
                 {playSongData.name || "未知曲目"}
               </div>
               {aliaText && (
-                <div className="mt-1 truncate text-base text-white/60">{aliaText}</div>
+                <div className="mt-1 truncate text-base text-white/60 max-md:text-sm">
+                  {aliaText}
+                </div>
               )}
-              <div className="mt-2 truncate text-sm text-white/70">
+              <div className="mt-2 truncate text-sm text-white/70 max-md:mt-1 max-md:text-xs">
                 {artistsText || "未知艺术家"}
               </div>
               {albumText && (
-                <div className="mt-1 truncate text-sm text-white/50">{albumText}</div>
+                <div className="mt-1 truncate text-sm text-white/50 max-md:hidden">
+                  {albumText}
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* 右半:歌词区(纯净模式下占满居中) */}
+        {/* 右半:歌词区(纯净模式下占满居中;窄屏堆叠时占据剩余高度) */}
         {hasLyric && (
           <div
             className={`flex h-full min-w-0 flex-col justify-center ${
-              purelyLyric ? "w-full px-[12%]" : "flex-1 pr-10"
+              purelyLyric
+                ? "w-full px-[12%] max-md:px-6"
+                : "flex-1 pr-10 max-md:h-auto max-md:min-h-0 max-md:w-full max-md:px-6 max-md:pr-6"
             }`}
           >
             {useAM ? (
               <div
-                className="relative h-[86%] w-full overflow-hidden"
+                className="relative h-[86%] w-full overflow-hidden max-md:h-full"
                 style={{
                   maskImage: LYRIC_MASK,
                   WebkitMaskImage: LYRIC_MASK,
@@ -347,7 +412,7 @@ function FullPlayerInner() {
                 )}
               </div>
             ) : (
-              <div className="h-[86%] w-full">
+              <div className="h-[86%] w-full max-md:h-full">
                 <LyricScroll />
               </div>
             )}
@@ -355,8 +420,12 @@ function FullPlayerInner() {
         )}
       </div>
 
-      {/* ===== 底部:频谱 + 悬浮控制条 ===== */}
-      {showSpectrums && <Spectrum visible={!playerControlShow} />}
+      {/* ===== 底部:频谱(窄屏隐藏)+ 悬浮控制条 ===== */}
+      {showSpectrums && (
+        <div className="max-md:hidden">
+          <Spectrum visible={!playerControlShow} />
+        </div>
+      )}
       <FullPlayerControls onKeepVisible={keepControlsVisible} />
     </div>
   );

@@ -27,6 +27,7 @@
     "colorthief": "^3.5.0",
     "idb-keyval": "^6.3.0",
     "motion": "^13.1.0",
+    "plyr": "^3.8.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sonner": "^2.0.8",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@babel/core": "^8.0.1",
+    "@playwright/test": "^1.62.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.3",
     "@types/babel__core": "^7.20.5",

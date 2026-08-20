@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, formatNumber, getSongTime, type Artist, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import { Pagination } from "@/components/ui/pagination";
@@ -27,6 +26,7 @@ const durationText = (duration: Song["duration"]): string => {
 export default function Videos() {
   const search = useSearch({ strict: false }) as { keywords?: string };
   const keywords = search.keywords ?? "";
+  const navigate = useNavigate();
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
 
   const [page, setPage] = useState(1);
@@ -96,7 +96,10 @@ export default function Videos() {
             <button
               key={String(video.id)}
               type="button"
-              onClick={() => toast("视频播放后续版本支持")}
+              onClick={() =>
+                video.id != null &&
+                navigate({ to: "/videos-player", search: { id: String(video.id) } })
+              }
               className="group flex flex-col text-left"
             >
               <div className="relative aspect-video overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">

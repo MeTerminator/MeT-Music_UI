@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, formatNumber } from "@met/core";
 import formatData from "@/lib/formatData";
 import { useSettingsStore } from "@/stores/settings";
@@ -27,6 +26,7 @@ const mvArtistsText = (artists: MvCard["artists"]): string => {
 export default function Videos() {
   const search = useSearch({ strict: false }) as { id?: number | string };
   const id = search.id;
+  const navigate = useNavigate();
   const loadSize = useSettingsStore((s) => s.loadSize);
   const pageSize = loadSize > 0 ? loadSize : 50;
   const [page, setPage] = useState(1);
@@ -90,7 +90,10 @@ export default function Videos() {
           <button
             key={`${video.id}-${index}`}
             type="button"
-            onClick={() => toast("视频播放 U3 后续")}
+            onClick={() =>
+              video.id != null &&
+              navigate({ to: "/videos-player", search: { id: String(video.id) } })
+            }
             className="group flex flex-col text-left"
           >
             <div className="relative w-full overflow-hidden rounded-xl">

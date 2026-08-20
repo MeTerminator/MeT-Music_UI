@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   changePlayIndex,
@@ -8,6 +9,7 @@ import {
   setVolume,
   setVolumeMute,
 } from "@met/core";
+import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
@@ -55,6 +57,8 @@ export default function PlayerBar() {
   const showYrc = useSettingsStore((s) => s.showYrc);
   const showPlaylistCount = useSettingsStore((s) => s.showPlaylistCount);
 
+  const navigate = useNavigate();
+
   /** 拖动中的进度值(0-100);null 表示未在拖动,由 playTimeData.bar 驱动 */
   const [dragBar, setDragBar] = useState<number | null>(null);
   /** 倍速菜单开关 */
@@ -95,6 +99,57 @@ export default function PlayerBar() {
     useStatusStore.setState({ playRate: rate });
     setRateMenuOpen(false);
   };
+
+  // 「更多操作」菜单(对照旧 MainControl.vue 的 songMoreOptions)
+  // 无当前歌曲或为本地歌曲(旧逻辑 v-if="!path")时禁用
+  const currentSongId = playSongData?.id;
+  const moreDisabled =
+    currentSongId == null || currentSongId === "" || !!playSongData?.path;
+
+  /** 复制歌曲分享链接(对照旧「复制歌曲链接」;兜底对齐 Setting 页 copySessionId) */
+  const copySongLink = async () => {
+    const shareUrl = `https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = shareUrl;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      toast.success("复制歌曲链接成功");
+    } catch {
+      toast.error("复制失败,请手动复制");
+    }
+  };
+
+  const moreItems: MenuItemDef[] = [
+    {
+      key: "comment",
+      label: "查看评论",
+      onSelect: () => void navigate({ to: "/comments", search: { id: String(currentSongId) } }),
+    },
+    {
+      key: "song-detail",
+      label: "查看单曲详情",
+      onSelect: () => void navigate({ to: "/song", search: { id: String(currentSongId) } }),
+    },
+    {
+      key: "download",
+      label: "下载歌曲",
+      onSelect: () => void navigate({ to: "/download", search: { id: String(currentSongId) } }),
+    },
+    {
+      key: "share",
+      label: "复制歌曲链接",
+      onSelect: () => void copySongLink(),
+    },
+  ];
 
   return (
     <div
@@ -308,6 +363,19 @@ export default function PlayerBar() {
             setVolume(v);
           }}
         />
+
+        {/* 更多操作(当前歌曲的评论/详情/下载/复制链接;无当前歌曲或本地歌曲时禁用) */}
+        <DropdownMenu
+          items={moreItems}
+          disabled={moreDisabled}
+          side="top"
+          align="end"
+          ariaLabel="更多操作"
+          title="更多操作"
+          triggerClassName="bg-transparent text-lg text-[var(--met-fg)]"
+        >
+          ⋯
+        </DropdownMenu>
 
         {/* 播放列表 */}
         <button

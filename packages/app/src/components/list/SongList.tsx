@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   addSongToNext,
   fadePlayOrPause,
@@ -10,6 +12,8 @@ import {
 } from "@met/core";
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
+import { ContextMenu } from "@/components/ui/context-menu";
+import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
 
 interface SongListProps {
   songs: Song[];
@@ -46,6 +50,28 @@ const durationText = (duration: Song["duration"]): string => {
   return duration || "--:--";
 };
 
+/** 复制歌曲分享链接(对照旧 SongListDropdown 的「分享歌曲链接」;兜底对齐 Setting 页 copySessionId) */
+const copySongLink = async (song: Song): Promise<void> => {
+  const shareUrl = `https://y.qq.com/n/ryqq/songDetail/${String(song.id)}`;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareUrl);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = shareUrl;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    toast.success("复制歌曲链接成功");
+  } catch {
+    toast.error("复制失败,请手动复制");
+  }
+};
+
 /**
  * 列表定位播放(对照旧 SongList.vue 的 playSong 双击逻辑):
  * 整表设为播放列表,并从被点击行开始播放;再次操作当前播放行则切换播放/暂停。
@@ -74,6 +100,7 @@ export default function SongList({
   onReachEnd,
 }: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
+  const navigate = useNavigate();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const reachEndRef = useRef<SongListProps["onReachEnd"]>(onReachEnd);
   reachEndRef.current = onReachEnd;
@@ -84,6 +111,57 @@ export default function SongList({
     () => (keyword ? fuzzySearch(keyword, songs) : songs),
     [keyword, songs],
   );
+
+  /**
+   * 行操作菜单项(右键菜单与窄屏「⋯」按钮共用;对照旧 SongListDropdown 选项)。
+   * 本地歌曲(song.path 存在)无线上 id,隐藏评论/详情/下载/复制链接。
+   */
+  const rowMenuItems = (song: Song, index: number): MenuItemDef[] => {
+    const isLocalSong = !!song.path;
+    const songId = String(song.id);
+    const items: MenuItemDef[] = [
+      {
+        key: "play",
+        label: "立即播放",
+        onSelect: () => void playFromList(displaySongs, song, index),
+      },
+      {
+        key: "next-play",
+        label: "下一首播放",
+        // 对照旧逻辑:当前播放歌曲不可再「下一首播放」
+        disabled: playingId != null && playingId === song.id,
+        onSelect: () => {
+          useStatusStore.setState({ playMode: "normal" });
+          addSongToNext(song);
+        },
+      },
+    ];
+    if (!isLocalSong) {
+      items.push(
+        {
+          key: "comment",
+          label: "查看评论",
+          onSelect: () => void navigate({ to: "/comments", search: { id: songId } }),
+        },
+        {
+          key: "song-detail",
+          label: "查看单曲详情",
+          onSelect: () => void navigate({ to: "/song", search: { id: songId } }),
+        },
+        {
+          key: "download",
+          label: "下载歌曲",
+          onSelect: () => void navigate({ to: "/download", search: { id: songId } }),
+        },
+        {
+          key: "share",
+          label: "复制歌曲链接",
+          onSelect: () => void copySongLink(song),
+        },
+      );
+    }
+    return items;
+  };
 
   // 触底回调(预留分页)
   useEffect(() => {
@@ -155,13 +233,19 @@ export default function SongList({
       <ul className="flex flex-col">
         {displaySongs.map((song, index) => {
           const isPlaying = playingId != null && playingId === song.id;
+          const menuItems = rowMenuItems(song, index);
           return (
-            <li
+            <ContextMenu
               key={`${song.id}-${index}`}
-              onDoubleClick={() => void playFromList(displaySongs, song, index)}
-              className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
-                isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
-              }`}
+              items={menuItems}
+              render={
+                <li
+                  onDoubleClick={() => void playFromList(displaySongs, song, index)}
+                  className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
+                    isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
+                  }`}
+                />
+              }
             >
               {/* 序号 */}
               <span
@@ -204,8 +288,8 @@ export default function SongList({
                   {albumText(song.album)}
                 </div>
               ) : null}
-              {/* 悬停操作:立即播放 / 下一首播放 */}
-              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              {/* 悬停操作:立即播放 / 下一首播放(窄屏隐藏,由行尾「⋯」菜单承接) */}
+              <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 md:flex">
                 <button
                   type="button"
                   aria-label={`播放 ${song.name}`}
@@ -233,7 +317,18 @@ export default function SongList({
               <span className="w-12 shrink-0 text-right text-xs tabular-nums text-[var(--met-fg-dim)]">
                 {durationText(song.duration)}
               </span>
-            </li>
+              {/* 窄屏「⋯」菜单(<768px 无右键场景;与右键菜单同组操作) */}
+              <DropdownMenu
+                items={menuItems}
+                side="bottom"
+                align="end"
+                ariaLabel={`${song.name} 更多操作`}
+                title="更多操作"
+                triggerClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)] md:hidden"
+              >
+                ⋯
+              </DropdownMenu>
+            </ContextMenu>
           );
         })}
       </ul>

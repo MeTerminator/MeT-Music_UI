@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { changePlayIndex, playOrPause, setSeek, setVolume, setVolumeMute } from "@met/core";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { Slider } from "../ui/slider";
@@ -26,7 +26,8 @@ export interface FullPlayerControlsProps {
 
 /**
  * 全屏播放器底部悬浮控制条(对齐旧 PlayerControl.vue):
- * 进度 Slider + 上一曲/播放暂停/下一曲 + 播放模式 + 音量 + 关闭。
+ * 进度 Slider + 上一曲/播放暂停/下一曲 + 播放模式 + 音量 + 全屏 + 关闭。
+ * 窄屏(max-md)下隐藏播放模式与音量等次要控件,保留核心播放控制。
  * 随 status.playerControlShow 淡入淡出(鼠标静止 2 秒后由 FullPlayer 隐藏)。
  */
 export default function FullPlayerControls({ onKeepVisible }: FullPlayerControlsProps) {
@@ -41,6 +42,30 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
   const [dragBar, setDragBar] = useState<number | null>(null);
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
   const modeMeta = SONG_MODE_META[playSongMode];
+
+  // ===== 浏览器全屏(原生 Fullscreen API,对齐旧 screenfullChange 职责) =====
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(
+    () => Boolean(document.fullscreenElement),
+  );
+
+  // fullscreenchange 同步按钮状态(含 Esc / F11 等浏览器自行退出的场景)
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      // 关闭播放器时若仍处于浏览器全屏,一并退出,避免遗留全屏页面
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else {
+      void document.documentElement.requestFullscreen().catch(() => undefined);
+    }
+  };
 
   const commitSeek = (percent: number) => {
     const { duration } = useStatusStore.getState().playTimeData;
@@ -83,11 +108,11 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
 
         {/* 控制按钮行 */}
         <div className="grid grid-cols-3 items-center">
-          {/* 左区:播放模式 */}
+          {/* 左区:播放模式(窄屏隐藏次要控件,保核心播放控制) */}
           <div className="flex items-center justify-start">
             <button
               type="button"
-              className={`${iconBtnCls} text-lg`}
+              className={`${iconBtnCls} text-lg max-md:hidden`}
               title={modeMeta.label}
               onClick={() =>
                 useStatusStore.setState({ playSongMode: NEXT_SONG_MODE[playSongMode] })
@@ -132,17 +157,17 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
             </button>
           </div>
 
-          {/* 右区:音量 + 关闭 */}
+          {/* 右区:音量(窄屏隐藏)+ 全屏 + 关闭 */}
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
-              className={iconBtnCls}
+              className={`${iconBtnCls} max-md:hidden`}
               title={playVolume > 0 ? "静音" : "取消静音"}
               onClick={() => setVolumeMute()}
             >
               {playVolume === 0 ? "🔇" : playVolume < 0.5 ? "🔉" : "🔊"}
             </button>
-            <div className="w-24">
+            <div className="w-24 max-md:hidden">
               <Slider
                 value={playVolume}
                 min={0}
@@ -154,6 +179,14 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
                 }}
               />
             </div>
+            <button
+              type="button"
+              className={iconBtnCls}
+              title={isFullscreen ? "退出全屏" : "进入全屏"}
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? "⤡" : "⤢"}
+            </button>
             <button
               type="button"
               className={iconBtnCls}
