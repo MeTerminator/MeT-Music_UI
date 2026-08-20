@@ -87,6 +87,16 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
       // (偏移取 80,消化 sticky 分区导航自身高度)
       const scrollTop = container ? container.scrollTop : window.scrollY;
       const containerTop = container ? container.getBoundingClientRect().top : 0;
+      // 触底(2px 容差)时直接高亮最后一组:末尾分组不够高时其顶边永远
+      // 到不了判定线,否则只有过冲瞬间达标、回弹又退回上一组
+      const clientHeight = container ? container.clientHeight : window.innerHeight;
+      const scrollHeight = container
+        ? container.scrollHeight
+        : document.documentElement.scrollHeight;
+      if (scrollTop + clientHeight >= scrollHeight - 2) {
+        setActiveTab(sections[sections.length - 1]);
+        return;
+      }
       const distance = scrollTop + 80;
       let current: SectionName = sections[0];
       for (const name of sections) {
