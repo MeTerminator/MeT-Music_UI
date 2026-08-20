@@ -1,17 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, type Artist, type Song } from "@met/core";
+import { api, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
+import { formatArtists } from "@/lib/format";
 import { Pagination } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
-
-/** 歌手展示文本(artists 可能是数组或字符串) */
-const artistsText = (artists: Song["artists"]): string => {
-  if (!artists) return "";
-  if (typeof artists === "string") return artists;
-  return artists.map((a: Artist) => a?.name).filter(Boolean).join(" / ");
-};
 
 /** 搜索结果 - 专辑(对照旧 src/views/Search/albums.vue,type=10) */
 export default function Albums() {
@@ -81,7 +75,7 @@ export default function Albums() {
       {/* 专辑卡片 */}
       <div className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {albums.map((album) => {
-          const artistLine = artistsText(album.artists);
+          const artistLine = formatArtists(album.artists);
           return (
             <button
               key={String(album.id)}

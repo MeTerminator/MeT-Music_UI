@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { api } from "@met/core";
 import CommentList, { type CommentItem } from "@/components/list/CommentList";
+import { PrevNextPager } from "@/components/ui/pagination";
 
 const PAGE_SIZE = 25;
 
@@ -15,6 +16,12 @@ export default function Comments() {
   const [page, setPage] = useState(1);
   const [cursorStack, setCursorStack] = useState<string[]>([""]);
   const cursor = cursorStack[page - 1] ?? "";
+
+  // 切换歌曲(id 变化)时复位分页与游标栈,避免沿用上一首的游标
+  useEffect(() => {
+    setPage(1);
+    setCursorStack([]);
+  }, [id]);
 
   // 歌曲信息(取标题/歌手/专辑与评论所需的数字 songID)
   const infoQuery = useQuery({
@@ -147,26 +154,15 @@ export default function Comments() {
         <CommentList comments={comments} loading={loading} />
       )}
 
-      {/* 简版分页 */}
-      <div className="flex items-center justify-center gap-3 py-8">
-        <button
-          type="button"
-          disabled={page <= 1 || commentsQuery.isFetching}
-          onClick={handlePrevPage}
-          className="rounded-full border border-[var(--met-border)] px-4 py-1.5 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          上一页
-        </button>
-        <span className="min-w-16 text-center text-xs text-[var(--met-fg-dim)]">第 {page} 页</span>
-        <button
-          type="button"
-          disabled={rawComments.length < PAGE_SIZE || commentsQuery.isFetching}
-          onClick={handleNextPage}
-          className="rounded-full border border-[var(--met-border)] px-4 py-1.5 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          下一页
-        </button>
-      </div>
+      {/* 简版分页(游标式,总页数未知) */}
+      <PrevNextPager
+        className="py-8"
+        label={`第 ${page} 页`}
+        prevDisabled={page <= 1 || commentsQuery.isFetching}
+        nextDisabled={rawComments.length < PAGE_SIZE || commentsQuery.isFetching}
+        onPrev={handlePrevPage}
+        onNext={handleNextPage}
+      />
     </div>
   );
 }

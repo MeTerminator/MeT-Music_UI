@@ -1,21 +1,32 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
+import { Pagination } from "@/components/ui/pagination";
+import { useSettingsStore } from "@/stores/settings";
 
-/** 搜索结果 - 歌单(点击进入歌单详情页) */
+/** 搜索结果 - 歌单(type=1000,点击进入歌单详情页;分页对齐同目录 Videos.tsx 模式) */
 export default function Playlists() {
   const search = useSearch({ strict: false }) as { keywords?: string };
   const keywords = search.keywords ?? "";
   const navigate = useNavigate();
+  const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
+
+  const [page, setPage] = useState(1);
+  // 关键词变化时回到第一页
+  useEffect(() => {
+    setPage(1);
+  }, [keywords]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["search", "playlists", keywords],
-    queryFn: () => api.getSearchRes(keywords, 30, 0, 1000),
+    queryKey: ["search", "playlists", keywords, page, searchLoadSize],
+    queryFn: () =>
+      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1000),
     enabled: !!keywords,
   });
 
+  const totalCount: number = data?.result?.playlistCount ?? 0;
   // formatData 的 playlist 分支输出与 Song 同为宽松形态,此处仅用 id/name/coverSize/count
   const playlists = useMemo<Song[]>(
     () => formatData(data?.result?.playlists, "playlist", true) ?? [],
@@ -58,35 +69,44 @@ export default function Playlists() {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-      {playlists.map((pl) => (
-        <button
-          key={String(pl.id)}
-          type="button"
-          onClick={() => navigate({ to: "/playlist", search: { id: String(pl.id) } })}
-          className="group flex flex-col text-left"
-        >
-          <div className="relative aspect-square overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
-            {pl.coverSize?.s ? (
-              <img
-                src={pl.coverSize.s}
-                alt=""
-                loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : null}
-          </div>
-          <span
-            className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
-            title={pl.name}
+    <div>
+      <div className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {playlists.map((pl) => (
+          <button
+            key={String(pl.id)}
+            type="button"
+            onClick={() => navigate({ to: "/playlist", search: { id: String(pl.id) } })}
+            className="group flex flex-col text-left"
           >
-            {pl.name}
-          </span>
-          {typeof pl.count === "number" ? (
-            <span className="mt-0.5 text-xs text-[var(--met-fg-dim)]">{pl.count} 首</span>
-          ) : null}
-        </button>
-      ))}
+            <div className="relative aspect-square overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
+              {pl.coverSize?.s ? (
+                <img
+                  src={pl.coverSize.s}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : null}
+            </div>
+            <span
+              className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
+              title={pl.name}
+            >
+              {pl.name}
+            </span>
+            {typeof pl.count === "number" ? (
+              <span className="mt-0.5 text-xs text-[var(--met-fg-dim)]">{pl.count} 首</span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {/* 分页 */}
+      <Pagination
+        page={page}
+        pageCount={Math.ceil(totalCount / searchLoadSize)}
+        onChange={setPage}
+      />
     </div>
   );
 }

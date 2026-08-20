@@ -55,10 +55,23 @@ export const buildHookPayload = (): HookPayload | null => {
   });
 
   try {
-    const lrcData = music.playSongLyric.yrc[status.playSongLyricIndex];
-    const lyricText = lrcData ? lrcData.content.map((i) => i.content).join("") : "";
-    const lyricTrans = lrcData ? lrcData.tran ?? "" : "";
-    const lyricData = computeWordProgress(lrcData, currentTime, settings.lyricsHookOffset);
+    // 与引擎同款 lrcType 分支:有逐字歌词且开启逐字显示时用 yrc,否则回退 lrc
+    const useYrc = settings.showYrc && music.playSongLyric.hasYrc;
+    let lyricText = "";
+    let lyricTrans = "";
+    let lyricData: ReturnType<typeof computeWordProgress> = [];
+    if (useYrc) {
+      const lrcData = music.playSongLyric.yrc[status.playSongLyricIndex];
+      lyricText = lrcData ? lrcData.content.map((i) => i.content).join("") : "";
+      lyricTrans = lrcData ? lrcData.tran ?? "" : "";
+      lyricData = computeWordProgress(lrcData, currentTime, settings.lyricsHookOffset);
+    } else {
+      const lrcLine = music.playSongLyric.lrc[status.playSongLyricIndex];
+      lyricText = lrcLine ? lrcLine.content : "";
+      lyricTrans = lrcLine ? lrcLine.tran ?? "" : "";
+      // 纯 lrc 无逐字数据
+      lyricData = [];
+    }
 
     return {
       contractVersion: CONTRACT_VERSION,

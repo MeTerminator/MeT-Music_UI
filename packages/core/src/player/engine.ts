@@ -8,7 +8,12 @@
  *   2. updateHookData()(宿主契约广播)改为 deps.env.onTick?.() 回调,payload 组装上移应用层;
  *   3. getColorMainColor 中 coverTheme 的取色副作用由应用层的 coverGradient 实现负责,
  *      引擎只写 coverBackground(源码中 calcAccentColor 直接写 store,属 DOM 实现内部行为);
- *   4. window.$MeTMusic_* 三个控制全局不在 core 挂载,应用层包装 playOrPause/changePlayIndex。
+ *   4. window.$MeTMusic_* 三个控制全局不在 core 挂载,应用层包装 playOrPause/changePlayIndex;
+ *   5. mediaSession 的 clear() 只在真正终止播放的路径(mediaSession stop 动作 →
+ *      内部 stopPlayback())调用;soundStop 本身不清媒体会话——与旧版一致,
+ *      切歌途中的 soundStop 不得瞬断 SMTC;
+ *   6. 频谱更新循环带模块级代际计数(spectrumGeneration),旧循环在切歌/重置后
+ *      自行终止,修复源码中 rAF 循环累积的泄漏(仅止损,不改暂停时的循环行为)。
  */
 import { Howl, Howler } from "howler";
 import type { CoverSize, Song } from "../types/song";
@@ -56,6 +61,10 @@ let simulationDuration = 0;
 let testNumber = 0;
 // 是否结束
 let isPlayEnd = true;
+// 渐出竞态防护:渐出进行中标志与 once("fade") handler 引用
+// (渐出未完成时再次 play,需先摘除该 handler 并取消渐出,否则渐出完成回调会把歌暂停)
+let pendingFadePause = false;
+let fadePauseHandler: (() => void) | null = null;
 // 频谱数据
 const spectrumsData: {
   audio: MediaElementAudioSourceNode | null;
@@ -66,6 +75,9 @@ const spectrumsData: {
   analyser: null,
   audioCtx: null,
 };
+// 频谱循环代际:每次起新循环 ++,旧循环发现代际不匹配即自行终止
+// (修复源码中切歌后旧 rAF 循环累积的泄漏)
+let spectrumGeneration = 0;
 // 默认标题
 const defaultTitle = "MeT-Music";
 
@@ -639,6 +651,20 @@ export const fadePlayOrPause = (type: "play" | "pause" = "play"): void => {
 
   // --- 真实播放器逻辑 ---
   if (type === "play") {
+    // 渐出进行中再次 play:摘除渐出完成 handler,取消渐出并把音量渐回目标值,
+    // 否则渐出完成回调会在稍后把歌暂停(竞态)。
+    if (pendingFadePause) {
+      if (fadePauseHandler) player?.off("fade", fadePauseHandler);
+      pendingFadePause = false;
+      fadePauseHandler = null;
+      const volumeNow = player?.volume();
+      const currentVolume = typeof volumeNow === "number" ? volumeNow : 0;
+      player?.fade(currentVolume, status.playVolume, duration);
+      setAllInterval();
+      deps.media.setPlaybackState(true);
+      syncMediaSessionPosition(true);
+      return;
+    }
     if (player?.playing()) return;
     player?.play();
     setAllInterval();
@@ -659,11 +685,18 @@ export const fadePlayOrPause = (type: "play" | "pause" = "play"): void => {
       status.playState = false;
     } else {
       player?.fade(status.playVolume, 0, duration);
-      player?.once("fade", () => {
+      const onFadeOutDone = (): void => {
+        pendingFadePause = false;
+        fadePauseHandler = null;
         player?.pause();
         cleanAllInterval();
         deps.media.setPlaybackState(false);
-      });
+      };
+      // 若上一次渐出尚未完成又再次 pause,先摘除旧 handler,避免重复回调
+      if (pendingFadePause && fadePauseHandler) player?.off("fade", fadePauseHandler);
+      pendingFadePause = true;
+      fadePauseHandler = onFadeOutDone;
+      player?.once("fade", onFadeOutDone);
     }
   }
 };
@@ -723,6 +756,8 @@ export const soundStop = (): void => {
   status.playSeekMs = 0;
 
   if (!settings.html5Player) resetSpectrum();
+  // html5 模式下 resetSpectrum 不执行,这里无条件 ++ 确保存量频谱循环终止
+  spectrumGeneration++;
   status.spectrumsData = []; // 清空 UI 上的频谱条
 
   isSimulating = false;
@@ -731,7 +766,22 @@ export const soundStop = (): void => {
   simulationDuration = 0;
   cleanAllInterval();
 
+  // 渐出竞态标志复位(旧 player 已销毁,残留 handler 随之失效)
+  pendingFadePause = false;
+  fadePauseHandler = null;
+
   player = null;
+  // 注意:此处不调用 deps.media.clear() —— soundStop 也在切歌路径(initPlayer/
+  // createPlayer)被调用,旧版从不在切歌时清媒体会话,清了会导致 SMTC 瞬断。
+  // 真正终止播放时用 stopPlayback()。
+};
+
+/**
+ * 终止播放(mediaSession stop 动作专用):停止播放器并清除系统媒体会话。
+ * 仅此路径调用 deps.media.clear(),对应旧版 stop → soundStop 的完整终止语义。
+ */
+const stopPlayback = (): void => {
+  soundStop();
   deps.media.clear();
 };
 
@@ -996,7 +1046,7 @@ const bindPlayerMediaSession = (): void => {
     previoustrack: () => changePlayIndex("prev", true),
     nexttrack: () => changePlayIndex("next", true),
     stop: () => {
-      if (deps.status().playState) playOrPause();
+      stopPlayback();
     },
     seekto: (details) => {
       if (typeof details?.seekTime === "number") setSeek(details.seekTime);
@@ -1102,9 +1152,9 @@ export const processSpectrum = (sound: Howl): void => {
         // 连接音频源和分析器，再连接至音频上下文的目标
         source.connect(analyser);
         analyser.connect(spectrumsData.audioCtx.destination);
-        // 更新频谱数据
+        // 更新频谱数据(携带新代际,旧循环自行终止)
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        updateSpectrums(analyser, dataArray);
+        updateSpectrums(analyser, dataArray, ++spectrumGeneration);
         // 保存当前链接
         spectrumsData.audio = source;
         spectrumsData.analyser = analyser;
@@ -1127,8 +1177,8 @@ export const processSpectrum = (sound: Howl): void => {
       // 无需再连 destination，Howler 内部已连
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       spectrumsData.analyser = analyser;
-      // 确保只开启一个更新循环
-      updateSpectrums(analyser, dataArray);
+      // 确保只开启一个更新循环(代际 ++ 后旧循环自行终止)
+      updateSpectrums(analyser, dataArray, ++spectrumGeneration);
     }
   } catch (err) {
     console.error("音乐频谱生成失败：", err);
@@ -1137,8 +1187,16 @@ export const processSpectrum = (sound: Howl): void => {
 
 /**
  * 递归更新频谱数据
+ * @param generation 循环创建时的代际;与当前代际不匹配时终止(旧循环泄漏防护)
  */
-const updateSpectrums = (analyser: AnalyserNode, dataArray: Uint8Array<ArrayBuffer>): void => {
+const updateSpectrums = (
+  analyser: AnalyserNode,
+  dataArray: Uint8Array<ArrayBuffer>,
+  generation: number,
+): void => {
+  // 代际不匹配:该循环已被新循环/重置取代,终止
+  if (generation !== spectrumGeneration) return;
+
   const status = deps.status();
 
   // 检查分析器是否存在
@@ -1151,7 +1209,7 @@ const updateSpectrums = (analyser: AnalyserNode, dataArray: Uint8Array<ArrayBuff
   status.spectrumsData = Array.from(dataArray);
 
   requestAnimationFrame(() => {
-    updateSpectrums(analyser, dataArray);
+    updateSpectrums(analyser, dataArray, generation);
   });
 };
 
@@ -1159,6 +1217,8 @@ const updateSpectrums = (analyser: AnalyserNode, dataArray: Uint8Array<ArrayBuff
  * 在切歌或重置应用时调用
  */
 export const resetSpectrum = (): void => {
+  // 无条件递增代际,终止一切存量频谱循环(html5 与 Web Audio 模式皆然)
+  spectrumGeneration++;
   const settings = deps.settings();
   if (settings.html5Player) return;
   // 源码亦断开 spectrumsData.source(该属性从未赋值,保留 audio 断开即可)

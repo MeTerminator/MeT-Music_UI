@@ -98,8 +98,9 @@ export default function VideosPlayer() {
   const brs = videoData?.brs;
 
   // 各分辨率播放地址(对照旧页:按 brs 枚举逐个请求 mv/url)
+  // queryKey 带上 brs 集合,详情返回的分辨率列表变化时重新拉取
   const urlsQuery = useQuery({
-    queryKey: ["video", "urls", id],
+    queryKey: ["video", "urls", id, (brs ?? []).map((v) => v.br).join(",")],
     queryFn: async (): Promise<Plyr.Source[]> => {
       const results = await Promise.all(
         (brs ?? []).map((v) => api.getVideoUrl(id as string, v.br)),

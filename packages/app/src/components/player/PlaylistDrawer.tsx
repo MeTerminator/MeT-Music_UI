@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { changePlayIndex, fadePlayOrPause, initPlayer, soundStop, type Song } from "@met/core";
+import { fadePlayOrPause, initPlayer, soundStop, type Song } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
@@ -25,6 +25,8 @@ export default function PlaylistDrawer() {
   useEffect(() => {
     if (!playListShow) return;
     const onKeyDown = (e: KeyboardEvent) => {
+      // 全屏播放器打开时让 Esc 先关闭播放器,避免一次按键双关(见 FullPlayer 的 Esc 处理)
+      if (useStatusStore.getState().showFullPlayer) return;
       if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKeyDown);
@@ -93,10 +95,13 @@ export default function PlaylistDrawer() {
       return;
     }
     const next = playList.filter((_, i) => i !== index);
-    // 若为当前播放
+    // 若为当前播放:原位顶上下一首(删除末尾曲则退到新末尾),
+    // 不走 changePlayIndex("next")——那会基于已过期索引再前进一位
     if (index === status.playIndex) {
-      useMusicStore.setState({ playList: next });
-      void changePlayIndex("next", true);
+      const newIndex = Math.min(index, next.length - 1);
+      useStatusStore.setState({ playIndex: newIndex });
+      useMusicStore.setState({ playList: next, playSongData: next[newIndex] });
+      void initPlayer(true);
     }
     // 若为当前播放之前
     else if (index < status.playIndex) {

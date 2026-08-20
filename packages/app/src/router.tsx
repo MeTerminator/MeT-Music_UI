@@ -3,7 +3,10 @@
  *
  * 结构逐条复刻旧 src/router/routes.js(27 条 hash 路由):
  * hash history 与旧 vue-router createWebHashHistory 一致(部署于 /app/ 子路径)。
- * 旧路由的 query 传参(?id=、?keywords=)对应此处的宽松 validateSearch,不做严格校验。
+ * 旧路由的 query 传参对应此处的宽松 validateSearch,不做严格校验:
+ * 歌曲类深链旧契约为 ?mid=(idSearch 兼容映射为 id),搜索为 ?keywords=,
+ * 下载页额外有 ?music_quality=。
+ * search 序列化按纯字符串处理(见 parseSearch/stringifySearch),与旧 URL 形态一致。
  * document.title 已由宿主引擎托管,不做 meta.title 联动。
  */
 import {
@@ -41,13 +44,45 @@ import SearchVideos from "@/pages/search/Videos";
 import SearchPlaylists from "@/pages/search/Playlists";
 import Playlist from "@/pages/list/Playlist";
 
-/** 宽松 search 参数:?id=(旧 query.id) */
-const idSearch = (search: Record<string, unknown>) => ({
-  id: search.id as string | undefined,
+/**
+ * search 参数序列化:值全部按纯字符串处理(替代 TanStack Router 默认的
+ * JSON parse/stringify)。效果:?id=123 读出 "123",String(id) 导航产出
+ * ?id=123(与旧 vue-router 的 URL 形态一致),react-query 的 queryKey 不再
+ * 因 123/"123" 双形态分裂。本仓 search 值不使用数组/对象场景。
+ */
+const parseSearch = (searchStr: string): Record<string, string> => {
+  const result: Record<string, string> = {};
+  for (const [key, value] of new URLSearchParams(searchStr)) {
+    result[key] = value;
+  }
+  return result;
+};
+
+const stringifySearch = (search: Record<string, unknown>): string => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    if (value == null) continue;
+    params.set(key, String(value));
+  }
+  const str = params.toString();
+  return str ? `?${str}` : "";
+};
+
+/** 宽松 search 参数:?id=(旧歌曲深链契约为 ?mid=,此处兼容映射) */
+const idSearch = (search: Record<string, unknown>): { id?: string } => ({
+  id: (search.id ?? search.mid) as string | undefined,
+});
+
+/** /download 专用:在 idSearch 基础上额外透传 ?music_quality=(旧深链契约) */
+const downloadSearch = (
+  search: Record<string, unknown>,
+): { id?: string; music_quality?: string } => ({
+  id: (search.id ?? search.mid) as string | undefined,
+  music_quality: search.music_quality as string | undefined,
 });
 
 /** 宽松 search 参数:?keywords=(旧 query.keywords) */
-const keywordsSearch = (search: Record<string, unknown>) => ({
+const keywordsSearch = (search: Record<string, unknown>): { keywords?: string } => ({
   keywords: search.keywords as string | undefined,
 });
 
@@ -197,7 +232,7 @@ const downloadRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/download",
   component: Download,
-  validateSearch: idSearch,
+  validateSearch: downloadSearch,
 });
 
 // 歌曲评论 /comments
@@ -285,6 +320,8 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   history: createHashHistory(),
+  parseSearch,
+  stringifySearch,
 });
 
 declare module "@tanstack/react-router" {

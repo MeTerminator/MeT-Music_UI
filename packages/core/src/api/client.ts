@@ -1,4 +1,4 @@
-import ky, { isHTTPError, isNetworkError } from "ky";
+import ky, { isHTTPError, isNetworkError, isTimeoutError } from "ky";
 import type { KyInstance } from "ky";
 import type { z } from "zod";
 
@@ -41,13 +41,14 @@ export const setApiBaseURL = (url: string): void => {
 
 /**
  * 错误处理,对齐旧 axios 响应拦截器语义:
- * - 网络层错误(fetch TypeError,ky 包装为 NetworkError):调用 offlineHandler,
+ * - 网络层错误(fetch TypeError,ky 包装为 NetworkError)与超时
+ *   (ky TimeoutError,对应旧 axios timeout/ECONNABORTED):调用 offlineHandler,
  *   未注入则 console.error;
  * - 非 2xx(ky HTTPError):按状态码 console.error 对应文案;
  * - 错误始终继续向上抛出(reject)。
  */
 const handleError = (error: unknown): never => {
-  if (isNetworkError(error) || error instanceof TypeError) {
+  if (isNetworkError(error) || isTimeoutError(error) || error instanceof TypeError) {
     if (offlineHandler) offlineHandler(error);
     else
       console.error(

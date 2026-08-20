@@ -39,8 +39,17 @@ const QUALITY_OPTIONS: SelectOption[] = Object.entries(SONG_LEVEL_DATA).map(
 const coverFromPmid = (pmid?: string): string | undefined =>
   pmid ? `/api/web/album/cover/highpic?pic=T002R800x800M000${pmid}.jpg` : undefined;
 
+/** 初始音质:?music_quality= 参数(合法枚举内,忽略大小写)优先,否则 "SQ" */
+const initialQuality = (musicQuality?: string): string => {
+  const upper = typeof musicQuality === "string" ? musicQuality.toUpperCase() : "";
+  return upper && upper in SONG_LEVEL_DATA ? upper : "SQ";
+};
+
 const Download = () => {
-  const search = useSearch({ strict: false }) as { id?: number | string };
+  const search = useSearch({ strict: false }) as {
+    id?: number | string;
+    music_quality?: string;
+  };
   const navigate = useNavigate();
   const playSongData = useMusicStore((s) => s.playSongData);
 
@@ -52,7 +61,7 @@ const Download = () => {
         ? String(playSongData.id)
         : "";
 
-  const [quality, setQuality] = useState("SQ");
+  const [quality, setQuality] = useState(() => initialQuality(search.music_quality));
   const [downloading, setDownloading] = useState(false);
 
   // 歌曲信息(res[mid].track_info,与旧 Comments.vue 的消费方式一致)

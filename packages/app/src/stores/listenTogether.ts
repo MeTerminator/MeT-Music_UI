@@ -225,7 +225,15 @@ export const handleLocalExit = (): void => {
     isInRoom: false,
     roomCode: "",
     roomUuid: "",
+    roomState: createDefaultRoomState(),
+    remainingTime: 3600,
+    userInfo: null,
+    renewCooldown: false,
   });
+  if (renewCooldownTimer) {
+    clearTimeout(renewCooldownTimer);
+    renewCooldownTimer = null;
+  }
   useStatusStore.setState({
     isInRoom: false,
     roomCode: "",
@@ -332,6 +340,14 @@ export const deleteRoom = (): void => {
 export const renewRoom = async (): Promise<void> => {
   if (useListenTogetherStore.getState().renewCooldown || !client) return;
 
+  const ok = await client.renewRoom();
+  if (!ok) {
+    // client 内部冷却中(静默返回)或请求失败(client 已提示);不置镜像冷却
+    toast.warning("续期冷却中，请稍候");
+    return;
+  }
+
+  // 成功:进入 10s 镜像冷却,并刷新 roomState 镜像供 UI 感知新的 expires_at
   useListenTogetherStore.setState({ renewCooldown: true });
   if (renewCooldownTimer) clearTimeout(renewCooldownTimer);
   renewCooldownTimer = setTimeout(() => {
@@ -339,16 +355,15 @@ export const renewRoom = async (): Promise<void> => {
     useListenTogetherStore.setState({ renewCooldown: false });
   }, 10000);
 
-  await client.renewRoom();
-  // client 已更新其内部 roomState.expires_at,刷新镜像供 UI 感知
   if (client) {
     useListenTogetherStore.setState({ roomState: { ...client.roomState } });
   }
 };
 
-/** 切换自动续期开关(下次 connectRoom 时传入 client 生效) */
+/** 切换自动续期开关(运行期即时生效;未连接时于下次 connectRoom 传入) */
 export const setAutoRenew = (value: boolean): void => {
   useListenTogetherStore.setState({ autoRenew: value });
+  client?.setAutoRenew(value);
 };
 
 /** 添加歌曲到共享播放列表(旧 addSong;格式化责任在本层) */

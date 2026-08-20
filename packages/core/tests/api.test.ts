@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TimeoutError } from "ky";
 import { setApiBaseURL, setOfflineHandler } from "../src/api/client";
 import { getSongUrl } from "../src/api/song";
 import { getSearchRes } from "../src/api/search";
@@ -135,6 +136,18 @@ describe("api client (ky)", () => {
     nextNetworkError = new TypeError("Failed to fetch");
 
     await expect(getSearchRes("offline")).rejects.toThrowError();
+    expect(offlineHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("超时(ky TimeoutError)时调用 offlineHandler 且 reject", async () => {
+    const offlineHandler = vi.fn();
+    setOfflineHandler(offlineHandler);
+    // 直接以 ky 导出的 TimeoutError 模拟超时(isTimeoutError 按 instanceof/name 判定)
+    nextNetworkError = new TimeoutError(
+      new Request("http://localhost/api/web/cloudsearch"),
+    );
+
+    await expect(getSearchRes("timeout")).rejects.toThrowError();
     expect(offlineHandler).toHaveBeenCalledTimes(1);
   });
 });

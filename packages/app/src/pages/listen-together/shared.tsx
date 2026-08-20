@@ -1,27 +1,21 @@
 import type { SyntheticEvent } from "react";
-import { toast } from "sonner";
 import type { Song } from "@met/core";
 import { getAssetUrl } from "@/platform/web";
+import { copyText as copy } from "@/lib/clipboard";
+import { formatArtists, getCoverUrl } from "@/lib/format";
 
 /**
  * 一起听歌页面共享工具(对应旧 src/views/ListenTogether.vue 中的格式化函数
- * 与 utils/helper.copyData)。
+ * 与 utils/helper.copyData;格式化/复制已收敛到 @/lib/format 与 @/lib/clipboard)。
  */
 
-/** 歌手字段兼容显示(旧 formatArtist) */
-export const formatArtist = (artists: Song["artists"]): string => {
-  if (!artists) return "未知歌手";
-  if (Array.isArray(artists)) {
-    return artists
-      .map((a) => a.name || String((a as Record<string, unknown>).title ?? ""))
-      .join(" / ");
-  }
-  return artists;
-};
+/** 歌手字段兼容显示(旧 formatArtist,空值兜底「未知歌手」) */
+export const formatArtist = (artists: Song["artists"]): string =>
+  formatArtists(artists) || "未知歌手";
 
 /** 歌曲封面缩略地址 */
 export const songCover = (song: Song): string =>
-  song.coverSize?.s ?? song.cover ?? getAssetUrl("/images/pic/song.jpg");
+  getCoverUrl(song, "s") ?? getAssetUrl("/images/pic/song.jpg");
 
 /** 剩余时间格式化 mm:ss */
 export const formatRemaining = (seconds: number): string => {
@@ -40,16 +34,9 @@ export const formatLogTime = (ts: number | undefined): string => {
   return `${h}:${m}:${s}`;
 };
 
-/** 复制文本并提示(旧 helper.copyData) */
-export const copyText = async (data: string, label: string): Promise<void> => {
-  try {
-    await navigator.clipboard.writeText(data);
-    toast.success(`${label}成功`);
-  } catch (error) {
-    console.error("复制出错：", error);
-    toast.error(`${label}失败`);
-  }
-};
+/** 复制文本并提示(旧 helper.copyData;实现收敛至 @/lib/clipboard) */
+export const copyText = (data: string, label: string): Promise<void> =>
+  copy(data, `${label}成功`);
 
 /** 图片加载失败时回退到默认图(避免回退图也失败导致死循环) */
 export const fallbackImg =

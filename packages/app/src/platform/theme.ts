@@ -30,10 +30,12 @@ const applyTheme = (): void => {
   ) as CoverThemeSide | undefined;
 
   const style = rootEl.style;
-  if (themeAutoCover && side?.primary) {
-    // coverTheme 的值为 "r, g, b" 字符串(与旧实现一致)
-    style.setProperty("--met-primary", `rgb(${side.primary})`);
-    style.setProperty("--met-cover-primary", `rgb(${side.primary})`);
+  if (themeAutoCover && side?.bg) {
+    // coverTheme 的值为 "r, g, b" 字符串(与旧实现一致)。
+    // 强调色取 side.bg(旧 $changeThemeColor 即用 bg);
+    // primary 字段是 HCT tone 100+ 的纯白,不能作为强调色。
+    style.setProperty("--met-primary", `rgb(${side.bg})`);
+    style.setProperty("--met-cover-primary", `rgb(${side.bg})`);
     if (side.mainBg) style.setProperty("--met-cover-bg", `rgb(${side.mainBg})`);
     if (side.shade) style.setProperty("--met-cover-shade", `rgb(${side.shade})`);
   } else {

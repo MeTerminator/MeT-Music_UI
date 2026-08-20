@@ -100,3 +100,39 @@ export const Pagination = ({ page, pageCount, onChange, className = "" }: Pagina
     </nav>
   );
 };
+
+export interface PrevNextPagerProps {
+  /** 中间展示文案(如「第 3 页」或「3 / 10 页」) */
+  label: string;
+  onPrev: () => void;
+  onNext: () => void;
+  prevDisabled?: boolean;
+  nextDisabled?: boolean;
+  className?: string;
+}
+
+const prevNextBtnCls =
+  "rounded-full border border-[var(--met-border)] px-4 py-1.5 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40";
+
+/**
+ * 简版「上一页 / 下一页」分页(总页数未知或游标分页场景;
+ * 收敛 artist 三页与 Comments 页的手写 prev/next 块)。
+ */
+export const PrevNextPager = ({
+  label,
+  onPrev,
+  onNext,
+  prevDisabled = false,
+  nextDisabled = false,
+  className = "",
+}: PrevNextPagerProps) => (
+  <div className={`flex items-center justify-center gap-3 ${className}`}>
+    <button type="button" disabled={prevDisabled} onClick={onPrev} className={prevNextBtnCls}>
+      上一页
+    </button>
+    <span className="min-w-16 text-center text-xs text-[var(--met-fg-dim)]">{label}</span>
+    <button type="button" disabled={nextDisabled} onClick={onNext} className={prevNextBtnCls}>
+      下一页
+    </button>
+  </div>
+);

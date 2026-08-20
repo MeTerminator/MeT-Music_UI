@@ -4,11 +4,13 @@ import { useSearch } from "@tanstack/react-router";
 import { api, playAllSongs, type Song } from "@met/core";
 import formatData, { getCoverUrl } from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
+import { useSiteDataStore } from "@/stores/siteData";
 
-/** 歌单详情页(id 来自 search params) */
+/** 歌单详情页(id 来自 search params;/like-songs 复用本组件,无 id 时依赖登录态) */
 export default function Playlist() {
   const search = useSearch({ strict: false }) as { id?: number | string };
   const id = search.id;
+  const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
 
   // 歌单详情(名称/简介/封面/歌曲数)
   const detailQuery = useQuery({
@@ -31,6 +33,17 @@ export default function Playlist() {
   );
 
   if (id == null || id === "") {
+    // like-songs 形态(路由无 id):未登录时不发请求,提示登录
+    if (!userLoginStatus) {
+      return (
+        <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2">
+          <p className="text-lg font-medium text-[var(--met-fg)]">请登录后使用</p>
+          <p className="text-sm text-[var(--met-fg-dim)]">
+            登录账号后即可查看「我喜欢的音乐」歌单
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="py-24 text-center text-sm text-[var(--met-fg-dim)]">
         未指定歌单

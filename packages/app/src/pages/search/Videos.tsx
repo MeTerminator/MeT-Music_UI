@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, formatNumber, getSongTime, type Artist, type Song } from "@met/core";
+import { api, formatNumber, getSongTime, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
+import { formatArtists } from "@/lib/format";
 import { Pagination } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
-
-/** 歌手/创作者展示文本(mv 分支的 artists 兼容 creator 数组) */
-const artistsText = (artists: Song["artists"]): string => {
-  if (!artists) return "";
-  if (typeof artists === "string") return artists;
-  return artists
-    .map((a: Artist) => a?.name ?? (a?.userName as string | undefined))
-    .filter(Boolean)
-    .join(" / ");
-};
 
 /** 时长展示(mv 分支 duration 为毫秒数) */
 const durationText = (duration: Song["duration"]): string => {
@@ -22,7 +13,7 @@ const durationText = (duration: Song["duration"]): string => {
   return typeof duration === "string" ? duration : "";
 };
 
-/** 搜索结果 - 视频(对照旧 src/views/Search/videos.vue,type=1014) */
+/** 搜索结果 - 视频(对照旧 src/views/Search/videos.vue,type=1004,消费 result.mvs/mvCount) */
 export default function Videos() {
   const search = useSearch({ strict: false }) as { keywords?: string };
   const keywords = search.keywords ?? "";
@@ -38,13 +29,13 @@ export default function Videos() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["search", "videos", keywords, page, searchLoadSize],
     queryFn: () =>
-      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1014),
+      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1004),
     enabled: !!keywords,
   });
 
-  const totalCount: number = data?.result?.videoCount ?? data?.result?.mvCount ?? 0;
+  const totalCount: number = data?.result?.mvCount ?? 0;
   const videos = useMemo<Song[]>(
-    () => formatData(data?.result?.videos ?? data?.result?.mvs, "mv") ?? [],
+    () => formatData(data?.result?.mvs, "mv") ?? [],
     [data],
   );
 
@@ -90,7 +81,7 @@ export default function Videos() {
       {/* 视频横卡 */}
       <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
         {videos.map((video) => {
-          const artistLine = artistsText(video.artists);
+          const artistLine = formatArtists(video.artists);
           const duration = durationText(video.duration);
           return (
             <button

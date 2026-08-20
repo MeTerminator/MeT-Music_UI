@@ -8,6 +8,7 @@ import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { useHostStore } from "@/host";
 import { cleanAll, getSessionId } from "@/platform/web";
+import { copyText } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
@@ -67,27 +68,8 @@ const Setting = () => {
     }
   };
 
-  // 复制 Session ID(对齐旧 copySessionId,浏览器剪贴板 + 旧浏览器兜底)
-  const copySessionId = async () => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(sessionId);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = sessionId;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      toast.success("已复制 Session ID 到剪贴板");
-    } catch (err) {
-      console.error("复制 Session ID 失败：", err);
-      toast.error("复制失败");
-    }
-  };
+  // 复制 Session ID(对齐旧 copySessionId)
+  const copySessionId = () => copyText(sessionId, "已复制 Session ID 到剪贴板");
 
   // 程序重置(Dialog 二次确认后执行,对齐旧 resetApp)
   const confirmReset = () => {

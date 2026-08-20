@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import { api, getTimestampTime } from "@met/core";
 import formatData from "@/lib/formatData";
+import { PrevNextPager } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
 
 /** 专辑卡片数据(formatData album 分支) */
@@ -21,6 +22,9 @@ export default function Albums() {
   const loadSize = useSettingsStore((s) => s.loadSize);
   const pageSize = loadSize > 0 ? loadSize : 50;
   const [page, setPage] = useState(1);
+
+  // 切换歌手(id 变化)时回到第一页
+  useEffect(() => setPage(1), [id]);
 
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ["artist", "albums", id, page, pageSize],
@@ -97,27 +101,14 @@ export default function Albums() {
       </div>
       {/* 分页 */}
       {total > pageSize ? (
-        <div className="flex items-center justify-center gap-3 py-6">
-          <button
-            type="button"
-            disabled={page <= 1 || isFetching}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-full border border-[var(--met-border)] px-4 py-1.5 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            上一页
-          </button>
-          <span className="min-w-16 text-center text-xs text-[var(--met-fg-dim)]">
-            {page} / {totalPages} 页
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages || isFetching}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="rounded-full border border-[var(--met-border)] px-4 py-1.5 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            下一页
-          </button>
-        </div>
+        <PrevNextPager
+          className="py-6"
+          label={`${page} / ${totalPages} 页`}
+          prevDisabled={page <= 1 || isFetching}
+          nextDisabled={page >= totalPages || isFetching}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+        />
       ) : null}
     </div>
   );

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
 import {
   addSongToNext,
   fadePlayOrPause,
   fuzzySearch,
   getSongTime,
   initPlayer,
-  type Artist,
   type Song,
 } from "@met/core";
+import { copyText } from "@/lib/clipboard";
+import { formatArtists } from "@/lib/format";
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { ContextMenu } from "@/components/ui/context-menu";
@@ -31,12 +31,9 @@ interface SongListProps {
   onReachEnd?: () => void;
 }
 
-/** 歌手展示文本(artists 可能是数组或字符串) */
-const artistsText = (artists: Song["artists"]): string => {
-  if (!artists) return "未知歌手";
-  if (typeof artists === "string") return artists;
-  return artists.map((a: Artist) => a?.name).filter(Boolean).join(" / ") || "未知歌手";
-};
+/** 歌手展示文本(空值兜底「未知歌手」) */
+const artistsText = (artists: Song["artists"]): string =>
+  formatArtists(artists) || "未知歌手";
 
 /** 专辑展示文本(album 可能是对象或字符串) */
 const albumText = (album: Song["album"]): string => {
@@ -50,27 +47,9 @@ const durationText = (duration: Song["duration"]): string => {
   return duration || "--:--";
 };
 
-/** 复制歌曲分享链接(对照旧 SongListDropdown 的「分享歌曲链接」;兜底对齐 Setting 页 copySessionId) */
-const copySongLink = async (song: Song): Promise<void> => {
-  const shareUrl = `https://y.qq.com/n/ryqq/songDetail/${String(song.id)}`;
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(shareUrl);
-    } else {
-      const textarea = document.createElement("textarea");
-      textarea.value = shareUrl;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
-    toast.success("复制歌曲链接成功");
-  } catch {
-    toast.error("复制失败,请手动复制");
-  }
-};
+/** 复制歌曲分享链接(对照旧 SongListDropdown 的「分享歌曲链接」) */
+const copySongLink = (song: Song): Promise<void> =>
+  copyText(`https://y.qq.com/n/ryqq/songDetail/${String(song.id)}`, "复制歌曲链接成功");
 
 /**
  * 列表定位播放(对照旧 SongList.vue 的 playSong 双击逻辑):

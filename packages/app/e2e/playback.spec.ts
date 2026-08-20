@@ -83,7 +83,7 @@ test("搜索页链路:SongList 渲染与播放全部", async ({ page }) => {
     timeout: 20_000,
   });
 
-  // SongList 每行有 aria-label="播放 <歌名>" 的行内播放按钮(搜索固定取 50 条)
+  // SongList 每行有 aria-label="播放 <歌名>" 的行内播放按钮(每页 searchLoadSize 条,默认 30)
   const rows = page.locator('button[aria-label^="播放 "]');
   await expect.poll(() => rows.count(), { timeout: 20_000 }).toBeGreaterThan(10);
 });

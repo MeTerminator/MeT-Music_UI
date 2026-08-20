@@ -1,18 +1,12 @@
 /** 主页(对照旧 src/views/Home.vue:标题 + 声明;另加最近播放快捷入口) */
 import { useNavigate } from "@tanstack/react-router";
-import { getGreetings, type Artist, type Song } from "@met/core";
+import { getGreetings, type Song } from "@met/core";
 import { useMusicStore } from "@/stores/music";
+import { formatArtists, getCoverUrl } from "@/lib/format";
 
-/** 歌手展示文本(artists 可能是数组或字符串) */
-const artistsText = (artists: Song["artists"]): string => {
-  if (!artists) return "未知歌手";
-  if (typeof artists === "string") return artists;
-  return artists.map((a: Artist) => a?.name).filter(Boolean).join(" / ") || "未知歌手";
-};
-
-/** 封面缩略地址 */
-const coverUrl = (song: Song): string | undefined =>
-  song.coverSize?.s ?? song.coverSize?.m ?? song.cover ?? song.localCover;
+/** 歌手展示文本(空值兜底「未知歌手」) */
+const artistsText = (artists: Song["artists"]): string =>
+  formatArtists(artists) || "未知歌手";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -47,7 +41,7 @@ const Home = () => {
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {recentSongs.map((song) => {
-              const cover = coverUrl(song);
+              const cover = getCoverUrl(song, "s");
               return (
                 <button
                   key={String(song.id)}

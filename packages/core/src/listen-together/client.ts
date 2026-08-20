@@ -80,7 +80,7 @@ export class ListenTogetherClient {
   private readonly httpBase: string;
   private readonly notify: Notifier | undefined;
   private readonly events: LTClientEvents;
-  private readonly autoRenew: boolean;
+  private autoRenew: boolean;
   private readonly wsFactory: (url: string) => WSLike;
 
   private ws: WSLike | null = null;
@@ -127,6 +127,11 @@ export class ListenTogetherClient {
   /** 房间剩余时间(秒,由倒计时定时器维护) */
   get remainingTime(): number {
     return this._remainingTime;
+  }
+
+  /** 运行期切换自动续期(下一个倒计时 tick 生效) */
+  setAutoRenew(value: boolean): void {
+    this.autoRenew = value;
   }
 
   // ---------------------------------------------------------------- 连接管理
@@ -285,9 +290,12 @@ export class ListenTogetherClient {
 
   // ---------------------------------------------------------------- HTTP
 
-  /** 房间续期(含 10s 冷却) */
-  async renewRoom(): Promise<void> {
-    if (this.renewCooldown) return;
+  /**
+   * 房间续期(含 10s 冷却)。
+   * @returns 成功 true;冷却中(静默)或请求失败(已提示)返回 false
+   */
+  async renewRoom(): Promise<boolean> {
+    if (this.renewCooldown) return false;
     try {
       this.renewCooldown = true;
       this.renewCooldownTimer = setTimeout(() => {
@@ -308,11 +316,13 @@ export class ListenTogetherClient {
       if (data && data.status === "ok" && typeof data.expires_at === "number") {
         this._roomState.expires_at = data.expires_at;
         this.notify?.success("房间已成功续期 1 小时");
-      } else {
-        this.notify?.error(data?.detail || "续期失败");
+        return true;
       }
+      this.notify?.error(data?.detail || "续期失败");
+      return false;
     } catch (err) {
       console.error("续期出错:", err);
+      return false;
     }
   }
 
@@ -393,6 +403,12 @@ export class ListenTogetherClient {
     if (this.ws) {
       const ws = this.ws;
       this.ws = null;
+      // 先摘除全部事件回调再关闭:防止旧连接的异步 onclose/onerror
+      // 在新连接建立后串扰(重入 handleLocalExit / 误报错误)
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onclose = null;
+      ws.onerror = null;
       try {
         ws.close();
       } catch (_) {

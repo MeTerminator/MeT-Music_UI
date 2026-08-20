@@ -13,6 +13,7 @@ import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
+import { copyText } from "@/lib/clipboard";
 import { formatArtists, getCoverUrl } from "./format";
 import PlaylistDrawer from "./PlaylistDrawer";
 
@@ -106,27 +107,12 @@ export default function PlayerBar() {
   const moreDisabled =
     currentSongId == null || currentSongId === "" || !!playSongData?.path;
 
-  /** 复制歌曲分享链接(对照旧「复制歌曲链接」;兜底对齐 Setting 页 copySessionId) */
-  const copySongLink = async () => {
-    const shareUrl = `https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = shareUrl;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      toast.success("复制歌曲链接成功");
-    } catch {
-      toast.error("复制失败,请手动复制");
-    }
-  };
+  /** 复制歌曲分享链接(对照旧「复制歌曲链接」) */
+  const copySongLink = () =>
+    copyText(
+      `https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`,
+      "复制歌曲链接成功",
+    );
 
   const moreItems: MenuItemDef[] = [
     {
