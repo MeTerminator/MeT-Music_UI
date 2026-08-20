@@ -3,20 +3,21 @@
  * 应用启动时调用一次 setupPlayer()。
  */
 import { toast } from "sonner";
-import { configurePlayer, createDefaultRoomState } from "@met/core";
+import { configurePlayer } from "@met/core";
 import type {
-  ListenTogetherBridge,
   MusicState,
   Notifier,
   PlayerSettings,
   SiteState,
   StatusState,
 } from "@met/core";
+import { ltBridge } from "@/stores/listenTogether";
 import { asGetter, bindStore } from "./bind";
 import { useMusicStore, getPlaySongData, setPlayHistory, setPersonalFm } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
 import { useSiteDataStore } from "@/stores/siteData";
+import { getCoverGradient } from "@/platform/cover-color";
 import { webMediaSession } from "@/platform/media-session";
 import { getBlobUrlFromUrl, getSessionId } from "@/platform/web";
 import { broadcastHook } from "@/host";
@@ -31,19 +32,6 @@ const notifier: Notifier = {
     if (window.confirm(`${title}\n${content}`)) action();
     void actionText;
   },
-};
-
-/**
- * 一起听桥接。U2 阶段为占位实现(isInRoom 恒为 false,引擎不会调用);
- * U3 接入 ListenTogetherClient 后替换为真实实现。
- */
-const ltBridge: ListenTogetherBridge = {
-  roomState: createDefaultRoomState(),
-  serverTimeOffset: 0,
-  sendNext: () => console.warn("[lt] 未接入(U3)"),
-  sendChangeIndex: () => console.warn("[lt] 未接入(U3)"),
-  sendPlayOrPause: () => console.warn("[lt] 未接入(U3)"),
-  sendSeek: () => console.warn("[lt] 未接入(U3)"),
 };
 
 let configured = false;
@@ -85,7 +73,8 @@ export const setupPlayer = (): void => {
       sessionId: getSessionId,
       reload: () => location.reload(),
       toBlobUrl: getBlobUrlFromUrl,
-      // coverGradient:封面取色留待 U3(cover-color DOM 实现)
+      // 封面取色:写入 coverBackground(引擎)与 coverTheme(取色实现内部 setState)
+      coverGradient: getCoverGradient,
       onTick: broadcastHook,
     },
   });

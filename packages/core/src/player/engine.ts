@@ -1271,3 +1271,18 @@ const setAllInterval = (): void => {
   reportInterval = setInterval(() => reportPlaybackStatus("progress"), 5000);
   seekInterval = setInterval(() => setAudioTime(), 17);
 };
+
+/**
+ * 解锁/恢复音频上下文。
+ * 浏览器自动播放策略下,Web Audio 需在用户手势中 resume;
+ * 旧 UI 在"一起听"入房点击时调用 Howler.ctx.resume(),经此导出替代。
+ */
+export const resumeAudioContext = (): void => {
+  try {
+    if (Howler.ctx && Howler.ctx.state === "suspended") {
+      void Howler.ctx.resume();
+    }
+  } catch (err) {
+    console.warn("恢复音频上下文失败：", err);
+  }
+};

@@ -1,118 +1,379 @@
-import { useCallback } from "react";
-import { LyricPlayer } from "@applemusic-like-lyrics/react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  BackgroundRender,
+  LyricPlayer,
+  type LyricPlayerRef,
+} from "@applemusic-like-lyrics/react";
 import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
-// @ts-ignore -- css 副作用导入;项目暂缺 vite-env.d.ts(vite/client 类型),main.tsx 的 styles.css 导入同此
 import "@applemusic-like-lyrics/core/style.css";
 import { setSeek } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
-import { formatArtists, getCoverUrl } from "./format";
+import { formatArtists } from "./format";
+import FullPlayerControls from "./FullPlayerControls";
+import LyricScroll from "./LyricScroll";
+import Spectrum from "./Spectrum";
+
+/** 歌词区上下渐隐遮罩(对齐旧 AMLyric.vue / Lyric.vue) */
+const LYRIC_MASK =
+  "linear-gradient(180deg, hsla(0,0%,100%,0) 0, hsla(0,0%,100%,0.6) 5%, #fff 10%, #fff 75%, hsla(0,0%,100%,0.6) 85%, hsla(0,0%,100%,0))";
 
 /**
- * 全屏歌词层(U2:功能完整、样式简洁)。
- * showFullPlayer 为 true 时渲染,覆盖于 PlayerBar 之上(z-40)。
- * 频谱、倒计时、纯净模式、背景流动渲染留待 U3。
+ * AMLL 流体背景的封面地址(对齐旧 FullPlayer.vue 的 AmllAlbum computed):
+ * QQ 音乐图床跨域会导致 WebGL 纹理读取失败,改走本站代理。
+ */
+const toAmllAlbumUrl = (src: string | undefined): string | undefined => {
+  if (!src) return undefined;
+  if (src.startsWith("https://y.qq.com/music/photo_new/")) {
+    const cleaned = src
+      .replace("https://y.qq.com/music/photo_new/", "")
+      .replace("?param=100y100", "");
+    return `/api/web/album/cover/pic?pic=${cleaned}`;
+  }
+  return src;
+};
+
+/**
+ * 全屏播放器(U3:对齐旧 FullPlayer.vue 功能)。
+ * showFullPlayer 为 true 时挂载,覆盖于 PlayerBar 之上(z-40)。
  */
 export default function FullPlayer() {
   const showFullPlayer = useStatusStore((s) => s.showFullPlayer);
+  // 关闭时整体卸载,保证 Esc/overflow/计时器等副作用随之清理
+  if (!showFullPlayer) return null;
+  return <FullPlayerInner />;
+}
+
+function FullPlayerInner() {
   const coverBackground = useStatusStore((s) => s.coverBackground);
   const playState = useStatusStore((s) => s.playState);
   const playSeekMs = useStatusStore((s) => s.playSeekMs);
+  const playerControlShow = useStatusStore((s) => s.playerControlShow);
+  const pureLyricMode = useStatusStore((s) => s.pureLyricMode);
   const playSongData = useMusicStore((s) => s.playSongData);
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
+
+  const playerBackgroundType = useSettingsStore((s) => s.playerBackgroundType);
+  const amllPlayerBackgroundFlowSpeed = useSettingsStore((s) => s.amllPlayerBackgroundFlowSpeed);
   const useAMLyrics = useSettingsStore((s) => s.useAMLyrics);
   const showYrc = useSettingsStore((s) => s.showYrc);
   const lyricsAMOffset = useSettingsStore((s) => s.lyricsAMOffset);
   const useAMSpring = useSettingsStore((s) => s.useAMSpring);
   const useAMScale = useSettingsStore((s) => s.useAMScale);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
+  const lyricsBlur = useSettingsStore((s) => s.lyricsBlur);
+  const lyricsBlock = useSettingsStore((s) => s.lyricsBlock);
+  const showSpectrums = useSettingsStore((s) => s.showSpectrums);
+
+  /**
+   * 修复(缺陷 B):挂载时 store 已有歌词但 LyricPlayer 空白。
+   * 根因见文件底部注释。三层防护:
+   * 1. 推迟一帧挂载 LyricPlayer,避开全屏层首帧提交时的布局/StrictMode 抖动;
+   * 2. key 随歌曲与歌词数据变化强制重建 core player;
+   * 3. ensureLyricApplied:挂载后经 ref 校验 core 实例是否真的持有歌词行,
+   *    缺失则手动补写(实测 StrictMode 下绑定层会把歌词写进已 dispose 的旧实例)。
+   */
+  const [lyricReady, setLyricReady] = useState(false);
+  const lyricPlayerRef = useRef<LyricPlayerRef>(null);
+  useEffect(() => {
+    // rAF 在页面不可见时不会触发,补一个 setTimeout 兜底
+    let done = false;
+    const ready = () => {
+      if (!done) {
+        done = true;
+        setLyricReady(true);
+      }
+    };
+    const raf = requestAnimationFrame(ready);
+    const timer = window.setTimeout(ready, 80);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  // Esc 关闭全屏;打开期间锁定 body 滚动
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") useStatusStore.setState({ showFullPlayer: false });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  // ===== 控制条显隐:鼠标移动唤出,静止 2 秒淡出(对齐旧 controlShowChange) =====
+  const hideTimerRef = useRef<number | null>(null);
+  const lastMoveRef = useRef(0);
+
+  const pokeControls = useCallback(() => {
+    const now = performance.now();
+    if (now - lastMoveRef.current < 150) return; // 节流
+    lastMoveRef.current = now;
+    useStatusStore.setState({ playerControlShow: true });
+    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = window.setTimeout(() => {
+      useStatusStore.setState({ playerControlShow: false });
+    }, 2000);
+  }, []);
+
+  /** 悬停控制条时保持可见(清除隐藏计时器) */
+  const keepControlsVisible = useCallback(() => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    useStatusStore.setState({ playerControlShow: true });
+  }, []);
+
+  const hideControls = useCallback(() => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    useStatusStore.setState({ playerControlShow: false });
+  }, []);
+
+  // 打开即视为一次交互;卸载时清理计时器并恢复显示状态
+  useEffect(() => {
+    lastMoveRef.current = -1000;
+    pokeControls();
+    return () => {
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      useStatusStore.setState({ playerControlShow: true });
+    };
+  }, [pokeControls]);
 
   const onLyricLineClick = useCallback((e: LyricLineMouseEvent) => {
     setSeek(e.line.getLine().startTime / 1000);
   }, []);
 
-  if (!showFullPlayer) return null;
+  // ===== 歌词数据 =====
+  const useYrcAM = useAMLyrics && playSongLyric.hasYrc && showYrc;
+  const amLines = (useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? [];
+  // 旧 isHasLrc 规则:lrc 首行存在且行数 > 4
+  const hasPlainLyric = Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
+  const useAM = useAMLyrics && amLines.length > 0;
+  const hasLyric = useAM || hasPlainLyric;
+  const purelyLyric = pureLyricMode && hasLyric;
 
-  const useYrc = useAMLyrics && playSongLyric.hasYrc && showYrc;
-  const lyricLines = (useYrc ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? [];
-  const hasLyric =
-    (playSongLyric.yrcAM?.length ?? 0) > 0 || (playSongLyric.lrcAM?.length ?? 0) > 0;
+  // 缺陷 B 兜底:LyricPlayer 挂载/歌词变化后,校验 core 实例已持有歌词,缺失则补写
+  useEffect(() => {
+    if (!lyricReady || !useAM || amLines.length === 0) return;
+    const timer = window.setTimeout(() => {
+      const core = lyricPlayerRef.current?.lyricPlayer;
+      if (!core || core.getLyricLines().length === amLines.length) return;
+      const time = Math.max(
+        0,
+        Math.round(useStatusStore.getState().playSeekMs + lyricsAMOffset),
+      );
+      core.setLyricLines(amLines, time);
+      core.setCurrentTime(time, true);
+      void core.calcLayout(true, true);
+      core.update();
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [lyricReady, useAM, amLines, lyricsAMOffset]);
 
-  const coverUrl = getCoverUrl(playSongData, "l");
+  // ===== 封面与背景 =====
+  const coverSmall = playSongData.coverSize?.s || playSongData.localCover || playSongData.cover;
+  const coverLarge =
+    playSongData.coverSize?.l || playSongData.localCover || playSongData.cover || coverSmall;
+  const amllAlbum = toAmllAlbumUrl(coverSmall);
   const artistsText = formatArtists(playSongData.artists);
+  const albumText = playSongData.album
+    ? typeof playSongData.album === "string"
+      ? playSongData.album
+      : playSongData.album.name
+    : "";
+  const aliaText = typeof playSongData.alia === "string" ? playSongData.alia : "";
+
+  const showAmllBackground = playerBackgroundType === "amllAnimation" && Boolean(amllAlbum);
+  const showBlurBackground =
+    playerBackgroundType === "blur" && Boolean(coverSmall) && !showAmllBackground;
+  const gradientBackground = coverBackground || "var(--met-bg)";
 
   return (
     <div
-      className="fixed inset-0 z-40 flex flex-col"
-      style={{ background: coverBackground || "var(--met-bg)" }}
+      className="fixed inset-0 z-40 select-none overflow-hidden"
+      style={{
+        background: "var(--met-bg)",
+        cursor: playerControlShow ? "auto" : "none",
+      }}
+      onMouseMove={pokeControls}
+      onTouchStart={pokeControls}
+      onMouseLeave={hideControls}
     >
-      {/* 顶部:关闭按钮 */}
-      <div className="flex shrink-0 justify-end p-4">
+      {/* ===== 背景层(按 settings.playerBackgroundType 分支) ===== */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        {showAmllBackground ? (
+          <div className="absolute inset-0">
+            <BackgroundRender
+              album={amllAlbum}
+              albumIsVideo={false}
+              playing={playState}
+              fps={30}
+              flowSpeed={amllPlayerBackgroundFlowSpeed}
+              renderScale={0.5}
+              hasLyric={hasLyric}
+            />
+          </div>
+        ) : showBlurBackground ? (
+          <img
+            src={coverSmall}
+            alt=""
+            aria-hidden
+            className="absolute left-1/2 top-1/2 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover blur-3xl"
+            style={{ filter: "blur(80px) contrast(1.2)" }}
+          />
+        ) : (
+          <div className="absolute inset-0" style={{ background: gradientBackground }} />
+        )}
+        {/* 暗化遮罩,保证前景可读性(对齐旧 .overlay::after) */}
+        <div className="absolute inset-0" style={{ background: "rgba(0, 0, 0, 0.4)" }} />
+      </div>
+
+      {/* ===== 顶部菜单:纯净歌词切换 + 关闭(随控制条显隐) ===== */}
+      <div
+        className={`absolute left-0 top-0 z-20 flex w-full items-center justify-between p-5 transition-opacity duration-300 ${
+          playerControlShow ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <div>
+          {hasLyric && (
+            <button
+              type="button"
+              className={`flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm transition-all hover:bg-white/10 ${
+                pureLyricMode ? "bg-white/10 text-white" : "text-white/50 hover:text-white"
+              }`}
+              title={pureLyricMode ? "退出纯净歌词模式" : "纯净歌词模式"}
+              onClick={() => useStatusStore.setState({ pureLyricMode: !pureLyricMode })}
+            >
+              纯净歌词
+            </button>
+          )}
+        </div>
         <button
           type="button"
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg"
-          style={{ background: "rgba(255, 255, 255, 0.1)", color: "var(--met-fg)" }}
-          title="关闭"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg text-white/70 transition-all hover:scale-105 hover:bg-white/10 hover:text-white"
+          title="关闭播放器 (Esc)"
           onClick={() => useStatusStore.setState({ showFullPlayer: false })}
         >
           ✕
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-stretch gap-8 px-8 pb-8">
-        {/* 左半:大封面 + 歌曲信息 */}
-        <div className="flex w-1/2 flex-col items-center justify-center gap-6">
-          {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt="封面"
-              className="aspect-square w-full max-w-[420px] rounded-xl object-cover shadow-2xl"
-            />
-          ) : (
-            <div
-              className="aspect-square w-full max-w-[420px] rounded-xl"
-              style={{ background: "var(--met-bg-elevated)" }}
-            />
-          )}
-          <div className="max-w-[420px] text-center">
-            <div className="truncate text-xl font-bold" style={{ color: "var(--met-fg)" }}>
-              {playSongData.name || "未在播放"}
-            </div>
-            {artistsText && (
+      {/* ===== 主体 ===== */}
+      <div className="relative z-10 flex h-full w-full items-center">
+        {/* 左半:大封面 + 歌曲信息(纯净歌词模式下隐藏) */}
+        {!purelyLyric && (
+          <div
+            className={`flex h-full flex-col items-center justify-center gap-6 px-10 ${
+              hasLyric ? "w-[45%]" : "w-full"
+            }`}
+          >
+            {coverLarge ? (
+              <img
+                src={coverLarge}
+                alt="封面"
+                className="aspect-square w-full max-w-[420px] rounded-xl object-cover shadow-2xl"
+              />
+            ) : (
               <div
-                className="mt-1 truncate text-sm"
-                style={{ color: "var(--met-fg-dim)" }}
+                className="aspect-square w-full max-w-[420px] rounded-xl"
+                style={{ background: "rgba(255, 255, 255, 0.08)" }}
+              />
+            )}
+            <div className="w-full max-w-[420px] text-center">
+              <div className="truncate text-2xl font-bold text-white">
+                {playSongData.name || "未知曲目"}
+              </div>
+              {aliaText && (
+                <div className="mt-1 truncate text-base text-white/60">{aliaText}</div>
+              )}
+              <div className="mt-2 truncate text-sm text-white/70">
+                {artistsText || "未知艺术家"}
+              </div>
+              {albumText && (
+                <div className="mt-1 truncate text-sm text-white/50">{albumText}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 右半:歌词区(纯净模式下占满居中) */}
+        {hasLyric && (
+          <div
+            className={`flex h-full min-w-0 flex-col justify-center ${
+              purelyLyric ? "w-full px-[12%]" : "flex-1 pr-10"
+            }`}
+          >
+            {useAM ? (
+              <div
+                className="relative h-[86%] w-full overflow-hidden"
+                style={{
+                  maskImage: LYRIC_MASK,
+                  WebkitMaskImage: LYRIC_MASK,
+                  filter: "drop-shadow(0px 4px 6px rgba(0, 0, 0, 0.2))",
+                  mixBlendMode: "plus-lighter",
+                }}
               >
-                {artistsText}
+                {lyricReady && (
+                  <LyricPlayer
+                    // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
+                    key={`${playSongData.id}-${useYrcAM ? "yrc" : "lrc"}-${amLines.length}`}
+                    ref={lyricPlayerRef}
+                    className="h-full w-full"
+                    style={
+                      {
+                        fontSize: `${lyricsFontSize}px`,
+                        "--amll-lp-color": "rgba(255, 255, 255, 0.95)",
+                      } as CSSProperties
+                    }
+                    lyricLines={amLines}
+                    currentTime={Math.max(0, Math.round(playSeekMs + lyricsAMOffset))}
+                    playing={playState}
+                    enableSpring={useAMSpring}
+                    enableScale={useAMScale}
+                    enableBlur={lyricsBlur}
+                    alignPosition={lyricsBlock === "center" ? 0.5 : 0.25}
+                    onLyricLineClick={onLyricLineClick}
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="h-[86%] w-full">
+                <LyricScroll />
               </div>
             )}
           </div>
-        </div>
-
-        {/* 右半:AMLL 歌词 */}
-        <div className="min-w-0 flex-1">
-          {hasLyric ? (
-            <LyricPlayer
-              className="h-full w-full"
-              style={{ fontSize: `${lyricsFontSize}px` }}
-              lyricLines={lyricLines}
-              currentTime={Math.round(playSeekMs + lyricsAMOffset)}
-              playing={playState}
-              enableSpring={useAMSpring}
-              enableScale={useAMScale}
-              onLyricLineClick={onLyricLineClick}
-            />
-          ) : (
-            <div
-              className="flex h-full items-center justify-center text-lg"
-              style={{ color: "var(--met-fg-dim)" }}
-            >
-              暂无歌词
-            </div>
-          )}
-        </div>
+        )}
       </div>
+
+      {/* ===== 底部:频谱 + 悬浮控制条 ===== */}
+      {showSpectrums && <Spectrum visible={!playerControlShow} />}
+      <FullPlayerControls onKeepVisible={keepControlsVisible} />
     </div>
   );
 }
+
+/*
+ * 缺陷 B 根因(挂载时 store 已有歌词但 LyricPlayer 空白,重开后正常):
+ * @applemusic-like-lyrics/react 的绑定在 useLayoutEffect 中 new 出 core player 并
+ * setCorePlayer 存入 state;setLyricLines 由另一个依赖 [corePlayer, lyricLines] 的
+ * useLayoutEffect 调用。React 19 StrictMode 会在挂载后立刻销毁并重建所有 effect:
+ * 旧实例被 dispose(元素移出 DOM),重建的 effect 以"旧 render 闭包"执行,把歌词
+ * 写进了已 dispose 的旧实例;新实例依赖 setCorePlayer(新实例) 触发的后续 render 才能
+ * 拿到歌词。实测(dev console 仅出现两次 AMLL 的"设置歌词行"日志,且存活实例的
+ * DOM 中没有任何歌词行分组)该后续 render 的歌词写入并未落在存活实例上——此后只要
+ * LyricPlayer 因任意 props 变化再渲染一次即可自愈(依赖数组比对差异触发重设),
+ * 因此播放中(currentTime 每帧变化)几乎立即恢复、而暂停状态下打开则一直空白,
+ * "重开一次"也因重新掷骰子而通常正常。
+ * 修复:上方三层防护,其中 ensureLyricApplied 兜底通过 ref 直接校验存活 core 实例
+ * (getLyricLines().length)并在缺失时手动 setLyricLines,彻底与绑定层时序解耦。
+ */

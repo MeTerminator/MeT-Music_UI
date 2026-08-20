@@ -1,10 +1,30 @@
-import { addSongToNext, getSongTime, type Artist, type Song } from "@met/core";
+import { useEffect, useMemo, useRef } from "react";
+import {
+  addSongToNext,
+  fadePlayOrPause,
+  fuzzySearch,
+  getSongTime,
+  initPlayer,
+  type Artist,
+  type Song,
+} from "@met/core";
 import { useMusicStore } from "@/stores/music";
+import { useStatusStore } from "@/stores/status";
 
 interface SongListProps {
   songs: Song[];
   loading?: boolean;
   onPlayAll?: () => void;
+  /** 是否显示专辑列(默认 true;专辑页内可关闭) */
+  showAlbum?: boolean;
+  /** 是否显示封面缩略图(默认 true) */
+  showCover?: boolean;
+  /** 序号偏移(分页时传 (page-1)*pageSize,仅影响序号展示) */
+  indexOffset?: number;
+  /** 模糊搜索关键词(fuzzySearch 本地过滤,空串/空白视为不过滤) */
+  filterKeyword?: string;
+  /** 列表触底回调(IntersectionObserver 哨兵,预留分页加载) */
+  onReachEnd?: () => void;
 }
 
 /** 歌手展示文本(artists 可能是数组或字符串) */
@@ -26,9 +46,57 @@ const durationText = (duration: Song["duration"]): string => {
   return duration || "--:--";
 };
 
+/**
+ * 列表定位播放(对照旧 SongList.vue 的 playSong 双击逻辑):
+ * 整表设为播放列表,并从被点击行开始播放;再次操作当前播放行则切换播放/暂停。
+ */
+const playFromList = async (list: Song[], song: Song, index: number): Promise<void> => {
+  const playingId = useMusicStore.getState().playSongData?.id;
+  if (playingId != null && playingId === song.id) {
+    // 与旧实现一致:双击当前播放歌曲 → 播放/暂停切换
+    fadePlayOrPause();
+    return;
+  }
+  useStatusStore.setState({ playMode: "normal", playIndex: index });
+  useMusicStore.setState({ playList: list.slice(), playSongData: song });
+  await initPlayer(true);
+};
+
 /** 可复用歌曲列表 */
-export default function SongList({ songs, loading = false, onPlayAll }: SongListProps) {
+export default function SongList({
+  songs,
+  loading = false,
+  onPlayAll,
+  showAlbum = true,
+  showCover = true,
+  indexOffset = 0,
+  filterKeyword,
+  onReachEnd,
+}: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const reachEndRef = useRef<SongListProps["onReachEnd"]>(onReachEnd);
+  reachEndRef.current = onReachEnd;
+
+  // 模糊搜索过滤(仅影响展示与定位播放的列表范围)
+  const keyword = filterKeyword?.trim() ?? "";
+  const displaySongs = useMemo<Song[]>(
+    () => (keyword ? fuzzySearch(keyword, songs) : songs),
+    [keyword, songs],
+  );
+
+  // 触底回调(预留分页)
+  useEffect(() => {
+    if (!onReachEnd || !sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) reachEndRef.current?.();
+      },
+      { rootMargin: "120px" },
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [onReachEnd, displaySongs.length]);
 
   if (loading) {
     return (
@@ -58,6 +126,14 @@ export default function SongList({ songs, loading = false, onPlayAll }: SongList
     );
   }
 
+  if (keyword && !displaySongs.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-[var(--met-fg-dim)]">
+        <span className="text-sm">搜不到关于「{keyword}」的任何歌曲呀</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
       {onPlayAll ? (
@@ -77,12 +153,12 @@ export default function SongList({ songs, loading = false, onPlayAll }: SongList
       ) : null}
 
       <ul className="flex flex-col">
-        {songs.map((song, index) => {
+        {displaySongs.map((song, index) => {
           const isPlaying = playingId != null && playingId === song.id;
           return (
             <li
               key={`${song.id}-${index}`}
-              onDoubleClick={() => addSongToNext(song, true)}
+              onDoubleClick={() => void playFromList(displaySongs, song, index)}
               className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
                 isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
               }`}
@@ -93,19 +169,21 @@ export default function SongList({ songs, loading = false, onPlayAll }: SongList
                   isPlaying ? "text-[var(--met-primary)]" : "text-[var(--met-fg-dim)]"
                 }`}
               >
-                {index + 1}
+                {indexOffset + index + 1}
               </span>
               {/* 封面缩略 */}
-              {song.coverSize?.s ? (
-                <img
-                  src={song.coverSize.s}
-                  alt=""
-                  loading="lazy"
-                  className="h-10 w-10 shrink-0 rounded-md bg-[var(--met-bg-elevated)] object-cover"
-                />
-              ) : (
-                <div className="h-10 w-10 shrink-0 rounded-md bg-[var(--met-bg-elevated)]" />
-              )}
+              {showCover ? (
+                song.coverSize?.s ? (
+                  <img
+                    src={song.coverSize.s}
+                    alt=""
+                    loading="lazy"
+                    className="h-10 w-10 shrink-0 rounded-md bg-[var(--met-bg-elevated)] object-cover"
+                  />
+                ) : (
+                  <div className="h-10 w-10 shrink-0 rounded-md bg-[var(--met-bg-elevated)]" />
+                )
+              ) : null}
               {/* 歌名 / 歌手 */}
               <div className="min-w-0 flex-1">
                 <div
@@ -121,28 +199,47 @@ export default function SongList({ songs, loading = false, onPlayAll }: SongList
                 </div>
               </div>
               {/* 专辑 */}
-              <div className="hidden w-1/4 min-w-0 truncate text-xs text-[var(--met-fg-dim)] sm:block">
-                {albumText(song.album)}
+              {showAlbum ? (
+                <div className="hidden w-1/4 min-w-0 truncate text-xs text-[var(--met-fg-dim)] sm:block">
+                  {albumText(song.album)}
+                </div>
+              ) : null}
+              {/* 悬停操作:立即播放 / 下一首播放 */}
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`播放 ${song.name}`}
+                  title="立即播放"
+                  onClick={() => void playFromList(displaySongs, song, index)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`下一首播放 ${song.name}`}
+                  title="下一首播放"
+                  onClick={() => addSongToNext(song)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                    <path d="M3 6h12v2H3V6zm0 4h12v2H3v-2zm0 4h8v2H3v-2zm14-4h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3z" />
+                  </svg>
+                </button>
               </div>
               {/* 时长 */}
               <span className="w-12 shrink-0 text-right text-xs tabular-nums text-[var(--met-fg-dim)]">
                 {durationText(song.duration)}
               </span>
-              {/* 行内播放按钮 */}
-              <button
-                type="button"
-                aria-label={`播放 ${song.name}`}
-                onClick={() => addSongToNext(song, true)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--met-fg-dim)] opacity-0 transition-opacity hover:text-[var(--met-primary)] focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </button>
             </li>
           );
         })}
       </ul>
+
+      {/* 触底哨兵 */}
+      {onReachEnd ? <div ref={sentinelRef} className="h-px w-full" /> : null}
     </div>
   );
 }

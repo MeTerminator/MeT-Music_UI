@@ -19,7 +19,10 @@ import History from "@/pages/History";
 import VideosPlayer from "@/pages/VideosPlayer";
 import Album from "@/pages/Album";
 import ArtistLayout from "@/pages/artist/ArtistLayout";
-import ArtistSection from "@/pages/artist/ArtistSection";
+import ArtistHot from "@/pages/artist/Hot";
+import ArtistSongs from "@/pages/artist/Songs";
+import ArtistAlbums from "@/pages/artist/Albums";
+import ArtistVideos from "@/pages/artist/Videos";
 import Setting from "@/pages/Setting";
 import SongDetail from "@/pages/Song";
 import Download from "@/pages/Download";
@@ -156,22 +159,22 @@ const artistIndexRoute = createRoute({
 const artistHotRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "hot",
-  component: ArtistSection,
+  component: ArtistHot,
 });
 const artistSongsRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "songs",
-  component: ArtistSection,
+  component: ArtistSongs,
 });
 const artistAlbumsRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "albums",
-  component: ArtistSection,
+  component: ArtistAlbums,
 });
 const artistVideosRoute = createRoute({
   getParentRoute: () => artistRoute,
   path: "videos",
-  component: ArtistSection,
+  component: ArtistVideos,
 });
 
 // 全局设置 /setting

@@ -1,73 +1,77 @@
-import { addSongToNext, type Song } from "@met/core";
-import { useMusicStore } from "@/stores/music";
+/** 最近播放(对照旧 src/views/History.vue:标题+数量、清空按钮、SongList 列表) */
+import { useState } from "react";
+import { setPlayHistory, useMusicStore } from "@/stores/music";
+import SongList from "@/components/list/SongList";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 
-/** 歌手字段兼容(Artist[] | string) */
-const artistNames = (artists: Song["artists"]): string => {
-  if (Array.isArray(artists)) return artists.map((ar) => ar.name).join(" / ");
-  return artists || "未知歌手";
-};
-
-/** 封面缩略地址(在线多尺寸 / 单地址 / 本地封面) */
-const coverUrl = (song: Song): string | undefined =>
-  song.coverSize?.s ?? song.coverSize?.m ?? song.cover ?? song.localCover;
-
-/** 最近播放:展示 historyPlaylist,点击行插入下一首并播放 */
 const History = () => {
   const historyPlaylist = useMusicStore((s) => s.historyPlaylist);
-
-  if (historyPlaylist.length === 0) {
-    return (
-      <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2">
-        <p className="text-lg font-medium text-[var(--met-fg)]">暂无播放记录</p>
-        <p className="text-sm text-[var(--met-fg-dim)]">播放过的歌曲会出现在这里</p>
-      </div>
-    );
-  }
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <div className="px-8 py-8">
-      <div className="mb-4 flex items-baseline gap-3">
-        <h1 className="text-2xl font-bold text-[var(--met-fg)]">最近播放</h1>
-        <span className="text-sm text-[var(--met-fg-dim)]">共 {historyPlaylist.length} 首</span>
+    <div className="mx-auto w-full max-w-5xl px-4 py-6">
+      {/* 标题 + 数量 */}
+      <div className="mb-4 flex items-end gap-3">
+        <h1 className="text-3xl font-bold text-[var(--met-fg)]">最近播放</h1>
+        <span className="pb-0.5 text-base text-[var(--met-fg-dim)]">
+          共 {historyPlaylist.length} 首
+        </span>
       </div>
-      <ul className="flex flex-col">
-        {historyPlaylist.map((song) => {
-          const cover = coverUrl(song);
-          return (
-            <li key={song.id}>
-              <button
-                type="button"
-                onClick={() => addSongToNext(song, true)}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--met-bg-elevated)]"
-              >
-                {cover ? (
-                  <img
-                    src={cover}
-                    alt=""
-                    loading="lazy"
-                    className="h-11 w-11 shrink-0 rounded-md border border-[var(--met-border)] object-cover"
-                  />
-                ) : (
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-xs text-[var(--met-fg-dim)]">
-                    无封面
-                  </span>
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-[var(--met-fg)]">{song.name}</span>
-                  <span className="block truncate text-xs text-[var(--met-fg-dim)]">
-                    {artistNames(song.artists)}
-                  </span>
-                </span>
-                {typeof song.duration === "string" ? (
-                  <span className="shrink-0 text-xs tabular-nums text-[var(--met-fg-dim)]">
-                    {song.duration}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+
+      {historyPlaylist.length > 0 ? (
+        <div>
+          {/* 操作区 */}
+          <div className="mb-5 flex items-center gap-2">
+            <Button variant="outline" onClick={() => setConfirmOpen(true)}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+              </svg>
+              清空列表
+            </Button>
+          </div>
+
+          {/* 列表 */}
+          <SongList songs={historyPlaylist} showCover={false} />
+
+          {/* 底部提示 */}
+          <div className="mt-6 flex items-center gap-3 text-xs text-[var(--met-fg-dim)]">
+            <span className="h-px flex-1 border-t border-dashed border-[var(--met-border)]" />
+            最多展示 500 条播放历史
+            <span className="h-px flex-1 border-t border-dashed border-[var(--met-border)]" />
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-[280px] flex-col items-center justify-center gap-2">
+          <p className="text-lg font-medium text-[var(--met-fg)]">你还没播放任何歌曲</p>
+          <p className="text-sm text-[var(--met-fg-dim)]">播放过的歌曲会出现在这里</p>
+        </div>
+      )}
+
+      {/* 清空二次确认 */}
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="清空列表"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setPlayHistory(null, true);
+                setConfirmOpen(false);
+              }}
+            >
+              确认
+            </Button>
+          </>
+        }
+      >
+        确认清空最近播放列表?该操作不可撤销!
+      </Dialog>
     </div>
   );
 };

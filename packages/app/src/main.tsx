@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { initHostGlobals } from "./host";
+import { initTheme } from "./platform/theme";
 import { setupPlayer } from "./player/setup";
 import { router } from "./router";
 import "./styles.css";
@@ -11,6 +12,7 @@ import "./styles.css";
 // 宿主契约全局与播放引擎装配(必须先于任何 UI 交互)
 initHostGlobals();
 setupPlayer();
+initTheme();
 
 // dev 调试出口
 if (import.meta.env.DEV) {
