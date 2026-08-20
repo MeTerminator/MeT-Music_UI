@@ -100,6 +100,9 @@ export default function LyricScroll() {
   const containerRef = useRef<HTMLDivElement>(null);
   /** 鼠标悬停时暂停自动滚动(lrcMousePause) */
   const hoverPausedRef = useRef(false);
+  /** 手动滚动(滚轮/触摸)后的保持期:自动滚动让位,静置 3s 后恢复 */
+  const manualHoldRef = useRef(false);
+  const manualTimerRef = useRef<number | undefined>(undefined);
 
   // 视口宽度(移动端响应式字号用,对照旧 Lyric.vue 700px 断点的 vw 字号)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
@@ -137,8 +140,9 @@ export default function LyricScroll() {
    * lyricsBlock === "center" 时居中,否则("start")滚动到偏上位置
    * (容器 scrollTop = 行相对容器 offsetTop - 80)。
    */
-  const scrollToLine = (index: number) => {
-    if (hoverPausedRef.current) return;
+  const scrollToLine = (index: number, force = false) => {
+    // force:用户点击行跳转等明确意图,绕过 hover/手动滚动保持
+    if (!force && (hoverPausedRef.current || manualHoldRef.current)) return;
     const container = containerRef.current;
     const el = container?.querySelector<HTMLElement>(`[data-lrc-index="${index}"]`);
     if (!container || !el) return;
@@ -200,6 +204,24 @@ export default function LyricScroll() {
         hoverPausedRef.current = false;
         scrollToLine(useStatusStore.getState().playSongLyricIndex);
       }}
+      // 手动滚动保持:滚轮/触摸拖动后 3s 内自动滚动让位,
+      // 静置后回到当前行(点击行跳转会立即清除保持并强制定位)
+      onWheel={() => {
+        manualHoldRef.current = true;
+        window.clearTimeout(manualTimerRef.current);
+        manualTimerRef.current = window.setTimeout(() => {
+          manualHoldRef.current = false;
+          scrollToLine(useStatusStore.getState().playSongLyricIndex);
+        }, 3000);
+      }}
+      onTouchMove={() => {
+        manualHoldRef.current = true;
+        window.clearTimeout(manualTimerRef.current);
+        manualTimerRef.current = window.setTimeout(() => {
+          manualHoldRef.current = false;
+          scrollToLine(useStatusStore.getState().playSongLyricIndex);
+        }, 3000);
+      }}
     >
       {/* 顶部占位 + 倒计时(前奏等待) */}
       <div className={`flex h-[26vh] w-full shrink-0 flex-col justify-end ${alignCls}`}>
@@ -226,6 +248,11 @@ export default function LyricScroll() {
               setSeek(line.time);
               const status = useStatusStore.getState();
               if (!status.playState && !status.isInRoom) fadePlayOrPause("play");
+              // 点击即明确定位意图:清除手动滚动保持并强制滚到该行,
+              // 否则 seek 后的中间态索引会把列表拽向旧播放行
+              manualHoldRef.current = false;
+              window.clearTimeout(manualTimerRef.current);
+              scrollToLine(index, true);
             }}
           >
             {/* 当前行 + 逐字数据 + 开启逐字动画:KTV 填充;否则整行文本(现行为) */}

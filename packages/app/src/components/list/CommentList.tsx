@@ -178,7 +178,7 @@ export default function CommentList({
                   alt="VIP"
                   title="VIP"
                   loading="lazy"
-                  className="h-4 w-auto shrink-0"
+                  className="met-img-plain h-4 w-auto shrink-0"
                 />
               ) : null}
               {comment.location ? (

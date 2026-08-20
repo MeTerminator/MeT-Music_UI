@@ -20,6 +20,7 @@
  * - 提交词为 114514 时跳转 /test 彩蛋(旧 toSearch 110 行)。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "@met/core";
@@ -266,14 +267,18 @@ const SearchSuggest = () => {
       }`}
     >
       {/* 聚焦遮罩(旧 .search-mask:全屏半透明 + 模糊,点击收起;
-          z 低于输入框与下拉面板;<640px 透明无模糊) */}
-      {open && (
-        <div
-          aria-hidden
-          onClick={close}
-          className="fixed inset-0 z-30 bg-black/25 backdrop-blur-xl max-sm:bg-transparent max-sm:backdrop-blur-none"
-        />
-      )}
+          z 低于输入框与下拉面板;<640px 透明无模糊)。
+          Portal 到 body:根容器带 transform(顶栏几何居中),fixed 会以其为
+          包含块,遮罩会坍缩成搜索框大小的矩形黑块 */}
+      {open &&
+        createPortal(
+          <div
+            aria-hidden
+            onClick={close}
+            className="fixed inset-0 z-30 bg-black/25 backdrop-blur-xl max-sm:bg-transparent max-sm:backdrop-blur-none"
+          />,
+          document.body,
+        )}
       {/* 搜索输入框(z 高于遮罩) */}
       <div className="relative z-40">
         <Search
@@ -302,7 +307,7 @@ const SearchSuggest = () => {
       {showPanel && (
         <div
           role="listbox"
-          className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
+          className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
         >
           {/* 直接搜索(固定首行,对齐旧组件 .direct) */}
           <button
@@ -375,7 +380,7 @@ const SearchSuggest = () => {
 
       {/* 聚焦面板:搜索历史 + 热搜榜(旧 SearchHot.vue,聚焦且关键词为空时) */}
       {showFocusPanel && (
-        <div className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
+        <div className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
           {/* 搜索历史 */}
           {historyVisible && (
             <div className="mb-4">

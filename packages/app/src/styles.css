@@ -84,3 +84,19 @@ body {
 .met-fp-in {
   animation: met-fp-in 0.45s cubic-bezier(0.32, 0.72, 0, 1);
 }
+
+/* 懒加载图片占位:图片就绪前显示底色块(透明贴图加 .met-img-plain 豁免) */
+img[loading="lazy"]:not(.met-img-plain) {
+  background-color: var(--met-bg-elevated);
+}
+
+/* 底栏歌词切行动画:新行淡入上移(行节点以歌词索引为 key 重放) */
+@keyframes met-lyric-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.met-lyric-in {
+  animation: met-lyric-in 0.35s ease;
+}

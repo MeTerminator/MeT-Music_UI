@@ -281,7 +281,7 @@ export default function PlayerBar() {
           {showBottomLyric ? (
             <div
               key={playSongLyricIndex}
-              className="lyric-font truncate text-xs"
+              className="met-lyric-in lyric-font truncate text-xs"
               style={{ color: "var(--met-fg-dim)" }}
             >
               {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本 */}
