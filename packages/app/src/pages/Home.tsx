@@ -5,11 +5,10 @@
  */
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Play } from "lucide-react";
-import { addSongToNext, getGreetings, type Song } from "@met/core";
+import { getGreetings, type Song } from "@met/core";
 import { useMusicStore } from "@/stores/music";
 import { useSiteDataStore } from "@/stores/siteData";
-import { useStatusStore } from "@/stores/status";
-import { addSong as ltAddSong } from "@/stores/listenTogether";
+import { playSongNow } from "@/player/actions";
 import { formatArtists, getCoverUrl as songCoverUrl } from "@/lib/format";
 import { getCoverUrl as picCoverUrl } from "@/lib/formatData";
 import CoverPlayButton from "@/components/cover/CoverPlayButton";
@@ -56,14 +55,8 @@ const Home = () => {
 
   const recentSongs = historyPlaylist.slice(0, 12);
 
-  // 歌曲卡点击即播(对齐房内语义:投共享队列而非本地播放)
-  const playSong = (song: Song) => {
-    if (useStatusStore.getState().isInRoom) {
-      ltAddSong(song);
-    } else {
-      addSongToNext(song, true);
-    }
-  };
+  // 歌曲卡点击即播(插播语义;房内投共享队列,当前曲则切播放/暂停)
+  const playSong = (song: Song) => void playSongNow(song);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-8 py-8 max-md:px-4">
