@@ -1,19 +1,28 @@
 import { useEffect, useRef } from "react";
+import { Music, X } from "lucide-react";
 import { toast } from "sonner";
 import { fadePlayOrPause, initPlayer, soundStop, type Song } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
+import {
+  playIndexAction as ltPlayIndex,
+  removeSong as ltRemoveSong,
+  reorderPlaylist as ltReorderPlaylist,
+} from "../../stores/listenTogether";
 import { formatArtists } from "./format";
 
 /**
  * 播放列表抽屉(U3)。对照旧 src/components/Global/Playlist.vue:
  * 右侧滑出面板,受 status.playListShow 控制,遮罩点击关闭;
  * 行点击定位播放、行内删除、清空列表。
+ * 一起听房内:music.playList 即共享列表镜像(listenTogether.syncPlayerState 写入),
+ * 操作全部转发共享列表(行点击→playIndexAction,删除→removeSong,清空→reorderPlaylist([]))。
  */
 export default function PlaylistDrawer() {
   const playListShow = useStatusStore((s) => s.playListShow);
   const playIndex = useStatusStore((s) => s.playIndex);
+  const isInRoom = useStatusStore((s) => s.isInRoom);
   const playList = useMusicStore((s) => s.playList);
   const playSongData = useMusicStore((s) => s.playSongData);
 
@@ -52,6 +61,15 @@ export default function PlaylistDrawer() {
       toast.warning("歌曲正在缓冲中,请稍后");
       return;
     }
+    // 房内:同曲切换播放/暂停,否则请求房间跳播共享列表索引(对齐旧 isInRoom 分支)
+    if (status.isInRoom) {
+      if (playSongData?.id === song?.id) {
+        fadePlayOrPause();
+      } else {
+        ltPlayIndex(index);
+      }
+      return;
+    }
     // 更改模式(旧逻辑:非电台时回到 normal)
     if (status.playMode !== "dj") {
       useStatusStore.setState({ playMode: "normal" });
@@ -69,11 +87,11 @@ export default function PlaylistDrawer() {
     }
   };
 
-  /** 清空列表(对齐旧 cleanPlaylists;isInRoom 时禁止本地清空) */
+  /** 清空列表(对齐旧 cleanPlaylists;房内转发共享列表清空 reorderPlaylist([])) */
   const cleanPlaylists = () => {
     const status = useStatusStore.getState();
     if (status.isInRoom) {
-      toast.warning("一起听房间内暂不支持清空播放列表");
+      ltReorderPlaylist([]);
       return;
     }
     soundStop();
@@ -82,11 +100,11 @@ export default function PlaylistDrawer() {
     toast.success("已清空播放列表");
   };
 
-  /** 移除单曲(对齐旧 removeSong,改为不可变更新) */
+  /** 移除单曲(对齐旧 removeSong,改为不可变更新;房内转发共享列表删除) */
   const removeSong = (index: number) => {
     const status = useStatusStore.getState();
     if (status.isInRoom) {
-      toast.warning("一起听房间内暂不支持移除歌曲");
+      ltRemoveSong(index);
       return;
     }
     // 若删除时仅剩一首
@@ -143,16 +161,16 @@ export default function PlaylistDrawer() {
           style={{ borderColor: "var(--met-border)" }}
         >
           <div className="text-sm font-bold" style={{ color: "var(--met-fg)" }}>
-            播放列表 ({playList.length})
+            {isInRoom ? "一起听列表" : "播放列表"} ({playList.length})
           </div>
           <button
             type="button"
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-transparent text-base transition-colors hover:bg-[var(--met-bg-hover)]"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-transparent transition-colors hover:bg-[var(--met-bg-hover)]"
             style={{ color: "var(--met-fg-dim)" }}
             title="关闭"
             onClick={close}
           >
-            ✕
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
 
@@ -182,10 +200,10 @@ export default function PlaylistDrawer() {
                 >
                   {/* 序号 / 播放标记 */}
                   <span
-                    className="w-7 shrink-0 text-center text-xs tabular-nums"
+                    className="flex w-7 shrink-0 items-center justify-center text-center text-xs tabular-nums"
                     style={{ color: isCurrent ? "var(--met-primary)" : "var(--met-fg-dim)" }}
                   >
-                    {isCurrent ? "♪" : index + 1}
+                    {isCurrent ? <Music size={16} aria-label="正在播放" /> : index + 1}
                   </span>
                   {/* 信息 */}
                   <div className="min-w-0 flex-1">
@@ -202,7 +220,7 @@ export default function PlaylistDrawer() {
                   {/* 删除 */}
                   <button
                     type="button"
-                    className="shrink-0 cursor-pointer rounded-md bg-transparent px-1.5 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--met-bg-hover)]"
+                    className="shrink-0 cursor-pointer rounded-md bg-transparent px-1.5 py-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--met-bg-hover)]"
                     style={{ color: "var(--met-fg-dim)" }}
                     title="从列表中移除"
                     onClick={(e) => {
@@ -210,7 +228,7 @@ export default function PlaylistDrawer() {
                       removeSong(index);
                     }}
                   >
-                    ✕
+                    <X size={16} aria-hidden="true" />
                   </button>
                 </div>
               );

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
+import { Music } from "lucide-react";
 import { addSongToNext, api, getSongPlayTime, initPlayer, type Song } from "@met/core";
 import { useMusicStore } from "@/stores/music";
 
@@ -114,7 +115,7 @@ export default function SongDetail() {
           />
         ) : (
           <div className="flex h-56 w-56 shrink-0 items-center justify-center rounded-2xl bg-[var(--met-bg-elevated)] text-4xl text-[var(--met-fg-dim)]">
-            ♪
+            <Music size={40} aria-hidden="true" />
           </div>
         )}
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-3">

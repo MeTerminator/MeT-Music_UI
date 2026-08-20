@@ -2,6 +2,7 @@
  * 简洁分页(对照旧 src/components/Global/Pagination.vue 的 n-pagination:
  * 上一页 / 页码(带省略) / 下一页;改为完全受控组件)。
  */
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface PaginationProps {
   /** 当前页码(从 1 开始) */
@@ -53,9 +54,7 @@ export const Pagination = ({ page, pageCount, onChange, className = "" }: Pagina
         onClick={() => goTo(page - 1)}
         className={`${itemBaseCls} cursor-pointer text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent`}
       >
-        <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-          <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-        </svg>
+        <ChevronLeft size={16} aria-hidden="true" />
       </button>
 
       {/* 页码 */}
@@ -93,9 +92,7 @@ export const Pagination = ({ page, pageCount, onChange, className = "" }: Pagina
         onClick={() => goTo(page + 1)}
         className={`${itemBaseCls} cursor-pointer text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent`}
       >
-        <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-          <path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z" />
-        </svg>
+        <ChevronRight size={16} aria-hidden="true" />
       </button>
     </nav>
   );

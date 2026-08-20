@@ -36,6 +36,8 @@ export interface StatusStoreState {
   isInRoom: boolean;
   roomCode: string;
   roomUuid: string;
+  /** 设置悬浮层是否展示(React 新增,不持久化——不在 PERSIST_PATHS 白名单内) */
+  showSettingsPanel: boolean;
 }
 
 /** 旧 pinia persist 的 paths 白名单,保持一致 */
@@ -91,6 +93,7 @@ export const useStatusStore = create<StatusStoreState>()(
       isInRoom: false,
       roomCode: "",
       roomUuid: "",
+      showSettingsPanel: false,
     }),
     {
       name: "siteStatus",

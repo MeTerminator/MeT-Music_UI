@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   BackgroundRender,
   LyricPlayer,
@@ -6,7 +6,8 @@ import {
 } from "@applemusic-like-lyrics/react";
 import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
-import { setSeek } from "@met/core";
+import { X } from "lucide-react";
+import { setSeek, type AMLine } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
@@ -105,6 +106,8 @@ function FullPlayerInner() {
   const amllPlayerBackgroundFlowSpeed = useSettingsStore((s) => s.amllPlayerBackgroundFlowSpeed);
   const useAMLyrics = useSettingsStore((s) => s.useAMLyrics);
   const showYrc = useSettingsStore((s) => s.showYrc);
+  const useAMttmlDB = useSettingsStore((s) => s.useAMttmlDB);
+  const lyricsAMttmlUseOffset = useSettingsStore((s) => s.lyricsAMttmlUseOffset);
   const lyricsAMOffset = useSettingsStore((s) => s.lyricsAMOffset);
   const useAMSpring = useSettingsStore((s) => s.useAMSpring);
   const useAMScale = useSettingsStore((s) => s.useAMScale);
@@ -207,13 +210,32 @@ function FullPlayerInner() {
   }, []);
 
   // ===== 歌词数据 =====
-  const useYrcAM = useAMLyrics && playSongLyric.hasYrc && showYrc;
-  const amLines = (useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? [];
+  // TTML 特效歌词优先(对齐旧 AMLyric.vue 的 amLyricsData computed):
+  // hasTtml && useAMttmlDB 时使用 ttml 行;深拷贝隔离,因 AMLL 会原地变更行对象
+  const ttmlLines = useMemo<AMLine[]>(() => {
+    const raw = playSongLyric.ttml;
+    if (!raw || raw.length === 0) return [];
+    return JSON.parse(JSON.stringify(raw)) as AMLine[];
+  }, [playSongLyric.ttml]);
+  const useTtml = useAMLyrics && Boolean(playSongLyric.hasTtml) && useAMttmlDB && ttmlLines.length > 0;
+  const useYrcAM = !useTtml && useAMLyrics && playSongLyric.hasYrc && showYrc;
+  const amLines = useTtml
+    ? ttmlLines
+    : ((useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? []);
+  const amLyricMode = useTtml ? "ttml" : useYrcAM ? "yrc" : "lrc";
   // 旧 isHasLrc 规则:lrc 首行存在且行数 > 4
   const hasPlainLyric = Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
   const useAM = useAMLyrics && amLines.length > 0;
   const hasLyric = useAM || hasPlainLyric;
   const purelyLyric = pureLyricMode && hasLyric;
+
+  // currentTime 偏移修正(对齐旧 AMLyric.vue 三元):仅 TTML 歌词且开启
+  // lyricsAMttmlUseOffset 时叠加 lyricsAMOffset,其余路径用原始 playSeekMs
+  const applyAMOffset = useTtml && lyricsAMttmlUseOffset;
+  const amCurrentTime = Math.max(
+    0,
+    Math.round(applyAMOffset ? playSeekMs + lyricsAMOffset : playSeekMs),
+  );
 
   // 缺陷 B 兜底:LyricPlayer 挂载/歌词变化后,校验 core 实例已持有歌词,缺失则补写
   useEffect(() => {
@@ -221,9 +243,10 @@ function FullPlayerInner() {
     const timer = window.setTimeout(() => {
       const core = lyricPlayerRef.current?.lyricPlayer;
       if (!core || core.getLyricLines().length === amLines.length) return;
+      const seekMs = useStatusStore.getState().playSeekMs;
       const time = Math.max(
         0,
-        Math.round(useStatusStore.getState().playSeekMs + lyricsAMOffset),
+        Math.round(applyAMOffset ? seekMs + lyricsAMOffset : seekMs),
       );
       core.setLyricLines(amLines, time);
       core.setCurrentTime(time, true);
@@ -231,7 +254,7 @@ function FullPlayerInner() {
       core.update();
     }, 100);
     return () => window.clearTimeout(timer);
-  }, [lyricReady, useAM, amLines, lyricsAMOffset]);
+  }, [lyricReady, useAM, amLines, applyAMOffset, lyricsAMOffset]);
 
   // ===== 封面与背景 =====
   const coverSmall = playSongData.coverSize?.s || playSongData.localCover || playSongData.cover;
@@ -317,7 +340,7 @@ function FullPlayerInner() {
           title="关闭播放器 (Esc)"
           onClick={() => useStatusStore.setState({ showFullPlayer: false })}
         >
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
 
@@ -391,7 +414,7 @@ function FullPlayerInner() {
                 {lyricReady && (
                   <LyricPlayer
                     // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
-                    key={`${playSongData.id}-${useYrcAM ? "yrc" : "lrc"}-${amLines.length}`}
+                    key={`${playSongData.id}-${amLyricMode}-${amLines.length}`}
                     ref={lyricPlayerRef}
                     className="h-full w-full"
                     style={
@@ -401,7 +424,7 @@ function FullPlayerInner() {
                       } as CSSProperties
                     }
                     lyricLines={amLines}
-                    currentTime={Math.max(0, Math.round(playSeekMs + lyricsAMOffset))}
+                    currentTime={amCurrentTime}
                     playing={playState}
                     enableSpring={useAMSpring}
                     enableScale={useAMScale}

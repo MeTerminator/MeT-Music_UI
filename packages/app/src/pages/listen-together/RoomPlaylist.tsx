@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, Music, Play, X } from "lucide-react";
 import {
   playIndexAction,
   removeSong,
@@ -57,7 +58,11 @@ const RoomPlaylist = () => {
                     isActive ? "animate-pulse text-[var(--met-primary)]" : "text-[var(--met-fg-dim)]"
                   }`}
                 >
-                  {isActive ? "♪" : idx + 1}
+                  {isActive ? (
+                    <Music size={14} className="inline-block" aria-hidden="true" />
+                  ) : (
+                    idx + 1
+                  )}
                 </span>
 
                 <img
@@ -94,7 +99,7 @@ const RoomPlaylist = () => {
                     onClick={() => playIndexAction(idx)}
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--met-primary)] hover:bg-[var(--met-primary)]/15"
                   >
-                    ▶
+                    <Play size={16} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -103,7 +108,7 @@ const RoomPlaylist = () => {
                     onClick={() => moveSong(idx, idx - 1)}
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)] disabled:cursor-not-allowed disabled:opacity-30"
                   >
-                    ↑
+                    <ArrowUp size={16} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -112,7 +117,7 @@ const RoomPlaylist = () => {
                     onClick={() => moveSong(idx, idx + 1)}
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)] disabled:cursor-not-allowed disabled:opacity-30"
                   >
-                    ↓
+                    <ArrowDown size={16} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -120,7 +125,7 @@ const RoomPlaylist = () => {
                     onClick={() => removeSong(idx)}
                     className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full text-[var(--met-danger)] hover:bg-[var(--met-danger)]/15"
                   >
-                    ✕
+                    <X size={16} aria-hidden="true" />
                   </button>
                 </div>
               </li>

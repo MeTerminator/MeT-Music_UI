@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
+import { Music } from "lucide-react";
 // plyr 的类型声明(export=)与其 ESM 产物(type: module + export default)冲突,
 // 默认导入的类型需豁免;类型侧改用其 UMD 全局命名空间(export as namespace Plyr)。
 // @ts-expect-error -- plyr d.ts 在 bundler 解析下无 default 导出
@@ -354,7 +355,7 @@ export default function VideosPlayer() {
                 />
               ) : (
                 <div className="mr-4 flex h-[60px] w-[60px] items-center justify-center rounded-full bg-[var(--met-bg)] text-xl text-[var(--met-fg-dim)]">
-                  ♪
+                  <Music size={20} aria-hidden="true" />
                 </div>
               )}
               <div className="flex min-w-0 flex-col gap-1.5">

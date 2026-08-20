@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
 import { api, playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
@@ -40,9 +41,10 @@ export default function Hot() {
         <Link
           to="/artist/songs"
           search={{ id }}
-          className="text-xs text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
+          className="flex items-center gap-0.5 text-xs text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
         >
-          查看全部 ›
+          查看全部
+          <ChevronRight size={14} aria-hidden="true" />
         </Link>
       </div>
       <SongList

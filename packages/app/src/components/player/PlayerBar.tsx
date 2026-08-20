@@ -1,5 +1,20 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import {
+  Ellipsis,
+  ListMusic,
+  Loader2,
+  Pause,
+  Play,
+  Repeat,
+  Repeat1,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   changePlayIndex,
@@ -27,10 +42,13 @@ const NEXT_SONG_MODE: Record<
   repeat: "normal",
 };
 
-const SONG_MODE_META: Record<StatusStoreState["playSongMode"], { icon: string; label: string }> = {
-  normal: { icon: "⇆", label: "列表循环" },
-  random: { icon: "⤮", label: "随机播放" },
-  repeat: { icon: "↺", label: "单曲循环" },
+const SONG_MODE_META: Record<
+  StatusStoreState["playSongMode"],
+  { icon: LucideIcon; label: string }
+> = {
+  normal: { icon: Repeat, label: "列表循环" },
+  random: { icon: Shuffle, label: "随机播放" },
+  repeat: { icon: Repeat1, label: "单曲循环" },
 };
 
 /** 倍速可选项(对照旧倍速滑块 0.1-2,改为常用档位菜单) */
@@ -114,6 +132,15 @@ export default function PlayerBar() {
       "复制歌曲链接成功",
     );
 
+  // 当前歌曲 MV id(formatData 的 song.mv 字段;0 / "0" / 空值视为无 MV)
+  const rawMv = (playSongData as { mv?: unknown })?.mv;
+  const mvId =
+    typeof rawMv === "number" && rawMv !== 0
+      ? String(rawMv)
+      : typeof rawMv === "string" && rawMv !== "" && rawMv !== "0"
+        ? rawMv
+        : null;
+
   const moreItems: MenuItemDef[] = [
     {
       key: "comment",
@@ -136,6 +163,14 @@ export default function PlayerBar() {
       onSelect: () => void copySongLink(),
     },
   ];
+  // 观看 MV(对照旧 SongListDropdown 的「观看 MV」;有 MV 时插入到「查看评论」之后)
+  if (mvId) {
+    moreItems.splice(1, 0, {
+      key: "mv",
+      label: "观看 MV",
+      onSelect: () => void navigate({ to: "/videos-player", search: { id: mvId } }),
+    });
+  }
 
   return (
     <div
@@ -199,36 +234,36 @@ export default function PlayerBar() {
         <div className="flex items-center gap-4">
           <button
             type="button"
-            className="cursor-pointer bg-transparent text-lg"
+            className="cursor-pointer bg-transparent"
             style={{ color: "var(--met-fg)" }}
             title="上一曲"
             onClick={() => void changePlayIndex("prev", true)}
           >
-            ⏮
+            <SkipBack size={18} aria-hidden="true" />
           </button>
           <button
             type="button"
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full"
             style={{ background: "var(--met-primary)", color: "var(--met-bg)" }}
             title={playState ? "暂停" : "播放"}
             onClick={() => void playOrPause()}
           >
             {playLoading ? (
-              <span className="inline-block animate-spin">◌</span>
+              <Loader2 size={18} className="animate-spin" aria-hidden="true" />
             ) : playState ? (
-              "⏸"
+              <Pause size={18} fill="currentColor" aria-hidden="true" />
             ) : (
-              "▶"
+              <Play size={18} fill="currentColor" aria-hidden="true" />
             )}
           </button>
           <button
             type="button"
-            className="cursor-pointer bg-transparent text-lg"
+            className="cursor-pointer bg-transparent"
             style={{ color: "var(--met-fg)" }}
             title="下一曲"
             onClick={() => void changePlayIndex("next", true)}
           >
-            ⏭
+            <SkipForward size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="flex w-full items-center gap-2">
@@ -267,12 +302,12 @@ export default function PlayerBar() {
         {/* 播放模式 */}
         <button
           type="button"
-          className="cursor-pointer bg-transparent text-lg"
+          className="cursor-pointer bg-transparent"
           style={{ color: "var(--met-fg)" }}
           title={modeMeta.label}
           onClick={changeSongMode}
         >
-          {modeMeta.icon}
+          <modeMeta.icon size={18} aria-hidden="true" />
         </button>
 
         {/* 倍速(对齐旧行为:一起听房间内隐藏) */}
@@ -327,12 +362,16 @@ export default function PlayerBar() {
         {/* 音量 */}
         <button
           type="button"
-          className="cursor-pointer bg-transparent text-lg"
+          className="cursor-pointer bg-transparent"
           style={{ color: "var(--met-fg)" }}
           title={playVolume > 0 ? "静音" : "取消静音"}
           onClick={() => setVolumeMute()}
         >
-          {playVolume > 0 ? "🔊" : "🔇"}
+          {playVolume > 0 ? (
+            <Volume2 size={18} aria-hidden="true" />
+          ) : (
+            <VolumeX size={18} aria-hidden="true" />
+          )}
         </button>
         <input
           type="range"
@@ -358,20 +397,20 @@ export default function PlayerBar() {
           align="end"
           ariaLabel="更多操作"
           title="更多操作"
-          triggerClassName="bg-transparent text-lg text-[var(--met-fg)]"
+          triggerClassName="flex items-center bg-transparent text-[var(--met-fg)]"
         >
-          ⋯
+          <Ellipsis size={18} aria-hidden="true" />
         </DropdownMenu>
 
         {/* 播放列表 */}
         <button
           type="button"
-          className="relative cursor-pointer bg-transparent text-lg"
+          className="relative cursor-pointer bg-transparent"
           style={{ color: playListShow ? "var(--met-primary)" : "var(--met-fg)" }}
           title="播放列表"
           onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
         >
-          ☰
+          <ListMusic size={18} aria-hidden="true" />
           {showPlaylistCount && playList.length > 0 && (
             <span
               className="absolute -top-1.5 -right-3 rounded-full px-1.5 py-px text-[10px] leading-4 tabular-nums"

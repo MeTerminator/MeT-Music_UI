@@ -1,4 +1,21 @@
 import { useEffect, useState } from "react";
+import {
+  ChevronDown,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Pause,
+  Play,
+  Repeat,
+  Repeat1,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+  Volume1,
+  Volume2,
+  VolumeX,
+  type LucideIcon,
+} from "lucide-react";
 import { changePlayIndex, playOrPause, setSeek, setVolume, setVolumeMute } from "@met/core";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { Slider } from "../ui/slider";
@@ -13,10 +30,13 @@ const NEXT_SONG_MODE: Record<
   repeat: "normal",
 };
 
-const SONG_MODE_META: Record<StatusStoreState["playSongMode"], { icon: string; label: string }> = {
-  normal: { icon: "⇆", label: "列表循环" },
-  random: { icon: "⤮", label: "随机播放" },
-  repeat: { icon: "↺", label: "单曲循环" },
+const SONG_MODE_META: Record<
+  StatusStoreState["playSongMode"],
+  { icon: LucideIcon; label: string }
+> = {
+  normal: { icon: Repeat, label: "列表循环" },
+  random: { icon: Shuffle, label: "随机播放" },
+  repeat: { icon: Repeat1, label: "单曲循环" },
 };
 
 export interface FullPlayerControlsProps {
@@ -42,6 +62,8 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
   const [dragBar, setDragBar] = useState<number | null>(null);
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
   const modeMeta = SONG_MODE_META[playSongMode];
+  const ModeIcon = modeMeta.icon;
+  const VolumeIcon: LucideIcon = playVolume === 0 ? VolumeX : playVolume < 0.5 ? Volume1 : Volume2;
 
   // ===== 浏览器全屏(原生 Fullscreen API,对齐旧 screenfullChange 职责) =====
   const [isFullscreen, setIsFullscreen] = useState<boolean>(
@@ -118,7 +140,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
                 useStatusStore.setState({ playSongMode: NEXT_SONG_MODE[playSongMode] })
               }
             >
-              {modeMeta.icon}
+              <ModeIcon size={20} aria-hidden="true" />
             </button>
           </div>
 
@@ -130,7 +152,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               title="上一曲"
               onClick={() => void changePlayIndex("prev", true)}
             >
-              ⏮
+              <SkipBack size={20} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -140,11 +162,11 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               onClick={() => void playOrPause()}
             >
               {playLoading ? (
-                <span className="inline-block animate-spin">◌</span>
+                <Loader2 size={20} className="animate-spin" aria-hidden="true" />
               ) : playState ? (
-                "⏸"
+                <Pause size={20} aria-hidden="true" />
               ) : (
-                "▶"
+                <Play size={20} aria-hidden="true" />
               )}
             </button>
             <button
@@ -153,7 +175,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               title="下一曲"
               onClick={() => void changePlayIndex("next", true)}
             >
-              ⏭
+              <SkipForward size={20} aria-hidden="true" />
             </button>
           </div>
 
@@ -165,7 +187,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               title={playVolume > 0 ? "静音" : "取消静音"}
               onClick={() => setVolumeMute()}
             >
-              {playVolume === 0 ? "🔇" : playVolume < 0.5 ? "🔉" : "🔊"}
+              <VolumeIcon size={20} aria-hidden="true" />
             </button>
             <div className="w-24 max-md:hidden">
               <Slider
@@ -185,7 +207,11 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               title={isFullscreen ? "退出全屏" : "进入全屏"}
               onClick={toggleFullscreen}
             >
-              {isFullscreen ? "⤡" : "⤢"}
+              {isFullscreen ? (
+                <Minimize2 size={20} aria-hidden="true" />
+              ) : (
+                <Maximize2 size={20} aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"
@@ -193,7 +219,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               title="关闭播放器"
               onClick={() => useStatusStore.setState({ showFullPlayer: false })}
             >
-              ⌄
+              <ChevronDown size={20} aria-hidden="true" />
             </button>
           </div>
         </div>

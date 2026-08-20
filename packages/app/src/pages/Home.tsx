@@ -1,5 +1,6 @@
 /** 主页(对照旧 src/views/Home.vue:标题 + 声明;另加最近播放快捷入口) */
 import { useNavigate } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import { getGreetings, type Song } from "@met/core";
 import { useMusicStore } from "@/stores/music";
 import { formatArtists, getCoverUrl } from "@/lib/format";
@@ -34,9 +35,10 @@ const Home = () => {
             <button
               type="button"
               onClick={() => navigate({ to: "/history" })}
-              className="cursor-pointer text-xs text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
+              className="flex cursor-pointer items-center gap-1 text-xs text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
             >
-              查看全部 →
+              查看全部
+              <ArrowRight size={14} aria-hidden="true" />
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

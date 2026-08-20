@@ -11,19 +11,28 @@ export default function Playlist() {
   const search = useSearch({ strict: false }) as { id?: number | string };
   const id = search.id;
   const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
+  const userPlaylists = useSiteDataStore((s) => s.userLikeData.playlists) as {
+    id?: number | string;
+  }[];
+
+  // like-songs 形态(无 id):已登录时取「我喜欢」歌单
+  // (对照旧 playlist.vue:userLikeData.playlists[0]?.id)
+  const likeSongsId = userLoginStatus ? (userPlaylists[0]?.id ?? null) : null;
+  const playlistId = id != null && id !== "" ? id : likeSongsId;
+  const enabled = playlistId != null && playlistId !== "";
 
   // 歌单详情(名称/简介/封面/歌曲数)
   const detailQuery = useQuery({
-    queryKey: ["playlist", "detail", id],
-    queryFn: () => api.getPlayListDetail(id as number | string),
-    enabled: id != null && id !== "",
+    queryKey: ["playlist", "detail", playlistId],
+    queryFn: () => api.getPlayListDetail(playlistId as number | string),
+    enabled,
   });
 
   // 歌单全部歌曲
   const songsQuery = useQuery({
-    queryKey: ["playlist", "songs", id],
-    queryFn: () => api.getAllPlayList(id as number | string, 500, 0),
-    enabled: id != null && id !== "",
+    queryKey: ["playlist", "songs", playlistId],
+    queryFn: () => api.getAllPlayList(playlistId as number | string, 500, 0),
+    enabled,
   });
 
   const detail = detailQuery.data?.playlist;
@@ -32,7 +41,7 @@ export default function Playlist() {
     [songsQuery.data],
   );
 
-  if (id == null || id === "") {
+  if (!enabled) {
     // like-songs 形态(路由无 id):未登录时不发请求,提示登录
     if (!userLoginStatus) {
       return (
@@ -44,9 +53,10 @@ export default function Playlist() {
         </div>
       );
     }
+    // 已登录但用户歌单尚未就绪(setUserProfile 可能仍在拉取)
     return (
       <div className="py-24 text-center text-sm text-[var(--met-fg-dim)]">
-        未指定歌单
+        正在获取「我喜欢的音乐」歌单…
       </div>
     );
   }

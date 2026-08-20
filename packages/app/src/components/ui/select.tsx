@@ -1,4 +1,5 @@
 import { Select as BaseSelect } from "@base-ui-components/react/select";
+import { ChevronDown } from "lucide-react";
 
 export interface SelectOption<V extends string = string> {
   value: V;
@@ -31,7 +32,9 @@ export const Select = <V extends string = string>({
       className={`flex h-9 min-w-36 cursor-pointer items-center justify-between gap-2 rounded-lg border border-[var(--met-border)] bg-[var(--met-bg-elevated)] px-3 text-sm text-[var(--met-fg)] hover:border-[var(--met-primary)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 ${className}`}
     >
       <BaseSelect.Value />
-      <BaseSelect.Icon className="text-[var(--met-fg-dim)]">▾</BaseSelect.Icon>
+      <BaseSelect.Icon className="text-[var(--met-fg-dim)]">
+        <ChevronDown size={16} aria-hidden="true" />
+      </BaseSelect.Icon>
     </BaseSelect.Trigger>
     <BaseSelect.Portal>
       <BaseSelect.Positioner sideOffset={4} className="z-50 outline-none">

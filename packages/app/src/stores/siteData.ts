@@ -97,3 +97,17 @@ export const setUserProfile = async (): Promise<void> => {
     toast.error("用户信息加载失败");
   }
 };
+
+/**
+ * 退出登录(旧 utils/auth.toLogout):清空 userData / userLikeData / userLoginStatus。
+ * 启动时的自动登录检查(旧 Login.vue onBeforeMount 的 checkLoginStatus)
+ * 由 components/user/UserPanel 挂载时调用 setUserProfile() 完成。
+ */
+export const logout = (show = true): void => {
+  useSiteDataStore.setState({
+    userLoginStatus: false,
+    userData: { userId: null, detail: {} },
+    userLikeData: { playlists: [] },
+  });
+  if (show) toast.success("成功退出登录");
+};

@@ -3,34 +3,33 @@
  *
  * 宿主按钮区是契约 v2 对旧 .main-nav DOM 注入的替代:
  * useHostStore().isHosted 为 true 时渲染「设置」「隐藏」按钮,
- * 分别调用宿主注册的 onOpenSettings / onHideWindow 回调。
+ * 分别调用宿主注册的 onOpenSettings / onHideWindow 回调(仍走宿主回调,与应用内设置悬浮层无关)。
+ *
+ * 侧栏「设置」项不再 navigate 到 /setting,改为打开 SettingsOverlay 悬浮层
+ * (useStatusStore.showSettingsPanel);/setting 路由页保留用于深链兼容。
  */
-import { useState } from "react";
-import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { Link, Outlet } from "@tanstack/react-router";
+import { History, Home, Search, Settings, Users, X } from "lucide-react";
 import { useHostStore } from "@/host";
-// —— 以下两个组件由并行任务实现;文件尚未落地时的 TS2307 属预期 ——
+import { useStatusStore } from "@/stores/status";
+import SearchSuggest from "@/components/search-suggest/SearchSuggest";
+import SettingsOverlay from "@/components/settings-overlay/SettingsOverlay";
+// —— 以下组件由并行任务实现;文件尚未落地时的 TS2307 属预期 ——
 import PlayerBar from "@/components/player/PlayerBar";
 import FullPlayer from "@/components/player/FullPlayer";
+import UserPanel from "@/components/user/UserPanel";
 
-const NAV_ITEMS = [
-  { to: "/", label: "主页" },
-  { to: "/search/songs", label: "搜索" },
-  { to: "/history", label: "最近播放" },
-  { to: "/listen-together", label: "一起听" },
-  { to: "/setting", label: "设置" },
+const NAV_LINKS = [
+  { to: "/", label: "主页", icon: Home },
+  { to: "/search/songs", label: "搜索", icon: Search },
+  { to: "/history", label: "最近播放", icon: History },
+  { to: "/listen-together", label: "一起听", icon: Users },
 ] as const;
 
 const RootLayout = () => {
-  const navigate = useNavigate();
   const isHosted = useHostStore((s) => s.isHosted);
   const callbacks = useHostStore((s) => s.callbacks);
-  const [keywords, setKeywords] = useState("");
-
-  const submitSearch = () => {
-    const kw = keywords.trim();
-    if (!kw) return;
-    void navigate({ to: "/search/songs", search: { keywords: kw } });
-  };
+  const showSettingsPanel = useStatusStore((s) => s.showSettingsPanel);
 
   return (
     <div className="flex h-full flex-col bg-[var(--met-bg)] text-[var(--met-fg)]">
@@ -39,17 +38,9 @@ const RootLayout = () => {
         <Link to="/" className="shrink-0 text-sm font-bold tracking-wide">
           MeT Music
         </Link>
+        {/* 搜索框 + 搜索建议下拉 */}
         <div className="flex flex-1 justify-center">
-          <input
-            type="text"
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitSearch();
-            }}
-            placeholder="搜索音乐 / 歌手 / 专辑"
-            className="h-9 w-full max-w-md rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] px-4 text-sm text-[var(--met-fg)] outline-none transition-colors placeholder:text-[var(--met-fg-dim)] focus:border-[var(--met-primary)]"
-          />
+          <SearchSuggest />
         </div>
         {/* 宿主按钮区(契约 v2:替代旧 .main-nav DOM 注入) */}
         <div className="flex shrink-0 items-center gap-1">
@@ -62,10 +53,7 @@ const RootLayout = () => {
                 onClick={() => callbacks?.onOpenSettings?.()}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]"
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
+                <Settings className="h-5 w-5" aria-hidden />
               </button>
               <button
                 type="button"
@@ -74,9 +62,7 @@ const RootLayout = () => {
                 onClick={() => callbacks?.onHideWindow?.()}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]"
               >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M5 12h14" />
-                </svg>
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </>
           ) : null}
@@ -85,20 +71,41 @@ const RootLayout = () => {
 
       <div className="flex min-h-0 flex-1">
         {/* 左侧窄侧边栏(asideMenuCollapsed 的完整宽度联动留待 U3,此处固定窄栏) */}
-        <aside className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-[var(--met-border)] py-3">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              activeOptions={{ exact: item.to === "/" }}
-              className="flex w-14 flex-col items-center rounded-lg px-1 py-2.5 text-xs text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]"
-              activeProps={{
-                className: "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]",
-              }}
+        <aside className="flex w-16 shrink-0 flex-col border-r border-[var(--met-border)] py-3">
+          <nav className="flex shrink-0 flex-col items-center gap-1">
+            {NAV_LINKS.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                activeOptions={{ exact: to === "/" }}
+                className="flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]"
+                activeProps={{
+                  className:
+                    "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]",
+                }}
+              >
+                <Icon className="h-5 w-5" aria-hidden />
+                {label}
+              </Link>
+            ))}
+            {/* 设置:打开悬浮层,不再跳转 /setting */}
+            <button
+              type="button"
+              onClick={() => useStatusStore.setState({ showSettingsPanel: true })}
+              className={`flex w-14 cursor-pointer flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs transition-colors ${
+                showSettingsPanel
+                  ? "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]"
+                  : "text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]"
+              }`}
             >
-              {item.label}
-            </Link>
-          ))}
+              <Settings className="h-5 w-5" aria-hidden />
+              设置
+            </button>
+          </nav>
+          {/* 用户面板(并行任务产出,位于导航项之下的滚动区) */}
+          <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-1">
+            <UserPanel />
+          </div>
         </aside>
 
         {/* 主内容区(底部预留 72px 给播放条) */}
@@ -110,6 +117,9 @@ const RootLayout = () => {
       {/* 播放条与全屏播放器(并行任务实现) */}
       <PlayerBar />
       <FullPlayer />
+
+      {/* 全局设置悬浮层 */}
+      <SettingsOverlay />
     </div>
   );
 };

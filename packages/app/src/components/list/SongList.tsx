@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Ellipsis, ListEnd, Play } from "lucide-react";
+import { toast } from "sonner";
 import {
   addSongToNext,
   fadePlayOrPause,
@@ -12,6 +14,7 @@ import { copyText } from "@/lib/clipboard";
 import { formatArtists } from "@/lib/format";
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
+import { addSong as ltAddSong } from "@/stores/listenTogether";
 import { ContextMenu } from "@/components/ui/context-menu";
 import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
 
@@ -51,20 +54,43 @@ const durationText = (duration: Song["duration"]): string => {
 const copySongLink = (song: Song): Promise<void> =>
   copyText(`https://y.qq.com/n/ryqq/songDetail/${String(song.id)}`, "复制歌曲链接成功");
 
+/** 歌曲 MV id(formatData 的 song.mv 字段;0 / "0" / 空值视为无 MV) */
+const getMvId = (song: Song): string | null => {
+  const mv = (song as { mv?: unknown }).mv;
+  if (typeof mv === "number" && mv !== 0) return String(mv);
+  if (typeof mv === "string" && mv !== "" && mv !== "0") return mv;
+  return null;
+};
+
 /**
  * 列表定位播放(对照旧 SongList.vue 的 playSong 双击逻辑):
  * 整表设为播放列表,并从被点击行开始播放;再次操作当前播放行则切换播放/暂停。
+ * 一起听房内(对齐旧 isInRoom 分支):不动本地播放列表,改为添加到共享队列。
  */
 const playFromList = async (list: Song[], song: Song, index: number): Promise<void> => {
   const playingId = useMusicStore.getState().playSongData?.id;
   if (playingId != null && playingId === song.id) {
-    // 与旧实现一致:双击当前播放歌曲 → 播放/暂停切换
+    // 与旧实现一致:双击当前播放歌曲 → 播放/暂停切换(房内同样走此分支)
     fadePlayOrPause();
+    return;
+  }
+  if (useStatusStore.getState().isInRoom) {
+    ltAddSong(song);
     return;
   }
   useStatusStore.setState({ playMode: "normal", playIndex: index });
   useMusicStore.setState({ playList: list.slice(), playSongData: song });
   await initPlayer(true);
+};
+
+/** 下一首播放(房内改为添加到一起听队列,对齐「房内一切歌曲操作入共享清单」语义) */
+const addNext = (song: Song): void => {
+  if (useStatusStore.getState().isInRoom) {
+    ltAddSong(song);
+    return;
+  }
+  useStatusStore.setState({ playMode: "normal" });
+  addSongToNext(song);
 };
 
 /** 可复用歌曲列表 */
@@ -79,6 +105,7 @@ export default function SongList({
   onReachEnd,
 }: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
+  const isInRoom = useStatusStore((s) => s.isInRoom);
   const navigate = useNavigate();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const reachEndRef = useRef<SongListProps["onReachEnd"]>(onReachEnd);
@@ -98,6 +125,7 @@ export default function SongList({
   const rowMenuItems = (song: Song, index: number): MenuItemDef[] => {
     const isLocalSong = !!song.path;
     const songId = String(song.id);
+    const mvId = getMvId(song);
     const items: MenuItemDef[] = [
       {
         key: "play",
@@ -107,14 +135,26 @@ export default function SongList({
       {
         key: "next-play",
         label: "下一首播放",
-        // 对照旧逻辑:当前播放歌曲不可再「下一首播放」
+        // 对照旧逻辑:当前播放歌曲不可再「下一首播放」;房内改为添加到一起听队列
         disabled: playingId != null && playingId === song.id,
-        onSelect: () => {
-          useStatusStore.setState({ playMode: "normal" });
-          addSongToNext(song);
-        },
+        onSelect: () => addNext(song),
       },
     ];
+    // 房内显式项(对照旧 SongListDropdown 的「添加到一起听歌」;不在房内隐藏)
+    if (isInRoom) {
+      items.push({
+        key: "add-listen-together",
+        label: "添加到一起听",
+        onSelect: () => ltAddSong(song),
+      });
+    }
+    if (mvId && !isLocalSong) {
+      items.push({
+        key: "mv",
+        label: "观看 MV",
+        onSelect: () => void navigate({ to: "/videos-player", search: { id: mvId } }),
+      });
+    }
     if (!isLocalSong) {
       items.push(
         {
@@ -197,12 +237,17 @@ export default function SongList({
         <div className="flex items-center gap-3 py-3">
           <button
             type="button"
-            onClick={onPlayAll}
+            onClick={() => {
+              // 房内禁止整表替换播放列表(engine.playAllSongs 已拒绝,此处显式提示)
+              if (useStatusStore.getState().isInRoom) {
+                toast.warning("一起听房间内暂不支持播放全部,请单曲添加到一起听队列");
+                return;
+              }
+              onPlayAll();
+            }}
             className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-4 py-1.5 text-sm font-medium text-[var(--met-bg)] transition-opacity hover:opacity-90"
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play size={16} fill="currentColor" aria-hidden="true" />
             播放全部
           </button>
           <span className="text-xs text-[var(--met-fg-dim)]">共 {songs.length} 首</span>
@@ -213,6 +258,7 @@ export default function SongList({
         {displaySongs.map((song, index) => {
           const isPlaying = playingId != null && playingId === song.id;
           const menuItems = rowMenuItems(song, index);
+          const mvId = getMvId(song);
           return (
             <ContextMenu
               key={`${song.id}-${index}`}
@@ -249,13 +295,30 @@ export default function SongList({
               ) : null}
               {/* 歌名 / 歌手 */}
               <div className="min-w-0 flex-1">
-                <div
-                  className={`truncate text-sm ${
-                    isPlaying ? "text-[var(--met-primary)]" : "text-[var(--met-fg)]"
-                  }`}
-                  title={song.name}
-                >
-                  {song.name}
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <div
+                    className={`truncate text-sm ${
+                      isPlaying ? "text-[var(--met-primary)]" : "text-[var(--met-fg)]"
+                    }`}
+                    title={song.name}
+                  >
+                    {song.name}
+                  </div>
+                  {/* MV 标签(对照旧 SongList 的 MV tag,点击跳转视频播放页) */}
+                  {mvId ? (
+                    <button
+                      type="button"
+                      title="观看 MV"
+                      className="shrink-0 cursor-pointer rounded-full border border-[var(--met-primary)] px-1.5 text-[10px] leading-4 text-[var(--met-primary)] transition-colors hover:bg-[var(--met-bg-hover)]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate({ to: "/videos-player", search: { id: mvId } });
+                      }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    >
+                      MV
+                    </button>
+                  ) : null}
                 </div>
                 <div className="truncate text-xs text-[var(--met-fg-dim)]">
                   {artistsText(song.artists)}
@@ -271,25 +334,23 @@ export default function SongList({
               <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 md:flex">
                 <button
                   type="button"
-                  aria-label={`播放 ${song.name}`}
-                  title="立即播放"
+                  aria-label={isInRoom ? `添加到一起听 ${song.name}` : `播放 ${song.name}`}
+                  title={isInRoom ? "添加到一起听" : "立即播放"}
                   onClick={() => void playFromList(displaySongs, song, index)}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
                 >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
+                  <Play size={18} aria-hidden="true" />
                 </button>
                 <button
                   type="button"
-                  aria-label={`下一首播放 ${song.name}`}
-                  title="下一首播放"
-                  onClick={() => addSongToNext(song)}
+                  aria-label={
+                    isInRoom ? `添加到一起听 ${song.name}` : `下一首播放 ${song.name}`
+                  }
+                  title={isInRoom ? "添加到一起听" : "下一首播放"}
+                  onClick={() => addNext(song)}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
                 >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                    <path d="M3 6h12v2H3V6zm0 4h12v2H3v-2zm0 4h8v2H3v-2zm14-4h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3z" />
-                  </svg>
+                  <ListEnd size={18} aria-hidden="true" />
                 </button>
               </div>
               {/* 时长 */}
@@ -305,7 +366,7 @@ export default function SongList({
                 title="更多操作"
                 triggerClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)] md:hidden"
               >
-                ⋯
+                <Ellipsis size={18} aria-hidden="true" />
               </DropdownMenu>
             </ContextMenu>
           );
