@@ -38,9 +38,7 @@ import {
   History,
   Home,
   Menu,
-  Moon,
   Settings,
-  Sun,
   Users,
   X,
 } from "lucide-react";
@@ -66,13 +64,6 @@ const NAV_LINKS = [
 const iconBtnCls =
   "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--met-fg-dim)] " +
   "transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]";
-
-/** 明暗一键切换(旧 siteSettings.setThemeType:切主题 + 关闭跟随系统 + toast) */
-const toggleThemeType = () => {
-  const next = useSettingsStore.getState().themeType === "light" ? "dark" : "light";
-  useSettingsStore.setState({ themeType: next, themeAuto: false });
-  toast(`已切换至${next === "light" ? "浅色" : "深色"}模式`);
-};
 
 /** 隔空播放房外入口(旧 UserData goToPlayer:任意时刻可开,sid 用本地 sessionId) */
 const openRemotePlayer = () => {
@@ -225,7 +216,6 @@ const RootLayout = () => {
   const router = useRouter();
   const isHosted = useHostStore((s) => s.isHosted);
   const callbacks = useHostStore((s) => s.callbacks);
-  const themeType = useSettingsStore((s) => s.themeType);
   const showSider = useSettingsStore((s) => s.showSider);
   const isInRoom = useStatusStore((s) => s.isInRoom);
 
@@ -326,20 +316,6 @@ const RootLayout = () => {
             className={iconBtnCls}
           >
             <Airplay className="h-5 w-5" aria-hidden />
-          </button>
-          {/* 明暗一键切换(位于宿主按钮区左侧) */}
-          <button
-            type="button"
-            title={themeType === "dark" ? "切换至浅色模式" : "切换至深色模式"}
-            aria-label={themeType === "dark" ? "切换至浅色模式" : "切换至深色模式"}
-            onClick={toggleThemeType}
-            className={iconBtnCls}
-          >
-            {themeType === "dark" ? (
-              <Sun className="h-5 w-5" aria-hidden />
-            ) : (
-              <Moon className="h-5 w-5" aria-hidden />
-            )}
           </button>
           {/* 宿主按钮区(契约 v2:替代旧 .main-nav DOM 注入) */}
           {isHosted ? (

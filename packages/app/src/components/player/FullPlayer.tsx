@@ -129,9 +129,36 @@ function useWakeLock(active: boolean) {
  */
 export default function FullPlayer() {
   const showFullPlayer = useStatusStore((s) => s.showFullPlayer);
-  // 关闭时整体卸载,保证 Esc/overflow/计时器等副作用随之清理
-  if (!showFullPlayer) return null;
-  return <FullPlayerInner />;
+  // Apple Music 式抽屉过渡:打开从底部滑入(CSS animation,挂载即自动播放,
+  // 不依赖 rAF/JS 时序),关闭用 transition 下收、transitionend 后才卸载
+  // (mounted 延迟到退场结束,保证 Inner 的副作用最终仍随卸载清理)
+  const [mounted, setMounted] = useState(showFullPlayer);
+
+  useEffect(() => {
+    if (showFullPlayer) {
+      setMounted(true);
+      return;
+    }
+    // 退场兜底:transitionend 意外缺失(标签页后台等)时也要完成卸载
+    const timer = window.setTimeout(() => setMounted(false), 600);
+    return () => window.clearTimeout(timer);
+  }, [showFullPlayer]);
+
+  if (!mounted) return null;
+  return (
+    <div
+      className={`met-fp-in fixed inset-0 z-40 transition-transform duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        showFullPlayer ? "" : "translate-y-full"
+      }`}
+      onTransitionEnd={(e) => {
+        if (e.target === e.currentTarget && !useStatusStore.getState().showFullPlayer) {
+          setMounted(false);
+        }
+      }}
+    >
+      <FullPlayerInner />
+    </div>
+  );
 }
 
 function FullPlayerInner() {

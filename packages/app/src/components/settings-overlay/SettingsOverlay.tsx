@@ -22,8 +22,8 @@ const SettingsOverlay = () => {
       onOpenChange={(value) => useStatusStore.setState({ showSettingsPanel: value })}
     >
       <BaseDialog.Portal>
-        <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-        <BaseDialog.Popup className="fixed top-1/2 left-1/2 z-50 flex h-[85vh] w-[min(92vw,860px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-[var(--met-border)] bg-[var(--met-bg)] text-[var(--met-fg)] shadow-2xl outline-none">
+        <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
+        <BaseDialog.Popup className="fixed top-1/2 left-1/2 z-50 flex h-[85vh] w-[min(92vw,860px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-[var(--met-border)] bg-[var(--met-bg)] text-[var(--met-fg)] shadow-2xl outline-none transition-all duration-200 data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0">
           {/* 固定 header:标题/版本与关闭钮同层同线 */}
           <div className="flex shrink-0 items-center justify-between border-b border-[var(--met-border)] px-6 py-4">
             <BaseDialog.Title className="flex items-end gap-2 text-lg font-semibold">

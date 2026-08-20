@@ -74,3 +74,13 @@ body {
 .met-page-in {
   animation: met-page-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* 全屏播放器进场:自底部滑入(退场由 transition + translate-y-full 完成) */
+@keyframes met-fp-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+.met-fp-in {
+  animation: met-fp-in 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+}
