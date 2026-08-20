@@ -15,7 +15,7 @@ const Home = () => {
   const recentSongs = historyPlaylist.slice(0, 6);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-10">
+    <div className="mx-auto w-full max-w-5xl px-8 py-8 max-md:px-4">
       {/* 问候语 */}
       <h1 className="text-3xl font-bold text-[var(--met-fg)]">{getGreetings()}</h1>
 

@@ -15,8 +15,8 @@ export default function SearchLayout() {
   const keywords = search.keywords ?? "";
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6">
-      <h1 className="text-xl font-semibold text-[var(--met-fg)]">
+    <div className="mx-auto flex w-full max-w-5xl flex-col px-8 py-8 max-md:px-4">
+      <h1 className="text-3xl font-bold text-[var(--met-fg)]">
         {keywords ? (
           <>
             「<span className="text-[var(--met-primary)]">{keywords}</span>」的搜索结果

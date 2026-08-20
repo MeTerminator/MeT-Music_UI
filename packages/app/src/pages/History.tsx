@@ -10,7 +10,7 @@ const History = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6">
+    <div className="mx-auto w-full max-w-5xl px-8 py-8 max-md:px-4">
       {/* 标题 + 数量 */}
       <div className="mb-4 flex items-end gap-3">
         <h1 className="text-3xl font-bold text-[var(--met-fg)]">最近播放</h1>

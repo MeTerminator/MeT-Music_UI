@@ -11,7 +11,7 @@ const ListenTogether = () => {
   const isInRoom = useListenTogetherStore((s) => s.isInRoom);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-8 py-8 max-md:px-4">
+    <div className="mx-auto w-full max-w-5xl px-8 py-8 max-md:px-4">
       <h1 className="mb-4 text-3xl font-bold text-[var(--met-fg)]">一起听歌</h1>
       {isInRoom ? <RoomPanel /> : <SetupPanel />}
     </div>
