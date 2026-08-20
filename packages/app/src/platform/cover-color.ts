@@ -30,6 +30,22 @@ interface CoverThemeColors {
 }
 
 /**
+ * 封面背景上的前景色组("r, g, b" 字符串)。
+ * 全屏播放器的背景恒为偏深的封面模糊/动效,与站点明暗主题无关,
+ * 因此前景恒取浅色调 —— 消费方用语义字段,不再自行猜 dark/light 侧
+ * (dark/light 两侧字段方向并不一致:bg 是界面强调色而 shade 是背景前景层,
+ *  按 themeType 选边曾导致深色主题下全屏出现深字深底)。
+ */
+export interface OnCoverColors {
+  /** 主文字/图标(HCT tone 90) */
+  main: string;
+  /** 次级文字(HCT tone 80) */
+  soft: string;
+  /** 强调色(近白的品牌色,与两侧 primary 同算法) */
+  accent: string;
+}
+
+/**
  * 根据图像的主色获取渐变色
  * @param coverSrc - 图片 URL
  * @returns 生成的渐变色
@@ -122,6 +138,7 @@ const calcAccentColor = (dom: HTMLImageElement, dominantColor: number[]): void =
     coverTheme: {
       dark: generateThemeColors(theme, variant, true, avgBrightness),
       light: generateThemeColors(theme, variant, false, avgBrightness),
+      onCover: generateOnCoverColors(theme, variant, avgBrightness),
     },
   });
 };
@@ -150,6 +167,21 @@ const generateThemeColors = (
     shadeTwo: getAccentColor(Hct.from(palette.hue, palette.chroma, isDark ? 15 : 90).toInt()),
     bg: getAccentColor(Hct.from(palette.hue, palette.chroma, isDark ? 90 : 20).toInt()),
     mainBg: getAccentColor(Hct.from(palette.hue, palette.chroma, isDark ? 10 : 100).toInt()),
+  };
+};
+
+/** 生成封面背景上的前景色组(见 OnCoverColors 注释) */
+const generateOnCoverColors = (
+  theme: Theme,
+  variant: string,
+  brightness: number,
+): OnCoverColors => {
+  const adjustBrightness = brightness > 150 ? -20 : 20;
+  const palette = (theme.palettes as unknown as Record<string, TonalPalette>)[variant];
+  return {
+    main: getAccentColor(Hct.from(palette.hue, palette.chroma, 90).toInt()),
+    soft: getAccentColor(Hct.from(palette.hue, palette.chroma, 80).toInt()),
+    accent: getAccentColor(Hct.from(palette.hue, palette.chroma, 100 + adjustBrightness).toInt()),
   };
 };
 

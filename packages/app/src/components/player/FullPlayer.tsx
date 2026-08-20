@@ -12,6 +12,7 @@ import { setSeek, type AMLine, type Artist } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
+import type { OnCoverColors } from "@/platform/cover-color";
 import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
 import LyricScroll from "./LyricScroll";
@@ -29,6 +30,13 @@ interface CoverThemeSide {
   shadeTwo?: string;
   bg?: string;
   mainBg?: string;
+}
+
+/** status.coverTheme 消费视角(onCover 见 platform/cover-color.ts) */
+interface CoverThemeShape {
+  light?: CoverThemeSide;
+  dark?: CoverThemeSide;
+  onCover?: Partial<OnCoverColors>;
 }
 
 /**
@@ -335,13 +343,12 @@ function FullPlayerInner() {
   const gradientBackground = coverBackground || "var(--met-bg)";
 
   // ===== coverTheme 主题色驱动前景(对照旧 --cover-main-color 体系) =====
-  // 取当前明暗侧(settings.themeType)的 shadeTwo/primary("r, g, b" 字符串),
-  // 写入容器局部 CSS 变量;无 coverTheme 时回退现白色系
-  const coverThemeSide = (
-    coverTheme as { light?: CoverThemeSide; dark?: CoverThemeSide } | undefined
-  )?.[themeType];
-  const mainRgb = coverThemeSide?.shadeTwo || "255, 255, 255";
-  const primaryRgb = coverThemeSide?.primary || "255, 255, 255";
+  // 背景恒为偏深的封面模糊/动效,前景取语义化的 onCover 组(与站点明暗无关);
+  // 旧持久化的 coverTheme 无 onCover 字段,回退 light.shadeTwo(旧
+  // --cover-main-color 同源,同为浅色调),再回退白色系
+  const theme = coverTheme as CoverThemeShape | undefined;
+  const mainRgb = theme?.onCover?.main || theme?.light?.shadeTwo || "255, 255, 255";
+  const primaryRgb = theme?.onCover?.accent || theme?.light?.primary || "255, 255, 255";
   const amLyricColor = `rgba(${mainRgb}, 0.95)`; // 对照旧 AMLyric.vue 109-112
 
   // ===== 全屏歌手/专辑跳转(对照旧 FullPlayer.vue 66-99 行) =====
