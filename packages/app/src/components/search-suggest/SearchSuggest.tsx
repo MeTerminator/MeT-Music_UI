@@ -81,8 +81,8 @@ type FlatEntry =
   | { kind: "direct" }
   | { kind: "item"; group: SuggestGroupKey; item: SuggestItem };
 
-/** 写入搜索历史(对齐旧 setSearchHistory:去重置顶,上限 30 条;搜索页发现面板复用) */
-export const setSearchHistory = (name: string): void => {
+/** 写入搜索历史(对齐旧 setSearchHistory:去重置顶,上限 30 条) */
+const setSearchHistory = (name: string): void => {
   const trimmed = name.trim();
   if (!trimmed) return;
   useSiteDataStore.setState((s) => {
