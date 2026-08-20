@@ -309,8 +309,8 @@ const RootLayout = () => {
             <ChevronRight className="h-5 w-5" aria-hidden />
           </button>
         </div>
-        {/* 搜索框 + 搜索建议下拉(靠右,与明暗切换相邻;聚焦展宽向左伸展) */}
-        <div className="flex min-w-0 flex-1 justify-end">
+        {/* 搜索框 + 搜索建议下拉 */}
+        <div className="flex min-w-0 flex-1 justify-center">
           <SearchSuggest />
         </div>
         <div className="flex shrink-0 items-center gap-1">
