@@ -4,7 +4,7 @@ import { Menu as BaseMenu } from "@base-ui-components/react/menu";
 /** 菜单项定义(DropdownMenu 与 ContextMenu 共用) */
 export interface MenuItemDef {
   key: string;
-  label: string;
+  label: ReactNode;
   /** 危险操作(红色文案) */
   danger?: boolean;
   disabled?: boolean;

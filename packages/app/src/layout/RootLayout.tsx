@@ -166,6 +166,9 @@ const SidebarContent = ({
 }) => {
   const showSettingsPanel = useStatusStore((s) => s.showSettingsPanel);
   const isRail = variant === "rail";
+  // 激活态自行判断而不用 Link activeProps:activeProps.className 与基础 className
+  // 是拼接关系,激活项会残留 idle 的 hover 变色(hover 时压过主题色显示黑字)
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const itemBase = isRail
     ? "flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs"
@@ -183,19 +186,20 @@ const SidebarContent = ({
             : "flex shrink-0 flex-col gap-0.5 px-2"
         }
       >
-        {NAV_LINKS.map(({ to, label, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            activeOptions={{ exact: to === "/" }}
-            onClick={onNavigate}
-            className={`${itemBase} ${itemIdle}`}
-            activeProps={{ className: itemActive }}
-          >
-            <Icon className="h-5 w-5" aria-hidden />
-            {label}
-          </Link>
-        ))}
+        {NAV_LINKS.map(({ to, label, icon: Icon }) => {
+          const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+          return (
+            <Link
+              key={to}
+              to={to}
+              onClick={onNavigate}
+              className={`${itemBase} ${active ? itemActive : itemIdle}`}
+            >
+              <Icon className="h-5 w-5" aria-hidden />
+              {label}
+            </Link>
+          );
+        })}
         {/* 设置:打开悬浮层,不再跳转 /setting */}
         <button
           type="button"

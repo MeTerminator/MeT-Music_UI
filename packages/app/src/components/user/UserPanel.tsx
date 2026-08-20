@@ -3,6 +3,7 @@ import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { ChevronDown, Heart, ListMusic, LogIn, LogOut } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu } from "@/components/ui/menu";
 import { getCoverUrl } from "@/lib/formatData";
 import { logout, setUserProfile, useSiteDataStore } from "@/stores/siteData";
 import { useMusicStore } from "@/stores/music";
@@ -98,7 +99,11 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
   // 未登录:登录入口(窄栏 compact 用圆形图标钮,避免两字竖排挤压)
   if (!userLoginStatus) {
     return (
-      <div className={`flex flex-col gap-2 py-2 ${compact ? "items-center px-0" : "px-2"}`}>
+      <div
+        className={`flex flex-col gap-2 py-2 ${
+          compact ? "h-full items-center justify-end px-0" : "px-2"
+        }`}
+      >
         {compact ? (
           <button
             type="button"
@@ -132,6 +137,105 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
   const likePlaylist = playlists[0];
   // 创建的歌单(对照旧 Menu.vue:slice(1))
   const userPlaylists = playlists.slice(1);
+
+  // 退出登录二次确认(旧 Login.vue 的 $dialog.warning;compact/完整两形态共用)
+  const logoutDialog = (
+    <Dialog
+      open={logoutOpen}
+      onOpenChange={setLogoutOpen}
+      title="退出登录"
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={() => setLogoutOpen(false)}>
+            取消
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              setLogoutOpen(false);
+              logout();
+            }}
+          >
+            登出
+          </Button>
+        </>
+      }
+    >
+      确认退出当前用户登录？
+    </Dialog>
+  );
+
+  // 已登录 + 窄轨:纵向图标列(头像点开退出确认;喜欢/歌单仅图标,title 提示名称),
+  // 完整面板的文字信息在窄轨宽度下会逐字竖排挤压,故整体收纳为图标形态
+  if (compact) {
+    const compactCls = (active: boolean) =>
+      "flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg transition-colors " +
+      (active
+        ? "bg-[var(--met-bg-elevated)] text-[var(--met-primary)]"
+        : "text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]");
+    // 沉底布局:头像最底,喜欢/歌单自下而上堆叠(justify-end + 渲染序倒置)
+    return (
+      <div className="flex h-full flex-col items-center justify-end gap-1.5 py-2">
+        {/* 我的歌单:封面平铺在窄轨里难辨认,收进折叠菜单(封面 + 标题行) */}
+        {userPlaylists.length > 0 && (
+          <DropdownMenu
+            side="right"
+            align="start"
+            title="我的歌单"
+            ariaLabel="我的歌单"
+            triggerClassName={compactCls(
+              userPlaylists.some((pl) => activePlaylistId === String(pl.id)),
+            )}
+            items={userPlaylists.map((pl) => ({
+              key: String(pl.id),
+              label: (
+                <span className="flex min-w-0 items-center gap-2">
+                  {siderShowCover && pl.coverImgUrl ? (
+                    <img
+                      src={getCoverUrl(pl.coverImgUrl, 90)}
+                      alt=""
+                      className="h-6 w-6 shrink-0 rounded-md bg-[var(--met-bg)] object-cover"
+                    />
+                  ) : (
+                    <ListMusic size={16} className="shrink-0 text-[var(--met-fg-dim)]" aria-hidden />
+                  )}
+                  <span className="max-w-44 truncate">{pl.name}</span>
+                </span>
+              ),
+              onSelect: () =>
+                void navigate({ to: "/playlist", search: { id: String(pl.id) } }),
+            }))}
+          >
+            <ListMusic size={18} aria-hidden />
+          </DropdownMenu>
+        )}
+        {likePlaylist ? (
+          <button
+            type="button"
+            title="喜欢的音乐"
+            className={compactCls(likeActive)}
+            onClick={() => void navigate({ to: "/like-songs" })}
+          >
+            <Heart size={18} className="text-[var(--met-primary)]" aria-hidden />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          title={`${nickname}(点击退出登录)`}
+          className="cursor-pointer"
+          onClick={() => setLogoutOpen(true)}
+        >
+          <img
+            src={avatarUrl}
+            alt="头像"
+            className="h-9 w-9 rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] object-cover"
+          />
+        </button>
+        {logoutDialog}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-col px-2 py-2">
@@ -207,7 +311,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
               >
                 {siderShowCover && pl.coverImgUrl ? (
                   <img
-                    src={getCoverUrl(pl.coverImgUrl, 100)}
+                    src={getCoverUrl(pl.coverImgUrl, 90)}
                     alt=""
                     className="h-6 w-6 shrink-0 rounded-md bg-[var(--met-bg-elevated)] object-cover"
                   />
@@ -223,31 +327,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
         </div>
       ) : null}
 
-      {/* 退出登录二次确认(旧 Login.vue 的 $dialog.warning) */}
-      <Dialog
-        open={logoutOpen}
-        onOpenChange={setLogoutOpen}
-        title="退出登录"
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setLogoutOpen(false)}>
-              取消
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                setLogoutOpen(false);
-                logout();
-              }}
-            >
-              登出
-            </Button>
-          </>
-        }
-      >
-        确认退出当前用户登录？
-      </Dialog>
+      {logoutDialog}
     </div>
   );
 }

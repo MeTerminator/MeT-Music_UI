@@ -161,8 +161,8 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
 
         {/* 控制按钮行 */}
         <div className="grid grid-cols-3 items-center">
-          {/* 左区:播放模式(窄屏隐藏次要控件,保核心播放控制) */}
-          <div className="flex items-center justify-start">
+          {/* 左区:播放模式 + 音量(与右区功能钮左右配重;窄屏隐藏次要控件,保核心播放控制) */}
+          <div className="flex items-center justify-start gap-2">
             <button
               type="button"
               className={`${iconBtnCls} text-lg max-md:hidden`}
@@ -173,6 +173,31 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
             >
               <ModeIcon size={20} aria-hidden="true" />
             </button>
+            <button
+              type="button"
+              className={`${iconBtnCls} max-md:hidden`}
+              title={playVolume > 0 ? "静音" : "取消静音"}
+              onClick={() => setVolumeMute()}
+              onWheel={handleVolumeWheel}
+            >
+              <VolumeIcon size={20} aria-hidden="true" />
+            </button>
+            <div className="w-24 max-md:hidden" onWheel={handleVolumeWheel}>
+              <Slider
+                value={playVolume}
+                min={0}
+                max={1}
+                step={0.01}
+                ariaLabel="音量"
+                onValueChange={(v) => {
+                  useStatusStore.setState({ playVolume: v });
+                  setVolume(v);
+                }}
+              />
+            </div>
+            <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/60 max-md:hidden">
+              {Math.round(playVolume * 100)}%
+            </span>
           </div>
 
           {/* 中区:上一曲 / 播放暂停 / 下一曲 */}
@@ -210,32 +235,8 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
             </button>
           </div>
 
-          {/* 右区:音量(窄屏隐藏)+ 全屏 + 关闭 */}
+          {/* 右区:播放列表 + 全屏 + 关闭 */}
           <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              className={`${iconBtnCls} max-md:hidden`}
-              title={playVolume > 0 ? "静音" : "取消静音"}
-              onClick={() => setVolumeMute()}
-              onWheel={handleVolumeWheel}
-            >
-              <VolumeIcon size={20} aria-hidden="true" />
-            </button>
-            <div className="w-24 max-md:hidden" onWheel={handleVolumeWheel}>
-              <Slider
-                value={playVolume}
-                min={0}
-                max={1}
-                step={0.01}
-                onValueChange={(v) => {
-                  useStatusStore.setState({ playVolume: v });
-                  setVolume(v);
-                }}
-              />
-            </div>
-            <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/60 max-md:hidden">
-              {Math.round(playVolume * 100)}%
-            </span>
             <button
               type="button"
               className={iconBtnCls}
