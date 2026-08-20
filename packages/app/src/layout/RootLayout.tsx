@@ -55,6 +55,7 @@ import SettingsOverlay from "@/components/settings-overlay/SettingsOverlay";
 import PlayerBar from "@/components/player/PlayerBar";
 import FullPlayer from "@/components/player/FullPlayer";
 import UserPanel from "@/components/user/UserPanel";
+import { Logo } from "@/components/Logo";
 
 const NAV_LINKS = [
   { to: "/", label: "主页", icon: Home },
@@ -279,7 +280,8 @@ const RootLayout = () => {
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <Link to="/" className="shrink-0 text-sm font-bold tracking-wide">
+        <Link to="/" className="flex shrink-0 items-center gap-2 text-sm font-bold tracking-wide">
+          <Logo size={24} />
           MeT Music
         </Link>
         {/* 前进/后退(旧 MainNav router.go(±1);窄屏下让位给搜索框) */}
@@ -409,7 +411,10 @@ const RootLayout = () => {
           />
           <div className="absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col border-r border-[var(--met-border)] bg-[var(--met-bg)] py-3 shadow-2xl">
             <div className="mb-2 flex items-center justify-between px-4">
-              <span className="text-sm font-bold tracking-wide">MeT Music</span>
+              <span className="flex items-center gap-2 text-sm font-bold tracking-wide">
+                <Logo size={22} />
+                MeT Music
+              </span>
               <button
                 type="button"
                 title="关闭菜单"

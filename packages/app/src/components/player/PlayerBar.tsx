@@ -350,20 +350,14 @@ export default function PlayerBar() {
             {playTimeData.played}
           </span>
           <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="bar">
-            <input
-              type="range"
-              className="w-full cursor-pointer"
-              style={{ accentColor: "var(--met-primary)" }}
+            <Slider
+              value={barValue}
               min={0}
               max={100}
               step={0.1}
-              value={barValue}
-              aria-label="播放进度"
-              onChange={(e) => setDragBar(Number(e.target.value))}
-              onPointerUp={(e) => commitSeek(Number(e.currentTarget.value))}
-              onKeyUp={(e) => {
-                if (dragBar !== null) commitSeek(Number(e.currentTarget.value));
-              }}
+              ariaLabel="播放进度"
+              onValueChange={setDragBar}
+              onValueCommitted={commitSeek}
             />
           </SeekTooltipArea>
           <span
@@ -490,22 +484,19 @@ export default function PlayerBar() {
         >
           <VolumeIcon size={18} aria-hidden="true" />
         </button>
-        <input
-          type="range"
-          className="w-24 cursor-pointer"
-          style={{ accentColor: "var(--met-primary)" }}
-          min={0}
-          max={1}
-          step={0.01}
-          value={playVolume}
-          aria-label="音量"
-          onWheel={handleVolumeWheel}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            useStatusStore.setState({ playVolume: v });
-            setVolume(v);
-          }}
-        />
+        <div className="w-24" onWheel={handleVolumeWheel}>
+          <Slider
+            value={playVolume}
+            min={0}
+            max={1}
+            step={0.01}
+            ariaLabel="音量"
+            onValueChange={(v) => {
+              useStatusStore.setState({ playVolume: v });
+              setVolume(v);
+            }}
+          />
+        </div>
         <span
           className="w-9 shrink-0 text-right text-xs tabular-nums"
           style={{ color: "var(--met-fg-dim)" }}
