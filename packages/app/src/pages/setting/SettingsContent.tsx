@@ -43,7 +43,12 @@ const set = useSettingsStore.setState;
 const sections = ["常规", "桌面客户端", "播放", "歌词", "其他"] as const;
 type SectionName = (typeof sections)[number];
 
-const SettingsContent = () => {
+export interface SettingsContentProps {
+  /** 悬浮层内渲染时隐藏页内大标题(标题已在悬浮层 header 中) */
+  hideHeader?: boolean;
+}
+
+const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const settings = useSettingsStore();
   const coverTheme = useStatusStore((s) => s.coverTheme);
   const isHosted = useHostStore((s) => s.isHosted);
@@ -165,32 +170,36 @@ const SettingsContent = () => {
 
   return (
     <div ref={rootRef} className="mx-auto max-w-5xl px-8 py-8">
-      {/* 标题(对齐旧页:标题 + 版本号) */}
-      <div className="mb-5 flex items-end gap-3">
-        <h1 className="text-3xl font-bold text-[var(--met-fg)]">全局设置</h1>
-        <span className="pb-1 text-sm text-[var(--met-fg-dim)]">v{packageJson.version}</span>
-      </div>
+      {/* 标题(对齐旧页:标题 + 版本号;悬浮层内由 header 承担) */}
+      {!hideHeader && (
+        <div className="mb-5 flex items-end gap-3">
+          <h1 className="text-3xl font-bold text-[var(--met-fg)]">全局设置</h1>
+          <span className="pb-1 text-sm text-[var(--met-fg-dim)]">v{packageJson.version}</span>
+        </div>
+      )}
 
-      {/* 分区导航 */}
-      <div className="sticky top-0 z-10 -mx-2 mb-2 flex gap-1 rounded-xl bg-[var(--met-bg-elevated)] p-1">
-        {sections.map((name) => (
-          <button
-            key={name}
-            type="button"
-            onClick={() => scrollToSection(name)}
-            className={`flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-sm transition-colors ${
-              activeTab === name
-                ? "bg-[var(--met-bg-hover)] text-[var(--met-fg)]"
-                : "text-[var(--met-fg-dim)] hover:text-[var(--met-fg)]"
-            }`}
-          >
-            {name}
-          </button>
-        ))}
+      {/* 分区导航:全宽不透明底板遮住滚动内容,内层圆角 tab 组;激活态主色高亮 */}
+      <div className="sticky top-0 z-10 -mx-8 mb-4 bg-[var(--met-bg)] px-8 py-2">
+        <div className="flex gap-1 overflow-x-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-1 [scrollbar-width:none]">
+          {sections.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => scrollToSection(name)}
+              className={`flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${
+                activeTab === name
+                  ? "bg-[var(--met-primary)] font-medium text-[var(--met-bg)]"
+                  : "text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]"
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 常规 */}
-      <div ref={bindSection("常规")}>
+      <div className="scroll-mt-20" ref={bindSection("常规")}>
         <SettingSection title="常规">
           <SettingItem name="明暗模式">
             <Select
@@ -263,7 +272,7 @@ const SettingsContent = () => {
       </div>
 
       {/* 桌面客户端(Electron 专属,浏览器中置灰展示) */}
-      <div ref={bindSection("桌面客户端")}>
+      <div className="mt-8 scroll-mt-20" ref={bindSection("桌面客户端")}>
         <SettingSection title="桌面客户端" note={isHosted ? undefined : "桌面客户端生效"}>
           <SettingItem name="关闭软件提醒弹窗" tip="关闭软件时是否弹窗询问" dimmed={!isHosted}>
             <Switch
@@ -292,7 +301,7 @@ const SettingsContent = () => {
       </div>
 
       {/* 播放 */}
-      <div ref={bindSection("播放")}>
+      <div className="mt-8 scroll-mt-20" ref={bindSection("播放")}>
         <SettingSection title="播放">
           <SettingItem
             name="在线播放音质"
@@ -454,20 +463,18 @@ const SettingsContent = () => {
       </div>
 
       {/* 歌词 */}
-      <div ref={bindSection("歌词")}>
+      <div className="mt-8 scroll-mt-20" ref={bindSection("歌词")}>
         <SettingSection title="歌词">
-          <SettingItem
-            name="歌词文本大小"
-            column
-            tip={
+          <SettingItem name="歌词文本大小" column tip="播放页歌词的文字大小">
+            {/* 预览独立成行,避免与标题/说明重叠 */}
+            <div className="mb-3 flex min-h-[72px] items-center justify-center overflow-hidden rounded-lg bg-[var(--met-bg)] px-4 py-2">
               <span
-                className="font-bold text-[var(--met-fg)]"
+                className="lyric-font truncate font-bold text-[var(--met-fg)]"
                 style={{ fontSize: `${settings.lyricsFontSize}px` }}
               >
                 我是一句歌词
               </span>
-            }
-          >
+            </div>
             <Slider
               value={settings.lyricsFontSize}
               min={36}
@@ -697,7 +704,7 @@ const SettingsContent = () => {
       </div>
 
       {/* 其他 */}
-      <div ref={bindSection("其他")}>
+      <div className="mt-8 scroll-mt-20" ref={bindSection("其他")}>
         <SettingSection title="其他">
           <SettingItem name="默认加载数量" tip="在部分列表页面显示几条数据">
             <Select
@@ -719,7 +726,8 @@ const SettingsContent = () => {
       </div>
 
       {/* 关于 */}
-      <SettingSection title="关于">
+      <div className="mt-8">
+        <SettingSection title="关于">
         <SettingItem name="版本" tip="MeT-Music">
           <span className="text-sm text-[var(--met-fg-dim)]">v{packageJson.version}</span>
         </SettingItem>
@@ -729,6 +737,7 @@ const SettingsContent = () => {
           </Button>
         </SettingItem>
       </SettingSection>
+      </div>
 
       {/* 程序重置确认弹窗(对齐旧 $dialog.warning) */}
       <Dialog

@@ -210,9 +210,9 @@ const SidebarContent = ({
           设置
         </button>
       </nav>
-      {/* 用户面板(导航项之下的滚动区) */}
+      {/* 用户面板(导航项之下的滚动区;窄栏 compact 形态) */}
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-1">
-        <UserPanel />
+        <UserPanel compact={isRail} />
       </div>
       {/* 隔空播放(房外入口,任意时刻可开;房内 roomUuid 版在 RoomHeader) */}
       <div className={`shrink-0 border-t border-[var(--met-border)] pt-2 ${isRail ? "flex justify-center px-1" : "px-2"}`}>

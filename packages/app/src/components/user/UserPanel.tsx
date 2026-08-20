@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { ChevronDown, Heart, ListMusic, LogOut } from "lucide-react";
+import { ChevronDown, Heart, ListMusic, LogIn, LogOut } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { getCoverUrl } from "@/lib/formatData";
@@ -62,7 +62,7 @@ const rowCls = (active: boolean) =>
  * 挂载约定:default export、无 props,由侧栏(RootLayout)直接渲染;
  * 纵向布局,窄空间友好,歌单列表区域自带 overflow-y-auto。
  */
-export default function UserPanel() {
+export default function UserPanel({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
   const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
   const userId = useSiteDataStore((s) => s.userData.userId);
@@ -95,13 +95,31 @@ export default function UserPanel() {
     if (uid != null && uid !== "") void setUserProfile();
   }, []);
 
-  // 未登录:登录入口
+  // 未登录:登录入口(窄栏 compact 用圆形图标钮,避免两字竖排挤压)
   if (!userLoginStatus) {
     return (
-      <div className="flex flex-col gap-2 px-2 py-2">
-        <Button variant="outline" size="sm" className="w-full" onClick={() => setLoginOpen(true)}>
-          登录
-        </Button>
+      <div className={`flex flex-col gap-2 py-2 ${compact ? "items-center px-0" : "px-2"}`}>
+        {compact ? (
+          <button
+            type="button"
+            title="登录"
+            aria-label="登录"
+            onClick={() => setLoginOpen(true)}
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] text-[var(--met-fg-dim)] transition-colors hover:border-[var(--met-primary)] hover:text-[var(--met-primary)]"
+          >
+            <LogIn className="h-4 w-4" aria-hidden />
+          </button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setLoginOpen(true)}
+          >
+            <LogIn className="h-4 w-4" aria-hidden />
+            登录
+          </Button>
+        )}
         <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
       </div>
     );
