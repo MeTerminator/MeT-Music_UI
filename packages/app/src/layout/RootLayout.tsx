@@ -217,19 +217,6 @@ const SidebarContent = ({
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-1">
         <UserPanel compact={isRail} />
       </div>
-      {/* 隔空播放(房外入口,任意时刻可开;房内 roomUuid 版在 RoomHeader) */}
-      <div className={`shrink-0 border-t border-[var(--met-border)] pt-2 ${isRail ? "flex justify-center px-1" : "px-2"}`}>
-        <button
-          type="button"
-          title="隔空播放"
-          onClick={openRemotePlayer}
-          className={`${itemBase} cursor-pointer ${itemIdle}`}
-        >
-          <Airplay className="h-5 w-5" aria-hidden />
-          {/* 窄栏下仅图标,避免四字折行 */}
-          {isRail ? null : "隔空播放"}
-        </button>
-      </div>
     </>
   );
 };
@@ -330,6 +317,16 @@ const RootLayout = () => {
               <span className="hidden sm:inline">一起听中</span>
             </Link>
           ) : null}
+          {/* 隔空播放(房外入口,任意时刻可开;房内 roomUuid 版在 RoomHeader) */}
+          <button
+            type="button"
+            title="隔空播放"
+            aria-label="隔空播放"
+            onClick={openRemotePlayer}
+            className={iconBtnCls}
+          >
+            <Airplay className="h-5 w-5" aria-hidden />
+          </button>
           {/* 明暗一键切换(位于宿主按钮区左侧) */}
           <button
             type="button"
