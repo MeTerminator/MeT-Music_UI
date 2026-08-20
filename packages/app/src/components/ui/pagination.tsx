@@ -75,7 +75,7 @@ export const Pagination = ({ page, pageCount, onChange, className = "" }: Pagina
             onClick={() => goTo(item)}
             className={`${itemBaseCls} cursor-pointer ${
               item === page
-                ? "bg-[var(--met-primary)] font-medium text-black"
+                ? "bg-[var(--met-primary)] font-medium text-[var(--met-primary-fg)]"
                 : "text-[var(--met-fg)] hover:bg-[var(--met-bg-hover)]"
             }`}
           >

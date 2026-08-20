@@ -375,7 +375,7 @@ export default function SongList({
               }
               onPlayAll();
             }}
-            className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-4 py-1.5 text-sm font-medium text-[var(--met-bg)] transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-4 py-1.5 text-sm font-medium text-[var(--met-primary-fg)] transition-opacity hover:opacity-90"
           >
             <Play size={16} fill="currentColor" aria-hidden="true" />
             播放全部

@@ -320,7 +320,7 @@ export default function PlayerBar() {
           <button
             type="button"
             className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full"
-            style={{ background: "var(--met-primary)", color: "var(--met-bg)" }}
+            style={{ background: "var(--met-primary)", color: "var(--met-primary-fg)" }}
             title={playState ? "暂停" : "播放"}
             onClick={() => void playOrPause()}
           >

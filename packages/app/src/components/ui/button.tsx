@@ -5,7 +5,7 @@ type Size = "sm" | "md" | "icon";
 
 const variantCls: Record<Variant, string> = {
   primary:
-    "bg-[var(--met-primary)] text-black hover:opacity-90 disabled:opacity-40",
+    "bg-[var(--met-primary)] text-[var(--met-primary-fg)] hover:opacity-90 disabled:opacity-40",
   ghost:
     "bg-transparent text-[var(--met-fg)] hover:bg-[var(--met-bg-hover)] disabled:opacity-40",
   outline:

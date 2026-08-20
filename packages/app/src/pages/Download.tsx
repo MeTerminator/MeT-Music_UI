@@ -498,7 +498,7 @@ const Download = () => {
                   onClick={() => setLyricTab(item.type)}
                   className={`cursor-pointer rounded-full px-3 py-1 text-xs transition-colors ${
                     item.type === activeLyricType
-                      ? "bg-[var(--met-primary)] text-black"
+                      ? "bg-[var(--met-primary)] text-[var(--met-primary-fg)]"
                       : "bg-[var(--met-bg)] text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)]"
                   }`}
                 >

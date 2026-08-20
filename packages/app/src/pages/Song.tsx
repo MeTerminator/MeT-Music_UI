@@ -271,7 +271,7 @@ export default function SongDetail() {
             <button
               type="button"
               onClick={() => void handlePlay()}
-              className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-5 py-2 text-sm font-medium text-[var(--met-bg)] transition-opacity hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-5 py-2 text-sm font-medium text-[var(--met-primary-fg)] transition-opacity hover:opacity-90"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
                 <path d="M8 5v14l11-7z" />

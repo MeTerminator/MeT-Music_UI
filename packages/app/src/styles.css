@@ -8,6 +8,8 @@
   --met-fg: #e6e6ea;
   --met-fg-dim: #9a9aa3;
   --met-primary: #6dd48c;
+  /* 主色上的文字色:亮主色配深字、深主色反白,theme.ts 按主色亮度动态覆写 */
+  --met-primary-fg: #10241a;
   --met-border: #2c2c33;
   --met-danger: #e5484d;
   /* 封面取色主题(coverTheme)运行期覆写以下变量,见 platform/theme.ts */

@@ -4,6 +4,7 @@ import { Link, useSearch } from "@tanstack/react-router";
 import { api, formatNumber, getTimestampTime, playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
+import { FuzzySearchInput } from "@/components/list/FuzzySearchInput";
 
 /** 专辑详情(formatData album 分支) */
 interface AlbumDetail {
@@ -132,20 +133,14 @@ export default function Album() {
           <button
             type="button"
             onClick={() => void playAllSongs(songs, "normal")}
-            className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-4 py-1.5 text-sm font-medium text-[var(--met-bg)] transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-full bg-[var(--met-primary)] px-4 py-1.5 text-sm font-medium text-[var(--met-primary-fg)] transition-opacity hover:opacity-90"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
               <path d="M8 5v14l11-7z" />
             </svg>
             播放全部
           </button>
-          <input
-            type="text"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="模糊搜索"
-            className="h-9 w-36 rounded-full border border-[var(--met-border)] bg-transparent px-4 text-sm text-[var(--met-fg)] outline-none transition-all placeholder:text-[var(--met-fg-dim)] focus:w-52 focus:border-[var(--met-primary)]"
-          />
+          <FuzzySearchInput value={keyword} onChange={setKeyword} />
         </div>
       ) : null}
 

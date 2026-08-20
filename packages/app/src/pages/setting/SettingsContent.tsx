@@ -188,7 +188,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onClick={() => scrollToSection(name)}
               className={`flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${
                 activeTab === name
-                  ? "bg-[var(--met-primary)] font-medium text-[var(--met-bg)]"
+                  ? "bg-[var(--met-primary)] font-medium text-[var(--met-primary-fg)]"
                   : "text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]"
               }`}
             >

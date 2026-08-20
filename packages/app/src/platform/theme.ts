@@ -26,6 +26,27 @@ interface CoverThemeSide {
 
 const COVER_VARS = ["--met-cover-primary", "--met-cover-bg", "--met-cover-shade"] as const;
 
+/**
+ * 主色上的文字色:按主色相对亮度(0-255 域)选深字或反白,
+ * 深色封面取色作按钮底时文字才不会糊(阈值 160 经验值,偏向反白)
+ */
+const primaryFgFor = (r: number, g: number, b: number): string =>
+  0.2126 * r + 0.7152 * g + 0.0722 * b > 160 ? "#10241a" : "#ffffff";
+
+/** 解析 "#rrggbb" 或 "r, g, b" 为 RGB 三元组;解析失败返回 null */
+const parseRgb = (color: string): [number, number, number] | null => {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const parts = color.split(",").map((p) => Number(p.trim()));
+  if (parts.length === 3 && parts.every((p) => Number.isFinite(p))) {
+    return parts as [number, number, number];
+  }
+  return null;
+};
+
 /** 同步 <meta name="theme-color"> 为当前 --met-bg 计算值(不存在则创建) */
 const syncMetaThemeColor = (): void => {
   const bg = getComputedStyle(document.documentElement).getPropertyValue("--met-bg").trim();
@@ -58,6 +79,8 @@ const applyTheme = (): void => {
     // primary 字段是 HCT tone 100+ 的纯白,不能作为强调色。
     style.setProperty("--met-primary", `rgb(${side.bg})`);
     style.setProperty("--met-cover-primary", `rgb(${side.bg})`);
+    const rgb = parseRgb(side.bg);
+    if (rgb) style.setProperty("--met-primary-fg", primaryFgFor(...rgb));
     if (side.mainBg) style.setProperty("--met-cover-bg", `rgb(${side.mainBg})`);
     if (side.shade) style.setProperty("--met-cover-shade", `rgb(${side.shade})`);
   } else {
@@ -66,8 +89,11 @@ const applyTheme = (): void => {
     const preset = themeColorPresets[themeTypeName];
     if (preset) {
       style.setProperty("--met-primary", preset.primaryColor);
+      const rgb = parseRgb(preset.primaryColor);
+      if (rgb) style.setProperty("--met-primary-fg", primaryFgFor(...rgb));
     } else {
       style.removeProperty("--met-primary");
+      style.removeProperty("--met-primary-fg");
     }
     for (const v of COVER_VARS) style.removeProperty(v);
   }
