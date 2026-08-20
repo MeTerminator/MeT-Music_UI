@@ -1,4 +1,4 @@
-import axios, { type ApiResponse } from "./client";
+import { request, type ApiResponse } from "./client";
 
 /**
  * 用户部分
@@ -15,14 +15,10 @@ export const getUserPlaylist = (
   limit: number = 30,
   offset: number = 0,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/user/playlist",
-    params: {
-      uid,
-      limit,
-      offset,
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/user/playlist", {
+    uid,
+    limit,
+    offset,
+    timestamp: new Date().getTime(),
   });
 };

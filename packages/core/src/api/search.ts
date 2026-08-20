@@ -1,4 +1,4 @@
-import axios, { type ApiResponse } from "./client";
+import { request, type ApiResponse } from "./client";
 
 /**
  * 搜索部分
@@ -8,12 +8,8 @@ import axios, { type ApiResponse } from "./client";
  * 热搜列表 - 详细
  */
 export const getSearchHot = (): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/search/hot/detail",
-    params: {
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/search/hot/detail", {
+    timestamp: new Date().getTime(),
   });
 };
 
@@ -26,13 +22,9 @@ export const getSearchSuggest = (
   keywords: string,
   mobile: boolean = false,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/search/suggest",
-    params: {
-      keywords,
-      ...(mobile && { type: "mobile" }),
-    },
+  return request("GET", "/search/suggest", {
+    keywords,
+    ...(mobile && { type: "mobile" }),
   });
 };
 
@@ -49,14 +41,10 @@ export const getSearchRes = (
   offset: number = 0,
   type: number = 1,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/cloudsearch",
-    params: {
-      keywords,
-      limit,
-      offset,
-      type,
-    },
+  return request("GET", "/cloudsearch", {
+    keywords,
+    limit,
+    offset,
+    type,
   });
 };

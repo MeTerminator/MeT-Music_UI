@@ -1,4 +1,4 @@
-import axios, { type ApiResponse } from "./client";
+import { request, type ApiResponse } from "./client";
 
 /**
  * 歌单部分
@@ -9,13 +9,9 @@ import axios, { type ApiResponse } from "./client";
  * @param id - 歌单 id
  */
 export const getPlayListDetail = (id: number | string): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/playlist/detail",
-    params: {
-      id,
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/playlist/detail", {
+    id,
+    timestamp: new Date().getTime(),
   });
 };
 
@@ -30,14 +26,10 @@ export const getAllPlayList = (
   limit: number = 30,
   offset: number = 0,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/playlist/track/all",
-    params: {
-      id,
-      limit,
-      offset,
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/playlist/track/all", {
+    id,
+    limit,
+    offset,
+    timestamp: new Date().getTime(),
   });
 };

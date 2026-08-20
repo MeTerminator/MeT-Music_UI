@@ -1,4 +1,4 @@
-import axios, { type ApiResponse } from "./client";
+import { request, type ApiResponse } from "./client";
 
 /**
  * 专辑部分
@@ -9,12 +9,8 @@ import axios, { type ApiResponse } from "./client";
  * @param id - 专辑id
  */
 export const getAlbumDetail = (id: number | string): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/album",
-    params: {
-      id,
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/album", {
+    id,
+    timestamp: new Date().getTime(),
   });
 };

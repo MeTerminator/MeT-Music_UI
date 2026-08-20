@@ -1,4 +1,4 @@
-import axios, { type ApiResponse } from "./client";
+import { request, type ApiResponse } from "./client";
 
 /**
  * 视频
@@ -9,12 +9,8 @@ import axios, { type ApiResponse } from "./client";
  * @param mvid - MV ID
  */
 export const getVideoDetail = (mvid: number | string): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/mv/detail",
-    params: {
-      mvid,
-    },
+  return request("GET", "/mv/detail", {
+    mvid,
   });
 };
 
@@ -27,13 +23,8 @@ export const getVideoUrl = (
   id: number | string,
   r: string | number | null = null,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    hiddenBar: true,
-    url: "/mv/url",
-    params: {
-      id,
-      r,
-    },
+  return request("GET", "/mv/url", {
+    id,
+    r,
   });
 };

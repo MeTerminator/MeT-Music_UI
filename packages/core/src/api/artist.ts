@@ -1,4 +1,4 @@
-import axios, { type ApiResponse } from "./client";
+import { request, type ApiResponse } from "./client";
 
 /**
  * 歌手部分
@@ -9,12 +9,8 @@ import axios, { type ApiResponse } from "./client";
  * @param id - 歌手id
  */
 export const getArtistDetail = (id: number | string): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/artist/detail",
-    params: {
-      id,
-    },
+  return request("GET", "/artist/detail", {
+    id,
   });
 };
 
@@ -23,13 +19,9 @@ export const getArtistDetail = (id: number | string): Promise<ApiResponse> => {
  * @param id - 歌手id
  */
 export const getArtistSongs = (id: number | string): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/artists",
-    params: {
-      id,
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/artists", {
+    id,
+    timestamp: new Date().getTime(),
   });
 };
 
@@ -46,16 +38,12 @@ export const getArtistAllSongs = (
   offset: number = 0,
   order: string = "hot",
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/artist/songs",
-    params: {
-      id,
-      limit,
-      offset,
-      order,
-      timestamp: new Date().getTime(),
-    },
+  return request("GET", "/artist/songs", {
+    id,
+    limit,
+    offset,
+    order,
+    timestamp: new Date().getTime(),
   });
 };
 
@@ -70,14 +58,10 @@ export const getArtistAblums = (
   limit: number = 50,
   offset: number = 0,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/artist/album",
-    params: {
-      id,
-      limit,
-      offset,
-    },
+  return request("GET", "/artist/album", {
+    id,
+    limit,
+    offset,
   });
 };
 
@@ -92,13 +76,9 @@ export const getArtistVideos = (
   limit: number = 50,
   offset: number = 0,
 ): Promise<ApiResponse> => {
-  return axios({
-    method: "GET",
-    url: "/artist/mv",
-    params: {
-      id,
-      limit,
-      offset,
-    },
+  return request("GET", "/artist/mv", {
+    id,
+    limit,
+    offset,
   });
 };
