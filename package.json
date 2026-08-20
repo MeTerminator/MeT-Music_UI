@@ -1,6 +1,6 @@
 {
   "name": "met-music",
-  "version": "6.0.0-alpha.0",
+  "version": "6.0.0",
   "description": "MeT-Music workspace(@met/core + @met/app)",
   "private": true,
   "author": "MeTerminator",
