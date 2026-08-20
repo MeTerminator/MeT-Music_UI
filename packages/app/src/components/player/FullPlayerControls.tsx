@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
+  ListMusic,
   Loader2,
   Maximize2,
   Minimize2,
@@ -19,6 +20,7 @@ import {
 import { changePlayIndex, playOrPause, setSeek, setVolume, setVolumeMute } from "@met/core";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { Slider } from "../ui/slider";
+import SeekTooltipArea from "./SeekTooltip";
 
 /** 播放模式循环顺序(与 PlayerBar 保持一致) */
 const NEXT_SONG_MODE: Record<
@@ -57,6 +59,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
   const playTimeData = useStatusStore((s) => s.playTimeData);
   const playSongMode = useStatusStore((s) => s.playSongMode);
   const playVolume = useStatusStore((s) => s.playVolume);
+  const playListShow = useStatusStore((s) => s.playListShow);
 
   /** 拖动中的进度(0-100);null 表示未拖动,由 playTimeData.bar 驱动 */
   const [dragBar, setDragBar] = useState<number | null>(null);
@@ -95,6 +98,15 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
     setDragBar(null);
   };
 
+  /** 上下曲 300ms 防抖(对照旧 MainControl.vue changePlayIndexDebounce:重复点击忽略) */
+  const lastSwitchRef = useRef(0);
+  const switchSong = (type: "prev" | "next") => {
+    const now = Date.now();
+    if (now - lastSwitchRef.current < 300) return;
+    lastSwitchRef.current = now;
+    void changePlayIndex(type, true);
+  };
+
   const iconBtnCls =
     "flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-transparent text-white/80 transition-all hover:scale-105 hover:bg-white/10 hover:text-white active:scale-100";
 
@@ -117,14 +129,16 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
         {/* 进度条 */}
         <div className="flex items-center gap-3 text-xs tabular-nums text-white/60">
           <span className="shrink-0">{playTimeData.played}</span>
-          <Slider
-            value={barValue}
-            min={0}
-            max={100}
-            step={0.1}
-            onValueChange={(v) => setDragBar(v)}
-            onValueCommitted={commitSeek}
-          />
+          <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="overlay">
+            <Slider
+              value={barValue}
+              min={0}
+              max={100}
+              step={0.1}
+              onValueChange={(v) => setDragBar(v)}
+              onValueCommitted={commitSeek}
+            />
+          </SeekTooltipArea>
           <span className="shrink-0">{playTimeData.durationTime}</span>
         </div>
 
@@ -150,7 +164,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               type="button"
               className={`${iconBtnCls} rounded-full text-xl`}
               title="上一曲"
-              onClick={() => void changePlayIndex("prev", true)}
+              onClick={() => switchSong("prev")}
             >
               <SkipBack size={20} aria-hidden="true" />
             </button>
@@ -173,7 +187,7 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               type="button"
               className={`${iconBtnCls} rounded-full text-xl`}
               title="下一曲"
-              onClick={() => void changePlayIndex("next", true)}
+              onClick={() => switchSong("next")}
             >
               <SkipForward size={20} aria-hidden="true" />
             </button>
@@ -201,6 +215,15 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
                 }}
               />
             </div>
+            <button
+              type="button"
+              className={iconBtnCls}
+              style={playListShow ? { color: "var(--met-primary)" } : undefined}
+              title="播放列表"
+              onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
+            >
+              <ListMusic size={20} aria-hidden="true" />
+            </button>
             <button
               type="button"
               className={iconBtnCls}

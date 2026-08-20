@@ -36,12 +36,28 @@ body {
   margin: 0;
   background: var(--met-bg);
   color: var(--met-fg);
-  font-family:
+  /* --met-site-font 由 platform/fonts.ts 按 settings.siteFont 写入(html 上) */
+  font-family: var(
+    --met-site-font,
     "HarmonyOS Sans SC",
     "PingFang SC",
     system-ui,
     -apple-system,
     "Segoe UI",
-    sans-serif;
+    sans-serif
+  );
   -webkit-font-smoothing: antialiased;
+}
+
+/* 歌词字体工具类(settings.lyricFont → platform/fonts.ts 写入变量;
+   歌词容器〔LyricScroll / FullPlayer 等〕加 .lyric-font 即生效) */
+.lyric-font {
+  font-family: var(
+    --met-lyric-font,
+    "HarmonyOS Sans SC",
+    "PingFang SC",
+    system-ui,
+    sans-serif
+  );
+  font-weight: var(--met-lyric-font-weight, bold);
 }

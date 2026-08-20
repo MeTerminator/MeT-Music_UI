@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { ChevronDown, Heart, ListMusic, LogOut } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,13 @@ interface UserDetail {
   };
 }
 
-const rowCls =
+/** 歌单行样式;active = 当前路由正在展示该歌单(高亮) */
+const rowCls = (active: boolean) =>
   "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left " +
-  "text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)]";
+  "text-sm transition-colors " +
+  (active
+    ? "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]"
+    : "text-[var(--met-fg)] hover:bg-[var(--met-bg-hover)]");
 
 /**
  * 侧栏用户面板(旧 Modal/Login.vue 登录入口 + Global/Menu.vue 用户歌单分组)。
@@ -39,6 +43,12 @@ export default function UserPanel() {
   const playlists = useSiteDataStore(
     (s) => s.userLikeData.playlists,
   ) as RawUserPlaylist[];
+
+  // 当前路由高亮:/playlist?id=xx 高亮对应歌单行,/like-songs 高亮「喜欢的音乐」
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const search = useSearch({ strict: false }) as { id?: string };
+  const activePlaylistId = pathname === "/playlist" ? search.id : undefined;
+  const likeActive = pathname === "/like-songs";
 
   const [loginOpen, setLoginOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -101,7 +111,7 @@ export default function UserPanel() {
       {likePlaylist ? (
         <button
           type="button"
-          className={rowCls}
+          className={rowCls(likeActive)}
           onClick={() => void navigate({ to: "/like-songs" })}
         >
           <Heart size={16} className="shrink-0 text-[var(--met-primary)]" />
@@ -128,7 +138,7 @@ export default function UserPanel() {
               <button
                 key={pl.id}
                 type="button"
-                className={rowCls}
+                className={rowCls(activePlaylistId === String(pl.id))}
                 title={pl.name}
                 onClick={() =>
                   void navigate({ to: "/playlist", search: { id: String(pl.id) } })

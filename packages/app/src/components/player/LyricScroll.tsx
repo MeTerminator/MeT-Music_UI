@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef } from "react";
-import { setSeek } from "@met/core";
+import { fadePlayOrPause, setSeek, type YrcLine } from "@met/core";
 import { useMusicStore } from "../../stores/music";
 import { useStatusStore } from "../../stores/status";
 import { useSettingsStore } from "../../stores/settings";
+import KtvLine from "./KtvLine";
 
-/** 统一后的展示行(lrc 直接映射;yrc 将逐字拼接为整行文本) */
+/** 统一后的展示行(lrc 直接映射;yrc 附带原始逐字行供 KTV 染色) */
 interface DisplayLine {
   time: number;
   text: string;
   tran?: string;
   roma?: string;
+  /** yrc 模式下的原始逐字行,当前行开启逐字动画时使用 */
+  yrc?: YrcLine;
 }
 
 /** 歌词区上下渐隐遮罩(对齐旧 Lyric.vue 的 mask 渐变) */
@@ -57,6 +60,7 @@ export default function LyricScroll() {
   const playSongLyricIndex = useStatusStore((s) => s.playSongLyricIndex);
   const pureLyricMode = useStatusStore((s) => s.pureLyricMode);
   const showYrc = useSettingsStore((s) => s.showYrc);
+  const showYrcAnimation = useSettingsStore((s) => s.showYrcAnimation);
   const showTransl = useSettingsStore((s) => s.showTransl);
   const showRoma = useSettingsStore((s) => s.showRoma);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
@@ -81,6 +85,7 @@ export default function LyricScroll() {
           .trimEnd(),
         tran: line.tran,
         roma: line.roma,
+        yrc: line,
       }));
     }
     return playSongLyric.lrc.map((line) => ({
@@ -121,7 +126,7 @@ export default function LyricScroll() {
   return (
     <div
       ref={containerRef}
-      className="h-full w-full overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="lyric-font h-full w-full overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{
         maskImage: LYRIC_MASK,
         WebkitMaskImage: LYRIC_MASK,
@@ -155,14 +160,31 @@ export default function LyricScroll() {
                 ? `blur(${Math.min(Math.abs(playSongLyricIndex - index) * 1.5, 10)}px)`
                 : undefined,
             }}
-            onClick={() => setSeek(line.time)}
+            onClick={() => {
+              // 行点击跳转;暂停态恢复播放(对照旧 Lyric.vue jumpSeek:房内不本地起播)
+              setSeek(line.time);
+              const status = useStatusStore.getState();
+              if (!status.playState && !status.isInRoom) fadePlayOrPause("play");
+            }}
           >
-            <span
-              className="break-words font-bold"
-              style={{ fontSize: lyricsFontSize, color: "#fff" }}
-            >
-              {line.text}
-            </span>
+            {/* 当前行 + 逐字数据 + 开启逐字动画:KTV 填充;否则整行文本(现行为) */}
+            {active && showYrcAnimation && line.yrc ? (
+              <KtvLine
+                line={line.yrc}
+                fontSize={lyricsFontSize}
+                activeColor="#fff"
+                inactiveColor="rgba(255,255,255,0.35)"
+                className="break-words font-bold"
+                longGlow
+              />
+            ) : (
+              <span
+                className="break-words font-bold"
+                style={{ fontSize: lyricsFontSize, color: "#fff" }}
+              >
+                {line.text}
+              </span>
+            )}
             {showTranLine && line.tran && (
               <span className="mt-2 text-white/60" style={{ fontSize: tranFontSize }}>
                 {line.tran}

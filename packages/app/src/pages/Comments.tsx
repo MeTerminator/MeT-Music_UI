@@ -62,6 +62,8 @@ export default function Comments() {
         content: c.Content || "",
         time: c.PubTime ? Number(c.PubTime) * 1000 : undefined,
         likedCount: c.PraiseNum ?? 0,
+        // 接口若带当前用户点赞态则透传(QQ 评论字段 IsPraised;缺省视为未点赞)
+        liked: Boolean(c.IsPraised),
         location: c.Location || undefined,
         replies: Array.isArray(c.SubComments)
           ? // eslint-disable-next-line @typescript-eslint/no-explicit-any

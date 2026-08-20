@@ -31,8 +31,8 @@ const History = () => {
             </Button>
           </div>
 
-          {/* 列表 */}
-          <SongList songs={historyPlaylist} showCover={false} />
+          {/* 列表(insert:仅播当前曲,不整表替换,对照旧 playSong 的 /history 分支) */}
+          <SongList songs={historyPlaylist} showCover={false} playBehavior="insert" />
 
           {/* 底部提示 */}
           <div className="mt-6 flex items-center gap-3 text-xs text-[var(--met-fg-dim)]">

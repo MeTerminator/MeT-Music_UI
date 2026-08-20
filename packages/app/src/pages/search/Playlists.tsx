@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
+import CoverPlayButton from "@/components/cover/CoverPlayButton";
 import { Pagination } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
 
@@ -72,32 +73,37 @@ export default function Playlists() {
     <div>
       <div className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {playlists.map((pl) => (
-          <button
-            key={String(pl.id)}
-            type="button"
-            onClick={() => navigate({ to: "/playlist", search: { id: String(pl.id) } })}
-            className="group flex flex-col text-left"
-          >
-            <div className="relative aspect-square overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
-              {pl.coverSize?.s ? (
-                <img
-                  src={pl.coverSize.s}
-                  alt=""
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-              ) : null}
-            </div>
-            <span
-              className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
-              title={pl.name}
+          <div key={String(pl.id)} className="group relative flex flex-col">
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/playlist", search: { id: String(pl.id) } })}
+              className="flex w-full flex-col text-left"
             >
-              {pl.name}
-            </span>
-            {typeof pl.count === "number" ? (
-              <span className="mt-0.5 text-xs text-[var(--met-fg-dim)]">{pl.count} 首</span>
-            ) : null}
-          </button>
+              <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
+                {pl.coverSize?.s ? (
+                  <img
+                    src={pl.coverSize.s}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : null}
+              </div>
+              <span
+                className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
+                title={pl.name}
+              >
+                {pl.name}
+              </span>
+              {typeof pl.count === "number" ? (
+                <span className="mt-0.5 text-xs text-[var(--met-fg-dim)]">{pl.count} 首</span>
+              ) : null}
+            </button>
+            {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
+              <CoverPlayButton id={pl.id} type="playlist" className="pointer-events-auto" />
+            </div>
+          </div>
         ))}
       </div>
 

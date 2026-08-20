@@ -12,6 +12,8 @@ export default function Songs() {
   const search = useSearch({ strict: false }) as { keywords?: string };
   const keywords = search.keywords ?? "";
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
+  // 对照旧 playSong:search 页且未开启 playSearch 时「仅播放当前歌曲」(insert)
+  const playSearch = useSettingsStore((s) => s.playSearch);
 
   const [page, setPage] = useState(1);
   // 关键词变化时回到第一页
@@ -55,6 +57,7 @@ export default function Songs() {
         loading={isLoading}
         onPlayAll={() => playAllSongs(songs, "normal")}
         indexOffset={(page - 1) * searchLoadSize}
+        playBehavior={playSearch ? "replace" : "insert"}
       />
       {/* 分页 */}
       <Pagination

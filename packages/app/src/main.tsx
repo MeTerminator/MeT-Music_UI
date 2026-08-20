@@ -5,6 +5,8 @@ import { RouterProvider } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { initPlayer } from "@met/core";
 import { initHostGlobals } from "./host";
+import { initOfflineHandler } from "./platform/offline";
+import { initGlobalShortcuts } from "./platform/shortcuts";
 import { initTheme } from "./platform/theme";
 import { setupPlayer } from "./player/setup";
 import { router } from "./router";
@@ -34,9 +36,11 @@ const bootstrapPlayback = (): void => {
 
 // 宿主契约全局与播放引擎装配(必须先于任何 UI 交互)
 initHostGlobals();
+initOfflineHandler();
 setupPlayer();
 initTheme();
 bootstrapPlayback();
+initGlobalShortcuts();
 
 // dev 调试出口
 if (import.meta.env.DEV) {

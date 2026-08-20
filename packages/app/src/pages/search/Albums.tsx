@@ -4,6 +4,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { api, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import { formatArtists } from "@/lib/format";
+import CoverPlayButton from "@/components/cover/CoverPlayButton";
 import { Pagination } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
 
@@ -77,34 +78,39 @@ export default function Albums() {
         {albums.map((album) => {
           const artistLine = formatArtists(album.artists);
           return (
-            <button
-              key={String(album.id)}
-              type="button"
-              onClick={() => navigate({ to: "/album", search: { id: String(album.id) } })}
-              className="group flex flex-col text-left"
-            >
-              <div className="relative aspect-square overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
-                {album.coverSize?.s ? (
-                  <img
-                    src={album.coverSize.s}
-                    alt=""
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : null}
-              </div>
-              <span
-                className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
-                title={album.name}
+            <div key={String(album.id)} className="group relative flex flex-col">
+              <button
+                type="button"
+                onClick={() => navigate({ to: "/album", search: { id: String(album.id) } })}
+                className="flex w-full flex-col text-left"
               >
-                {album.name}
-              </span>
-              {artistLine ? (
-                <span className="mt-0.5 line-clamp-1 text-xs text-[var(--met-fg-dim)]">
-                  {artistLine}
+                <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
+                  {album.coverSize?.s ? (
+                    <img
+                      src={album.coverSize.s}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : null}
+                </div>
+                <span
+                  className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
+                  title={album.name}
+                >
+                  {album.name}
                 </span>
-              ) : null}
-            </button>
+                {artistLine ? (
+                  <span className="mt-0.5 line-clamp-1 text-xs text-[var(--met-fg-dim)]">
+                    {artistLine}
+                  </span>
+                ) : null}
+              </button>
+              {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
+                <CoverPlayButton id={album.id} type="album" className="pointer-events-auto" />
+              </div>
+            </div>
           );
         })}
       </div>

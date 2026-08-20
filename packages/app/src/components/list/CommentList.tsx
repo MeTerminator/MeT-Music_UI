@@ -1,4 +1,8 @@
+import { useEffect, useRef, useState } from "react";
+import { Heart } from "lucide-react";
+import { toast } from "sonner";
 import { formatNumber, getCommentTime } from "@met/core";
+import { useSiteDataStore } from "@/stores/siteData";
 
 /** 规范化后的评论项(由页面从原始接口数据映射) */
 export interface CommentItem {
@@ -14,10 +18,18 @@ export interface CommentItem {
   time?: number;
   /** 点赞数 */
   likedCount?: number;
+  /** 当前用户是否已点赞(接口未提供时视为未点赞) */
+  liked?: boolean;
   /** IP / 地理位置 */
   location?: string;
   /** 子回复 */
   replies?: { nick: string; content: string }[];
+}
+
+/** 点赞本地覆盖(乐观切换后的 liked / 计数) */
+interface LikeOverride {
+  liked: boolean;
+  likedCount: number;
 }
 
 interface CommentListProps {
@@ -27,12 +39,56 @@ interface CommentListProps {
   loadingNum?: number;
 }
 
-/** 可复用评论列表(对照旧 components/List/CommentList.vue,精简为展示型组件) */
+/** 可复用评论列表(对照旧 components/List/CommentList.vue) */
 export default function CommentList({
   comments,
   loading = false,
   loadingNum = 8,
 }: CommentListProps) {
+  const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
+  // 点赞乐观覆盖(key: comment.id);列表数据变化(翻页/换歌)时清空
+  const [likeOverrides, setLikeOverrides] = useState<Record<string, LikeOverride>>({});
+  const lastLikeAtRef = useRef(0);
+
+  useEffect(() => {
+    setLikeOverrides({});
+  }, [comments]);
+
+  /**
+   * 点赞/取消点赞(对照旧 CommentList.vue toLikeComment:登录门槛 + 3s 节流 +
+   * 乐观计数增减与实心/空心切换)。
+   * 注:旧代码 import 的 @/api/comment(likeComment)在旧仓库中并不存在(死引用,
+   * 后端也无对应端点),故此处为纯前端本地切换,无请求、无需失败回滚;
+   * 若未来补齐端点,在此处发请求并在失败时用 setLikeOverrides 回滚即可。
+   */
+  const toLikeComment = (comment: CommentItem): void => {
+    if (!userLoginStatus) {
+      toast.warning("请登录后使用");
+      return;
+    }
+    const now = Date.now();
+    if (now - lastLikeAtRef.current < 3000) {
+      toast.warning("请稍后再操作");
+      return;
+    }
+    lastLikeAtRef.current = now;
+
+    const key = String(comment.id);
+    setLikeOverrides((prev) => {
+      const current = prev[key] ?? {
+        liked: comment.liked ?? false,
+        likedCount: comment.likedCount ?? 0,
+      };
+      return {
+        ...prev,
+        [key]: {
+          liked: !current.liked,
+          likedCount: Math.max(0, current.likedCount + (current.liked ? -1 : 1)),
+        },
+      };
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col gap-3">
@@ -63,7 +119,11 @@ export default function CommentList({
 
   return (
     <ul className="flex flex-col gap-3">
-      {comments.map((comment) => (
+      {comments.map((comment) => {
+        const override = likeOverrides[String(comment.id)];
+        const liked = override?.liked ?? comment.liked ?? false;
+        const likedCount = override?.likedCount ?? comment.likedCount ?? 0;
+        return (
         <li key={comment.id} className="flex gap-3 rounded-xl bg-[var(--met-bg-elevated)] p-4">
           {/* 头像 */}
           {comment.avatar ? (
@@ -108,16 +168,30 @@ export default function CommentList({
             {/* 时间 / 点赞 */}
             <div className="mt-2 flex items-center justify-between text-xs text-[var(--met-fg-dim)]">
               <span>{comment.time ? getCommentTime(comment.time) : ""}</span>
-              <span className="flex items-center gap-1">
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
-                  <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-                </svg>
-                {formatNumber(comment.likedCount ?? 0)}
-              </span>
+              <button
+                type="button"
+                onClick={() => toLikeComment(comment)}
+                aria-label={liked ? "取消点赞" : "点赞"}
+                aria-pressed={liked}
+                title={liked ? "取消点赞" : "点赞"}
+                className={`flex cursor-pointer items-center gap-1 transition-colors ${
+                  liked
+                    ? "text-[var(--met-primary)]"
+                    : "text-[var(--met-fg-dim)] hover:text-[var(--met-primary)]"
+                }`}
+              >
+                <Heart
+                  size={14}
+                  aria-hidden="true"
+                  fill={liked ? "currentColor" : "none"}
+                />
+                {liked ? likedCount : formatNumber(likedCount)}
+              </button>
             </div>
           </div>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

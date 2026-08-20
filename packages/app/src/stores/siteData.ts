@@ -57,6 +57,11 @@ export const useSiteDataStore = create<SiteDataState>()(
   ),
 );
 
+/** 清空搜索历史(旧 SearchHot.vue delSearchHistory 确认后 searchHistory = []) */
+export const clearSearchHistory = (): void => {
+  useSiteDataStore.setState({ searchHistory: [] });
+};
+
 /** 设置 userId(旧 siteData.setUserId) */
 export const setUserId = (userId: number | string): void => {
   useSiteDataStore.setState((s) => ({ userData: { ...s.userData, userId } }));

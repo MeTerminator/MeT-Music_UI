@@ -14,6 +14,8 @@ import { copyText } from "@/lib/clipboard";
 import { formatArtists } from "@/lib/format";
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
+import { useSettingsStore } from "@/stores/settings";
+import { useSiteDataStore } from "@/stores/siteData";
 import { addSong as ltAddSong } from "@/stores/listenTogether";
 import { ContextMenu } from "@/components/ui/context-menu";
 import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
@@ -32,7 +34,17 @@ interface SongListProps {
   filterKeyword?: string;
   /** 列表触底回调(IntersectionObserver 哨兵,预留分页加载) */
   onReachEnd?: () => void;
+  /**
+   * 双击/立即播放的语义(对照旧 SongList.playSong 的特殊分支):
+   * - "replace"(默认):整表替换播放列表并从被点击行播放;
+   * - "insert":仅将当前曲插入到下一首并播放(addSongToNext(song, true)),
+   *   不改动现有播放列表(旧 history 页 / search 页且未开启 playSearch 时的行为)。
+   */
+  playBehavior?: "replace" | "insert";
 }
+
+/** 播放行为(与 playBehavior prop 同型) */
+type PlayBehavior = NonNullable<SongListProps["playBehavior"]>;
 
 /** 歌手展示文本(空值兜底「未知歌手」) */
 const artistsText = (artists: Song["artists"]): string =>
@@ -62,12 +74,38 @@ const getMvId = (song: Song): string | null => {
   return null;
 };
 
+/** 歌曲付费类型(formatData 的 song.fee 字段;1=VIP,4=EP 数字专辑) */
+const getFee = (song: Song): number | null => {
+  const fee = (song as { fee?: unknown }).fee;
+  return typeof fee === "number" ? fee : null;
+};
+
+/** 歌曲是否带 TTML 逐词歌词标记(对照旧 tags-wrap 的 item.ttml === 1 判定) */
+const hasTtml = (song: Song): boolean => (song as { ttml?: unknown }).ttml === 1;
+
+/** 专辑 id(album 为对象且带 id 时可点击跳转专辑页) */
+const getAlbumId = (album: Song["album"]): string | null => {
+  if (album && typeof album === "object" && album.id != null) return String(album.id);
+  return null;
+};
+
+/** 徽标基础样式(与 MV 标签一致的小圆角描边徽标) */
+const tagBaseClassName =
+  "shrink-0 rounded-full border px-1.5 text-[10px] leading-4";
+
 /**
  * 列表定位播放(对照旧 SongList.vue 的 playSong 双击逻辑):
  * 整表设为播放列表,并从被点击行开始播放;再次操作当前播放行则切换播放/暂停。
  * 一起听房内(对齐旧 isInRoom 分支):不动本地播放列表,改为添加到共享队列。
+ * behavior === "insert" 时(旧 history 页 / search 页且未开启 playSearch 的
+ * 「仅播放当前歌曲」分支):addSongToNext(song, true) 插入下一首并播放,不整表替换。
  */
-const playFromList = async (list: Song[], song: Song, index: number): Promise<void> => {
+const playFromList = async (
+  list: Song[],
+  song: Song,
+  index: number,
+  behavior: PlayBehavior = "replace",
+): Promise<void> => {
   const playingId = useMusicStore.getState().playSongData?.id;
   if (playingId != null && playingId === song.id) {
     // 与旧实现一致:双击当前播放歌曲 → 播放/暂停切换(房内同样走此分支)
@@ -76,6 +114,14 @@ const playFromList = async (list: Song[], song: Song, index: number): Promise<vo
   }
   if (useStatusStore.getState().isInRoom) {
     ltAddSong(song);
+    return;
+  }
+  if (behavior === "insert") {
+    // 对照旧 playSong:addSongToNext(song, true) 后仍设 playSongData 并 initPlayer(true)
+    useStatusStore.setState({ playMode: "normal" });
+    addSongToNext(song, true);
+    useMusicStore.setState({ playSongData: song });
+    await initPlayer(true);
     return;
   }
   useStatusStore.setState({ playMode: "normal", playIndex: index });
@@ -103,9 +149,15 @@ export default function SongList({
   indexOffset = 0,
   filterKeyword,
   onReachEnd,
+  playBehavior = "replace",
 }: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
   const isInRoom = useStatusStore((s) => s.isInRoom);
+  // 用户 VIP 类型(对照旧 userData.detail?.profile?.vipType;11 为黑胶 VIP,不再显示 VIP 徽标)
+  const vipType = useSiteDataStore((s) => {
+    const profile = (s.userData.detail as { profile?: { vipType?: unknown } }).profile;
+    return typeof profile?.vipType === "number" ? profile.vipType : null;
+  });
   const navigate = useNavigate();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const reachEndRef = useRef<SongListProps["onReachEnd"]>(onReachEnd);
@@ -130,7 +182,7 @@ export default function SongList({
       {
         key: "play",
         label: "立即播放",
-        onSelect: () => void playFromList(displaySongs, song, index),
+        onSelect: () => void playFromList(displaySongs, song, index, playBehavior),
       },
       {
         key: "next-play",
@@ -170,7 +222,15 @@ export default function SongList({
         {
           key: "download",
           label: "下载歌曲",
-          onSelect: () => void navigate({ to: "/download", search: { id: songId } }),
+          // 对照旧 UrlDownloadSong:附带 music_quality=settings.songLevel(/download 路由已透传)
+          onSelect: () =>
+            void navigate({
+              to: "/download",
+              search: {
+                id: songId,
+                music_quality: useSettingsStore.getState().songLevel,
+              },
+            }),
         },
         {
           key: "share",
@@ -179,6 +239,13 @@ export default function SongList({
         },
       );
     }
+    // 同名搜索(对照旧 SongListDropdown,本地歌曲同样可用)
+    items.push({
+      key: "search-same-name",
+      label: "同名搜索",
+      onSelect: () =>
+        void navigate({ to: "/search/songs", search: { keywords: song.name } }),
+    });
     return items;
   };
 
@@ -259,13 +326,17 @@ export default function SongList({
           const isPlaying = playingId != null && playingId === song.id;
           const menuItems = rowMenuItems(song, index);
           const mvId = getMvId(song);
+          const fee = getFee(song);
+          const albumId = getAlbumId(song.album);
           return (
             <ContextMenu
               key={`${song.id}-${index}`}
               items={menuItems}
               render={
                 <li
-                  onDoubleClick={() => void playFromList(displaySongs, song, index)}
+                  onDoubleClick={() =>
+                    void playFromList(displaySongs, song, index, playBehavior)
+                  }
                   className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
                     isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
                   }`}
@@ -304,6 +375,30 @@ export default function SongList({
                   >
                     {song.name}
                   </div>
+                  {/* TTML 标签(对照旧 tags-wrap 的 item.ttml === 1,逐词歌词标记) */}
+                  {hasTtml(song) ? (
+                    <span
+                      className={`${tagBaseClassName} border-[var(--met-fg-dim)] text-[var(--met-fg-dim)]`}
+                    >
+                      TTML
+                    </span>
+                  ) : null}
+                  {/* VIP 标签(对照旧 tags-wrap:fee === 1 且用户非黑胶 VIP(vipType !== 11)时显示) */}
+                  {fee === 1 && vipType !== 11 ? (
+                    <span
+                      className={`${tagBaseClassName} border-[var(--met-danger)] text-[var(--met-danger)]`}
+                    >
+                      VIP
+                    </span>
+                  ) : null}
+                  {/* EP 标签(对照旧 tags-wrap:fee === 4,数字专辑) */}
+                  {fee === 4 ? (
+                    <span
+                      className={`${tagBaseClassName} border-[var(--met-danger)] text-[var(--met-danger)]`}
+                    >
+                      EP
+                    </span>
+                  ) : null}
                   {/* MV 标签(对照旧 SongList 的 MV tag,点击跳转视频播放页) */}
                   {mvId ? (
                     <button
@@ -320,14 +415,57 @@ export default function SongList({
                     </button>
                   ) : null}
                 </div>
+                {/* 歌手(对照旧 .artist:数组时逐个可点跳转 /artist?id=,"/" 分隔) */}
                 <div className="truncate text-xs text-[var(--met-fg-dim)]">
-                  {artistsText(song.artists)}
+                  {Array.isArray(song.artists) && song.artists.length ? (
+                    song.artists.map((ar, arIndex) => (
+                      <span key={`${ar.id ?? ar.name}-${arIndex}`}>
+                        {arIndex > 0 ? <span aria-hidden="true"> / </span> : null}
+                        {ar.id != null ? (
+                          <button
+                            type="button"
+                            title={`查看歌手 ${ar.name}`}
+                            className="cursor-pointer transition-colors hover:text-[var(--met-primary)]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void navigate({
+                                to: "/artist",
+                                search: { id: String(ar.id) },
+                              });
+                            }}
+                            onDoubleClick={(e) => e.stopPropagation()}
+                          >
+                            {ar.name}
+                          </button>
+                        ) : (
+                          ar.name
+                        )}
+                      </span>
+                    ))
+                  ) : (
+                    artistsText(song.artists)
+                  )}
                 </div>
               </div>
-              {/* 专辑 */}
+              {/* 专辑(对照旧 .album:album 为对象且带 id 时可点跳转 /album?id=) */}
               {showAlbum ? (
                 <div className="hidden w-1/4 min-w-0 truncate text-xs text-[var(--met-fg-dim)] sm:block">
-                  {albumText(song.album)}
+                  {albumId ? (
+                    <button
+                      type="button"
+                      title={`查看专辑 ${albumText(song.album)}`}
+                      className="max-w-full cursor-pointer truncate text-left transition-colors hover:text-[var(--met-primary)]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate({ to: "/album", search: { id: albumId } });
+                      }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    >
+                      {albumText(song.album)}
+                    </button>
+                  ) : (
+                    albumText(song.album)
+                  )}
                 </div>
               ) : null}
               {/* 悬停操作:立即播放 / 下一首播放(窄屏隐藏,由行尾「⋯」菜单承接) */}
@@ -336,7 +474,7 @@ export default function SongList({
                   type="button"
                   aria-label={isInRoom ? `添加到一起听 ${song.name}` : `播放 ${song.name}`}
                   title={isInRoom ? "添加到一起听" : "立即播放"}
-                  onClick={() => void playFromList(displaySongs, song, index)}
+                  onClick={() => void playFromList(displaySongs, song, index, playBehavior)}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
                 >
                   <Play size={18} aria-hidden="true" />

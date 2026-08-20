@@ -7,14 +7,31 @@
  * - 回车 / 点击「直接搜索」行 → /search/songs?keywords=(写入搜索历史,对齐旧 toSearch "song");
  * - 歌手 → /artist?id=,专辑 → /album?id=,歌单 → /playlist?id=(对齐旧 toSearch 各分支);
  * - 单曲 → /song?id=(旧组件此分支将歌曲 id 当关键词整词搜索,属旧实现缺陷,此处改跳歌曲详情页);
- * - Esc / 点击外部关闭;上下键循环高亮 + 回车选中(默认高亮「直接搜索」行)。
+ * - Esc / 点击外部关闭;上下键循环高亮 + 回车选中(默认高亮「直接搜索」行);
+ * - 聚焦且关键词为空时显示聚焦面板(旧 SearchHot.vue):搜索历史 tag 流
+ *   (settings.showSearchHistory 开启且非空时,带「清空」二次确认)+ 热搜榜
+ *   (api.getSearchHot,10 分钟缓存对齐旧 getCacheData("searchHot", 10)),
+ *   点击任意条目即整词搜索。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "@met/core";
-import { Disc, ListMusic, Loader2, MicVocal, Music, Search } from "lucide-react";
-import { useSiteDataStore } from "@/stores/siteData";
+import {
+  Disc,
+  Flame,
+  History,
+  ListMusic,
+  Loader2,
+  MicVocal,
+  Music,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { useSettingsStore } from "@/stores/settings";
+import { clearSearchHistory, useSiteDataStore } from "@/stores/siteData";
 
 /** 建议分组配置(对齐旧 searchSuggestionsType:songs/artists/albums/playlists) */
 const SUGGEST_GROUPS = {
@@ -41,6 +58,18 @@ type SuggestResult = Partial<Record<SuggestGroupKey, SuggestItem[]>> & {
   order?: string[];
 };
 
+/** 热搜条目(字段按 /search/hot/detail 实际响应,宽松容错) */
+interface SearchHotItem {
+  searchWord?: string;
+  /** 热度(接口返回字符串数字) */
+  score?: number | string;
+  /** 副标题描述 */
+  content?: string;
+  /** 1 = HOT,其他非 0 = UP(仅 iconUrl 存在时展示,对齐旧 SearchHot.vue) */
+  iconType?: number;
+  iconUrl?: string | null;
+}
+
 /** 键盘导航的扁平条目:首位固定为「直接搜索」行 */
 type FlatEntry =
   | { kind: "direct" }
@@ -65,6 +94,10 @@ const SearchSuggest = () => {
   const [open, setOpen] = useState(false);
   const [debounced, setDebounced] = useState("");
   const [highlight, setHighlight] = useState(0);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+
+  const searchHistory = useSiteDataStore((s) => s.searchHistory);
+  const showSearchHistory = useSettingsStore((s) => s.showSearchHistory);
 
   const kw = keywords.trim();
 
@@ -80,6 +113,22 @@ const SearchSuggest = () => {
     enabled: debounced.length >= 1,
     staleTime: 5 * 60 * 1000,
   });
+
+  // 热搜榜(聚焦且无关键词时拉取;10 分钟缓存对齐旧 getCacheData("searchHot", 10))
+  const { data: hotRaw } = useQuery({
+    queryKey: ["searchHot"],
+    queryFn: () => api.getSearchHot(),
+    enabled: open && kw.length === 0,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // 原始接口字段访问豁免点(data 体为热搜数组)
+  const hotItems = useMemo<SearchHotItem[]>(() => {
+    const list = (hotRaw as any)?.data; // eslint-disable-line @typescript-eslint/no-explicit-any
+    return Array.isArray(list)
+      ? (list as SearchHotItem[]).filter((item) => item?.searchWord)
+      : [];
+  }, [hotRaw]);
 
   // 原始接口字段访问豁免点
   const result = useMemo<SuggestResult | undefined>(() => {
@@ -114,9 +163,9 @@ const SearchSuggest = () => {
     setHighlight(0);
   }, [flat.length, debounced]);
 
-  // 点击外部关闭
+  // 点击外部关闭(清空历史确认框展示期间豁免:Dialog 为 Portal,位于 rootRef 之外)
   useEffect(() => {
-    if (!open) return;
+    if (!open || clearDialogOpen) return;
     const onPointerDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -124,7 +173,7 @@ const SearchSuggest = () => {
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open]);
+  }, [open, clearDialogOpen]);
 
   const close = () => {
     setOpen(false);
@@ -191,6 +240,11 @@ const SearchSuggest = () => {
   const showPanel = open && kw.length >= 1;
   const loading = isFetching && sections.length === 0;
   const empty = !isFetching && result !== undefined && sections.length === 0;
+
+  // 聚焦面板(旧 SearchHot.vue):关键词为空时展示历史 + 热搜,任一有内容才显示
+  const historyVisible = showSearchHistory && searchHistory.length > 0;
+  const showFocusPanel =
+    open && kw.length === 0 && (historyVisible || hotItems.length > 0);
 
   return (
     <div ref={rootRef} className="relative w-full max-w-md">
@@ -292,6 +346,122 @@ const SearchSuggest = () => {
           })}
         </div>
       )}
+
+      {/* 聚焦面板:搜索历史 + 热搜榜(旧 SearchHot.vue,聚焦且关键词为空时) */}
+      {showFocusPanel && (
+        <div className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
+          {/* 搜索历史 */}
+          {historyVisible && (
+            <div className="mb-4">
+              <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-[var(--met-primary)]">
+                <History className="h-3.5 w-3.5" aria-hidden />
+                搜索历史
+                <button
+                  type="button"
+                  title="清空搜索历史"
+                  onClick={() => setClearDialogOpen(true)}
+                  className="ml-auto flex cursor-pointer items-center gap-1 rounded-full px-1.5 py-0.5 font-normal text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  清空
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 px-1">
+                {searchHistory.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => goDirectSearch(item)}
+                    className="max-w-full cursor-pointer truncate rounded-full bg-[var(--met-bg-hover)] px-3 py-1 text-[13px] text-[var(--met-fg)] transition-colors hover:text-[var(--met-primary)]"
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 热搜榜 */}
+          {hotItems.length > 0 && (
+            <div>
+              <div className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-[var(--met-primary)]">
+                <Flame className="h-3.5 w-3.5" aria-hidden />
+                热搜榜
+              </div>
+              {hotItems.map((item, index) => (
+                <button
+                  key={`${index}-${item.searchWord}`}
+                  type="button"
+                  onClick={() => goDirectSearch(item.searchWord ?? "")}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--met-bg-hover)]"
+                >
+                  <span
+                    className={`w-7 shrink-0 text-center text-base font-bold ${
+                      index < 3 ? "text-[var(--met-primary)]" : "text-[var(--met-fg-dim)]"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center">
+                      <span className="truncate text-sm text-[var(--met-fg)]">
+                        {item.searchWord}
+                      </span>
+                      {item.iconUrl && (
+                        <span
+                          className={`ml-2 shrink-0 rounded-full px-1.5 text-[10px] font-bold ${
+                            item.iconType === 1
+                              ? "bg-[var(--met-danger)]/15 text-[var(--met-danger)]"
+                              : "bg-[var(--met-primary)]/15 text-[var(--met-primary)]"
+                          }`}
+                        >
+                          {item.iconType === 1 ? "HOT" : "UP"}
+                        </span>
+                      )}
+                      {item.score != null && item.score !== "" && (
+                        <span className="ml-auto shrink-0 pl-2 text-xs text-[var(--met-fg-dim)] italic">
+                          {item.score}
+                        </span>
+                      )}
+                    </span>
+                    {item.content && (
+                      <span className="mt-0.5 line-clamp-2 block text-xs text-[var(--met-fg-dim)]">
+                        {item.content}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 清空历史二次确认(文案对照旧 $dialog.warning) */}
+      <Dialog
+        open={clearDialogOpen}
+        onOpenChange={setClearDialogOpen}
+        title="删除历史"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                clearSearchHistory();
+                setClearDialogOpen(false);
+              }}
+            >
+              确认
+            </Button>
+          </>
+        }
+      >
+        确认删除全部的搜索历史？这将无法恢复！
+      </Dialog>
     </div>
   );
 };

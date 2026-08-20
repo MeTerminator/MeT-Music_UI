@@ -8,6 +8,8 @@ export interface SpectrumProps {
   visible: boolean;
   /** 频谱高度(px),默认 60 */
   height?: number;
+  /** 柱色(FullPlayer 由 coverTheme 主题色驱动传入),缺省回退白色系 */
+  color?: string;
 }
 
 /**
@@ -15,7 +17,11 @@ export interface SpectrumProps {
  * 数据源为 status.spectrumsData(AnalyserNode 的 getByteFrequencyData,0-255),
  * 每帧更新,降采样为 64 条取段内均值。
  */
-export default function Spectrum({ visible, height = 60 }: SpectrumProps) {
+export default function Spectrum({
+  visible,
+  height = 60,
+  color = "rgba(255, 255, 255, 0.35)",
+}: SpectrumProps) {
   const spectrumsData = useStatusStore((s) => s.spectrumsData);
 
   if (spectrumsData.length === 0) return null;
@@ -50,7 +56,7 @@ export default function Spectrum({ visible, height = 60 }: SpectrumProps) {
           style={{
             maxWidth: 10,
             height: `${Math.max((value / 255) * 100, 3)}%`,
-            background: "rgba(255, 255, 255, 0.35)",
+            background: color,
           }}
         />
       ))}

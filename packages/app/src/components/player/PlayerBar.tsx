@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Ellipsis,
@@ -31,6 +31,8 @@ import { useSettingsStore } from "../../stores/settings";
 import { copyText } from "@/lib/clipboard";
 import { formatArtists, getCoverUrl } from "./format";
 import PlaylistDrawer from "./PlaylistDrawer";
+import SeekTooltipArea from "./SeekTooltip";
+import KtvLine from "./KtvLine";
 
 /** 播放模式循环顺序(对齐旧 MainControl.vue:列表循环 → 随机播放 → 单曲循环) */
 const NEXT_SONG_MODE: Record<
@@ -74,6 +76,7 @@ export default function PlayerBar() {
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
   const bottomLyricShow = useSettingsStore((s) => s.bottomLyricShow);
   const showYrc = useSettingsStore((s) => s.showYrc);
+  const showYrcAnimation = useSettingsStore((s) => s.showYrcAnimation);
   const showPlaylistCount = useSettingsStore((s) => s.showPlaylistCount);
 
   const navigate = useNavigate();
@@ -88,14 +91,15 @@ export default function PlayerBar() {
   const modeMeta = SONG_MODE_META[playSongMode];
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
 
-  // 底栏歌词:当前歌词行文本(yrc 优先拼接逐字,其次 lrc 整行)
-  const lyricLine =
-    playSongLyric.hasYrc && showYrc
-      ? (playSongLyric.yrc[playSongLyricIndex]?.content ?? [])
-          .map((word) => word.content + (word.endsWithSpace ? " " : ""))
-          .join("")
-      : playSongLyric.lrc[playSongLyricIndex]?.content ?? "";
-  // 对齐旧逻辑:开启底栏歌词 && 播放中 && 有当前行 时展示歌词,否则展示歌手
+  // 底栏歌词:当前逐字行(showYrc 时优先)与整行文本回退
+  const yrcLine =
+    playSongLyric.hasYrc && showYrc ? playSongLyric.yrc[playSongLyricIndex] : undefined;
+  const lyricLine = yrcLine
+    ? yrcLine.content
+        .map((word) => word.content + (word.endsWithSpace ? " " : ""))
+        .join("")
+    : playSongLyric.lrc[playSongLyricIndex]?.content ?? "";
+  // 对齐旧逻辑:开启底栏歌词 && 播放中 && 有当前行 时展示歌词,否则展示歌手(暂停回退歌手)
   const showBottomLyric =
     bottomLyricShow && playState && playSongLyricIndex >= 0 && lyricLine.length > 0;
 
@@ -103,6 +107,15 @@ export default function PlayerBar() {
     const { duration } = useStatusStore.getState().playTimeData;
     setSeek((percent / 100) * duration);
     setDragBar(null);
+  };
+
+  /** 上下曲 300ms 防抖(对照旧 MainControl.vue changePlayIndexDebounce:重复点击忽略) */
+  const lastSwitchRef = useRef(0);
+  const switchSong = (type: "prev" | "next") => {
+    const now = Date.now();
+    if (now - lastSwitchRef.current < 300) return;
+    lastSwitchRef.current = now;
+    void changePlayIndex(type, true);
   };
 
   /** 播放模式切换(toast 提示模式名,对齐旧交互) */
@@ -214,10 +227,19 @@ export default function PlayerBar() {
           {showBottomLyric ? (
             <div
               key={playSongLyricIndex}
-              className="truncate text-xs"
+              className="lyric-font truncate text-xs"
               style={{ color: "var(--met-fg-dim)" }}
             >
-              {lyricLine}
+              {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本 */}
+              {yrcLine && showYrcAnimation ? (
+                <KtvLine
+                  line={yrcLine}
+                  activeColor="var(--met-primary)"
+                  inactiveColor="var(--met-fg-dim)"
+                />
+              ) : (
+                lyricLine
+              )}
             </div>
           ) : (
             artistsText && (
@@ -237,7 +259,7 @@ export default function PlayerBar() {
             className="cursor-pointer bg-transparent"
             style={{ color: "var(--met-fg)" }}
             title="上一曲"
-            onClick={() => void changePlayIndex("prev", true)}
+            onClick={() => switchSong("prev")}
           >
             <SkipBack size={18} aria-hidden="true" />
           </button>
@@ -261,7 +283,7 @@ export default function PlayerBar() {
             className="cursor-pointer bg-transparent"
             style={{ color: "var(--met-fg)" }}
             title="下一曲"
-            onClick={() => void changePlayIndex("next", true)}
+            onClick={() => switchSong("next")}
           >
             <SkipForward size={18} aria-hidden="true" />
           </button>
@@ -273,21 +295,23 @@ export default function PlayerBar() {
           >
             {playTimeData.played}
           </span>
-          <input
-            type="range"
-            className="w-full cursor-pointer"
-            style={{ accentColor: "var(--met-primary)" }}
-            min={0}
-            max={100}
-            step={0.1}
-            value={barValue}
-            aria-label="播放进度"
-            onChange={(e) => setDragBar(Number(e.target.value))}
-            onPointerUp={(e) => commitSeek(Number(e.currentTarget.value))}
-            onKeyUp={(e) => {
-              if (dragBar !== null) commitSeek(Number(e.currentTarget.value));
-            }}
-          />
+          <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="bar">
+            <input
+              type="range"
+              className="w-full cursor-pointer"
+              style={{ accentColor: "var(--met-primary)" }}
+              min={0}
+              max={100}
+              step={0.1}
+              value={barValue}
+              aria-label="播放进度"
+              onChange={(e) => setDragBar(Number(e.target.value))}
+              onPointerUp={(e) => commitSeek(Number(e.currentTarget.value))}
+              onKeyUp={(e) => {
+                if (dragBar !== null) commitSeek(Number(e.currentTarget.value));
+              }}
+            />
+          </SeekTooltipArea>
           <span
             className="w-10 shrink-0 text-xs tabular-nums"
             style={{ color: "var(--met-fg-dim)" }}

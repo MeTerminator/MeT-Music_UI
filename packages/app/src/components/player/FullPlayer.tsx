@@ -7,18 +7,51 @@ import {
 import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
 import { X } from "lucide-react";
-import { setSeek, type AMLine } from "@met/core";
+import { useNavigate } from "@tanstack/react-router";
+import { setSeek, type AMLine, type Artist } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
 import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
 import LyricScroll from "./LyricScroll";
+import PlayerCover from "./PlayerCover";
 import Spectrum from "./Spectrum";
 
 /** 歌词区上下渐隐遮罩(对齐旧 AMLyric.vue / Lyric.vue) */
 const LYRIC_MASK =
   "linear-gradient(180deg, hsla(0,0%,100%,0) 0, hsla(0,0%,100%,0.6) 5%, #fff 10%, #fff 75%, hsla(0,0%,100%,0.6) 85%, hsla(0,0%,100%,0))";
+
+/** 单侧封面主题色(status.coverTheme 的 light/dark 侧,值为 "r, g, b" 字符串) */
+interface CoverThemeSide {
+  primary?: string;
+  shade?: string;
+  shadeTwo?: string;
+  bg?: string;
+  mainBg?: string;
+}
+
+/**
+ * animation 背景(对照旧 FullPlayer.vue 417-451 行 CSS):
+ * 四象限大图 blur(80px)+contrast(1.75),各自不同时长 rotate 动画。
+ */
+const ANIMATION_BG_QUADRANTS: {
+  pos: CSSProperties;
+  duration: number;
+  reverse: boolean;
+}[] = [
+  { pos: { top: 0, left: 0 }, duration: 62, reverse: false },
+  { pos: { left: 0, bottom: 0 }, duration: 55, reverse: true },
+  { pos: { bottom: "50%", right: 0 }, duration: 58, reverse: true },
+  { pos: { bottom: 0, right: 0 }, duration: 65, reverse: false },
+];
+
+const FULL_PLAYER_CSS = `
+@keyframes met-fp-cover-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+`;
 
 /**
  * AMLL 流体背景的封面地址(对齐旧 FullPlayer.vue 的 AmllAlbum computed):
@@ -95,6 +128,7 @@ export default function FullPlayer() {
 
 function FullPlayerInner() {
   const coverBackground = useStatusStore((s) => s.coverBackground);
+  const coverTheme = useStatusStore((s) => s.coverTheme);
   const playState = useStatusStore((s) => s.playState);
   const playSeekMs = useStatusStore((s) => s.playSeekMs);
   const playerControlShow = useStatusStore((s) => s.playerControlShow);
@@ -103,12 +137,15 @@ function FullPlayerInner() {
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
 
   const playerBackgroundType = useSettingsStore((s) => s.playerBackgroundType);
+  const playCoverType = useSettingsStore((s) => s.playCoverType);
+  const themeType = useSettingsStore((s) => s.themeType);
   const amllPlayerBackgroundFlowSpeed = useSettingsStore((s) => s.amllPlayerBackgroundFlowSpeed);
   const useAMLyrics = useSettingsStore((s) => s.useAMLyrics);
   const showYrc = useSettingsStore((s) => s.showYrc);
   const useAMttmlDB = useSettingsStore((s) => s.useAMttmlDB);
   const lyricsAMttmlUseOffset = useSettingsStore((s) => s.lyricsAMttmlUseOffset);
   const lyricsAMOffset = useSettingsStore((s) => s.lyricsAMOffset);
+  const lyricsAMEndTimeOffset = useSettingsStore((s) => s.lyricsAMEndTimeOffset);
   const useAMSpring = useSettingsStore((s) => s.useAMSpring);
   const useAMScale = useSettingsStore((s) => s.useAMScale);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
@@ -219,9 +256,17 @@ function FullPlayerInner() {
   }, [playSongLyric.ttml]);
   const useTtml = useAMLyrics && Boolean(playSongLyric.hasTtml) && useAMttmlDB && ttmlLines.length > 0;
   const useYrcAM = !useTtml && useAMLyrics && playSongLyric.hasYrc && showYrc;
-  const amLines = useTtml
-    ? ttmlLines
-    : ((useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? []);
+  // 非 TTML 的 yrcAM/lrcAM:行 endTime 减去 lyricsAMEndTimeOffset
+  // (对照旧 AMLyric.vue 127-130;TTML 路径不做此偏移,保持上方深拷贝分支不变)
+  const plainAMLines = useMemo<AMLine[]>(() => {
+    const source = (useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? [];
+    if (!lyricsAMEndTimeOffset) return source;
+    return source.map((line) => ({
+      ...line,
+      endTime: line.endTime - lyricsAMEndTimeOffset,
+    }));
+  }, [useYrcAM, playSongLyric.yrcAM, playSongLyric.lrcAM, lyricsAMEndTimeOffset]);
+  const amLines = useTtml ? ttmlLines : plainAMLines;
   const amLyricMode = useTtml ? "ttml" : useYrcAM ? "yrc" : "lrc";
   // 旧 isHasLrc 规则:lrc 首行存在且行数 > 4
   const hasPlainLyric = Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
@@ -258,10 +303,13 @@ function FullPlayerInner() {
 
   // ===== 封面与背景 =====
   const coverSmall = playSongData.coverSize?.s || playSongData.localCover || playSongData.cover;
-  const coverLarge =
-    playSongData.coverSize?.l || playSongData.localCover || playSongData.cover || coverSmall;
   const amllAlbum = toAmllAlbumUrl(coverSmall);
   const artistsText = formatArtists(playSongData.artists);
+  const artistList: Artist[] | null = Array.isArray(playSongData.artists)
+    ? playSongData.artists
+    : null;
+  const albumData =
+    playSongData.album && typeof playSongData.album !== "string" ? playSongData.album : null;
   const albumText = playSongData.album
     ? typeof playSongData.album === "string"
       ? playSongData.album
@@ -270,21 +318,56 @@ function FullPlayerInner() {
   const aliaText = typeof playSongData.alia === "string" ? playSongData.alia : "";
 
   const showAmllBackground = playerBackgroundType === "amllAnimation" && Boolean(amllAlbum);
+  const showAnimationBackground =
+    playerBackgroundType === "animation" && Boolean(coverSmall) && !showAmllBackground;
   const showBlurBackground =
     playerBackgroundType === "blur" && Boolean(coverSmall) && !showAmllBackground;
   const gradientBackground = coverBackground || "var(--met-bg)";
 
+  // ===== coverTheme 主题色驱动前景(对照旧 --cover-main-color 体系) =====
+  // 取当前明暗侧(settings.themeType)的 shadeTwo/primary("r, g, b" 字符串),
+  // 写入容器局部 CSS 变量;无 coverTheme 时回退现白色系
+  const coverThemeSide = (
+    coverTheme as { light?: CoverThemeSide; dark?: CoverThemeSide } | undefined
+  )?.[themeType];
+  const mainRgb = coverThemeSide?.shadeTwo || "255, 255, 255";
+  const primaryRgb = coverThemeSide?.primary || "255, 255, 255";
+  const amLyricColor = `rgba(${mainRgb}, 0.95)`; // 对照旧 AMLyric.vue 109-112
+
+  // ===== 全屏歌手/专辑跳转(对照旧 FullPlayer.vue 66-99 行) =====
+  const navigate = useNavigate();
+  const gotoArtist = useCallback(
+    (id: number | string) => {
+      useStatusStore.setState({ showFullPlayer: false });
+      void navigate({ to: "/artist", search: { id: String(id) } });
+    },
+    [navigate],
+  );
+  const gotoAlbum = useCallback(
+    (id: number | string) => {
+      useStatusStore.setState({ showFullPlayer: false });
+      void navigate({ to: "/album", search: { id: String(id) } });
+    },
+    [navigate],
+  );
+
   return (
     <div
       className="fixed inset-0 z-40 select-none overflow-hidden"
-      style={{
-        background: "var(--met-bg)",
-        cursor: playerControlShow ? "auto" : "none",
-      }}
+      style={
+        {
+          background: "var(--met-bg)",
+          cursor: playerControlShow ? "auto" : "none",
+          // 局部主题色变量(对照旧 --cover-main-color / --cover-second-color)
+          "--fp-main-rgb": mainRgb,
+          "--fp-primary-rgb": primaryRgb,
+        } as CSSProperties
+      }
       onMouseMove={pokeControls}
       onTouchStart={pokeControls}
       onMouseLeave={hideControls}
     >
+      <style>{FULL_PLAYER_CSS}</style>
       {/* ===== 背景层(按 settings.playerBackgroundType 分支) ===== */}
       <div className="absolute inset-0 z-0 overflow-hidden">
         {showAmllBackground ? (
@@ -298,6 +381,28 @@ function FullPlayerInner() {
               renderScale={0.5}
               hasLyric={hasLyric}
             />
+          </div>
+        ) : showAnimationBackground ? (
+          // animation:四象限旋转模糊大图(对照旧 FullPlayer.vue 417-451 行 CSS)
+          <div className="absolute inset-0" style={{ transform: "scale(1.3)" }}>
+            {ANIMATION_BG_QUADRANTS.map((q, i) => (
+              <img
+                key={i}
+                src={coverSmall}
+                alt=""
+                aria-hidden
+                className="absolute h-1/2 w-1/2 max-w-none object-cover"
+                style={{
+                  ...q.pos,
+                  filter: "blur(80px) contrast(1.75)",
+                  animation: `met-fp-cover-rotate ${q.duration}s linear infinite${
+                    q.reverse ? " reverse" : ""
+                  }`,
+                  // 暂停冻结
+                  animationPlayState: playState ? "running" : "paused",
+                }}
+              />
+            ))}
           </div>
         ) : showBlurBackground ? (
           <img
@@ -324,8 +429,10 @@ function FullPlayerInner() {
           {hasLyric && (
             <button
               type="button"
-              className={`flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm transition-all hover:bg-white/10 ${
-                pureLyricMode ? "bg-white/10 text-white" : "text-white/50 hover:text-white"
+              className={`flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm transition-all hover:bg-[rgba(var(--fp-main-rgb),0.14)] ${
+                pureLyricMode
+                  ? "bg-[rgba(var(--fp-main-rgb),0.14)] text-[rgb(var(--fp-main-rgb))]"
+                  : "text-[rgba(var(--fp-main-rgb),0.5)] hover:text-[rgb(var(--fp-main-rgb))]"
               }`}
               title={pureLyricMode ? "退出纯净歌词模式" : "纯净歌词模式"}
               onClick={() => useStatusStore.setState({ pureLyricMode: !pureLyricMode })}
@@ -336,7 +443,7 @@ function FullPlayerInner() {
         </div>
         <button
           type="button"
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg text-white/70 transition-all hover:scale-105 hover:bg-white/10 hover:text-white"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-lg text-[rgba(var(--fp-main-rgb),0.7)] transition-all hover:scale-105 hover:bg-[rgba(var(--fp-main-rgb),0.14)] hover:text-[rgb(var(--fp-main-rgb))]"
           title="关闭播放器 (Esc)"
           onClick={() => useStatusStore.setState({ showFullPlayer: false })}
         >
@@ -355,37 +462,88 @@ function FullPlayerInner() {
                 : "w-full max-md:px-6"
             }`}
           >
-            {coverLarge ? (
-              <img
-                src={coverLarge}
-                alt="封面"
-                className={`aspect-square w-full max-w-[420px] rounded-xl object-cover shadow-2xl ${
-                  hasLyric ? "max-md:max-w-[min(200px,32vh)]" : "max-md:max-w-[70vw]"
-                }`}
-              />
-            ) : (
-              <div
-                className={`aspect-square w-full max-w-[420px] rounded-xl ${
-                  hasLyric ? "max-md:max-w-[min(200px,32vh)]" : "max-md:max-w-[70vw]"
-                }`}
-                style={{ background: "rgba(255, 255, 255, 0.08)" }}
-              />
-            )}
+            {/* 封面(cover/record 两种模式,见 PlayerCover) */}
+            <PlayerCover
+              className={
+                playCoverType === "record"
+                  ? `max-w-[min(46vh,420px)] ${
+                      hasLyric ? "max-md:max-w-[min(180px,30vh)]" : "max-md:max-w-[60vw]"
+                    }`
+                  : `max-w-[420px] ${
+                      hasLyric ? "max-md:max-w-[min(200px,32vh)]" : "max-md:max-w-[70vw]"
+                    }`
+              }
+            />
             <div className="w-full max-w-[420px] text-center">
-              <div className="truncate text-2xl font-bold text-white max-md:text-lg">
+              <div
+                className="truncate text-2xl font-bold max-md:text-lg"
+                style={{ color: "rgb(var(--fp-main-rgb))" }}
+              >
                 {playSongData.name || "未知曲目"}
               </div>
               {aliaText && (
-                <div className="mt-1 truncate text-base text-white/60 max-md:text-sm">
+                <div
+                  className="mt-1 truncate text-base max-md:text-sm"
+                  style={{ color: "rgba(var(--fp-main-rgb), 0.6)" }}
+                >
                   {aliaText}
                 </div>
               )}
-              <div className="mt-2 truncate text-sm text-white/70 max-md:mt-1 max-md:text-xs">
-                {artistsText || "未知艺术家"}
+              {/* 歌手:有 id 时可点跳转 /artist(对照旧 FullPlayer.vue 66-99 行) */}
+              <div
+                className="mt-2 truncate text-sm max-md:mt-1 max-md:text-xs"
+                style={{ color: "rgba(var(--fp-main-rgb), 0.7)" }}
+              >
+                {artistList && artistList.length > 0
+                  ? artistList.map((ar, index) => (
+                      <span key={`${ar.id ?? "no-id"}-${index}`}>
+                        {index > 0 && <span> / </span>}
+                        {ar.id != null ? (
+                          <span
+                            role="link"
+                            tabIndex={0}
+                            className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              gotoArtist(ar.id as number | string);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") gotoArtist(ar.id as number | string);
+                            }}
+                          >
+                            {ar.name}
+                          </span>
+                        ) : (
+                          <span>{ar.name}</span>
+                        )}
+                      </span>
+                    ))
+                  : artistsText || "未知艺术家"}
               </div>
+              {/* 专辑:album.id 存在时可点跳转 /album */}
               {albumText && (
-                <div className="mt-1 truncate text-sm text-white/50 max-md:hidden">
-                  {albumText}
+                <div
+                  className="mt-1 truncate text-sm max-md:hidden"
+                  style={{ color: "rgba(var(--fp-main-rgb), 0.5)" }}
+                >
+                  {albumData?.id != null ? (
+                    <span
+                      role="link"
+                      tabIndex={0}
+                      className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        gotoAlbum(albumData.id as number | string);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") gotoAlbum(albumData.id as number | string);
+                      }}
+                    >
+                      {albumText}
+                    </span>
+                  ) : (
+                    albumText
+                  )}
                 </div>
               )}
             </div>
@@ -416,11 +574,12 @@ function FullPlayerInner() {
                     // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
                     key={`${playSongData.id}-${amLyricMode}-${amLines.length}`}
                     ref={lyricPlayerRef}
-                    className="h-full w-full"
+                    className="lyric-font h-full w-full"
                     style={
                       {
                         fontSize: `${lyricsFontSize}px`,
-                        "--amll-lp-color": "rgba(255, 255, 255, 0.95)",
+                        // 对照旧 AMLyric.vue 109-112:coverTheme shadeTwo rgba 0.95
+                        "--amll-lp-color": amLyricColor,
                       } as CSSProperties
                     }
                     lyricLines={amLines}
@@ -446,7 +605,7 @@ function FullPlayerInner() {
       {/* ===== 底部:频谱(窄屏隐藏)+ 悬浮控制条 ===== */}
       {showSpectrums && (
         <div className="max-md:hidden">
-          <Spectrum visible={!playerControlShow} />
+          <Spectrum visible={!playerControlShow} color={`rgba(${mainRgb}, 0.35)`} />
         </div>
       )}
       <FullPlayerControls onKeepVisible={keepControlsVisible} />

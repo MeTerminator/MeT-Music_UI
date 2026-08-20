@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import { api, getTimestampTime } from "@met/core";
 import formatData from "@/lib/formatData";
+import CoverPlayButton from "@/components/cover/CoverPlayButton";
 import { PrevNextPager } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
 
@@ -75,28 +76,33 @@ export default function Albums() {
       {/* 专辑栅格 */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {albums.map((album, index) => (
-          <Link
-            key={`${album.id}-${index}`}
-            to="/album"
-            search={{ id: album.id != null ? String(album.id) : undefined }}
-            className="group flex flex-col"
-          >
-            <img
-              src={album.coverSize?.m}
-              alt=""
-              loading="lazy"
-              className="aspect-square w-full rounded-xl bg-[var(--met-bg-elevated)] object-cover transition-transform group-hover:scale-[1.02]"
-            />
-            <span
-              className="mt-2 truncate text-sm text-[var(--met-fg)] transition-colors group-hover:text-[var(--met-primary)]"
-              title={album.name}
+          <div key={`${album.id}-${index}`} className="group relative flex flex-col">
+            <Link
+              to="/album"
+              search={{ id: album.id != null ? String(album.id) : undefined }}
+              className="flex flex-col"
             >
-              {album.name || "未知专辑"}
-            </span>
-            <span className="mt-0.5 truncate text-xs text-[var(--met-fg-dim)]">
-              {album.publishTime ? getTimestampTime(album.publishTime) : ""}
-            </span>
-          </Link>
+              <img
+                src={album.coverSize?.m}
+                alt=""
+                loading="lazy"
+                className="aspect-square w-full rounded-xl bg-[var(--met-bg-elevated)] object-cover transition-transform group-hover:scale-[1.02]"
+              />
+              <span
+                className="mt-2 truncate text-sm text-[var(--met-fg)] transition-colors group-hover:text-[var(--met-primary)]"
+                title={album.name}
+              >
+                {album.name || "未知专辑"}
+              </span>
+              <span className="mt-0.5 truncate text-xs text-[var(--met-fg-dim)]">
+                {album.publishTime ? getTimestampTime(album.publishTime) : ""}
+              </span>
+            </Link>
+            {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
+              <CoverPlayButton id={album.id} type="album" className="pointer-events-auto" />
+            </div>
+          </div>
         ))}
       </div>
       {/* 分页 */}
