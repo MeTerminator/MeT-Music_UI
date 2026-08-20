@@ -8,7 +8,7 @@ import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
 import { X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { setSeek, type AMLine, type Artist } from "@met/core";
+import { fadePlayOrPause, setSeek, type AMLine, type Artist } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
@@ -288,7 +288,21 @@ function FullPlayerInner() {
   }, [pokeControls]);
 
   const onLyricLineClick = useCallback((e: LyricLineMouseEvent) => {
-    setSeek(e.line.getLine().startTime / 1000);
+    const startMs = e.line.getLine().startTime;
+    setSeek(startMs / 1000);
+    // 暂停态点击恢复播放(对齐 LyricScroll 路径;房内不本地起播)
+    const status = useStatusStore.getState();
+    if (!status.playState && !status.isInRoom) fadePlayOrPause("play");
+    // AMLL 靠连续的时间推进重排;seek(尤其暂停态)必须显式立即对位,
+    // 否则滚动停留在旧行、当前行落在视界之外,视觉上"歌词消失",
+    // 直到自然行进两三行后才自行校正。官方流程:
+    // resetScroll → setCurrentTime(ms, isSeek=true) → calcLayout
+    const core = lyricPlayerRef.current?.lyricPlayer;
+    if (core) {
+      core.resetScroll();
+      core.setCurrentTime(startMs, true);
+      void core.calcLayout(true, true);
+    }
   }, []);
 
   // ===== 歌词数据 =====

@@ -248,8 +248,11 @@ export default function LyricScroll() {
               setSeek(line.time);
               const status = useStatusStore.getState();
               if (!status.playState && !status.isInRoom) fadePlayOrPause("play");
-              // 点击即明确定位意图:清除手动滚动保持并强制滚到该行,
-              // 否则 seek 后的中间态索引会把列表拽向旧播放行
+              // 乐观更新歌词索引:真实播放 seek 有缓冲延迟,索引若停在旧行,
+              // 点击行连同视口内所有行都会按距离被 blur 到不可读
+              // (引擎下一拍按新进度重算,结果一致)
+              useStatusStore.setState({ playSongLyricIndex: index });
+              // 点击即明确定位意图:清除手动滚动保持并强制滚到该行
               manualHoldRef.current = false;
               window.clearTimeout(manualTimerRef.current);
               scrollToLine(index, true);

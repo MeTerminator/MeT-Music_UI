@@ -288,7 +288,9 @@ const RootLayout = () => {
         <div className="hidden min-w-0 flex-1 md:block" aria-hidden />
         {/* 搜索框 + 搜索建议下拉:相对顶栏几何居中(左右两组宽度不等,
             流内居中会随剩余空间偏移);窄屏保持流内布局 */}
-        <div className="flex min-w-0 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
+        {/* md:z-40:transform 让本容器成为独立 stacking context,z 必须显式高于
+            body 下 z-30 的聚焦遮罩,否则输入框与面板会被全屏模糊盖住 */}
+        <div className="flex min-w-0 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:z-40 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
           <SearchSuggest />
         </div>
         <div className="flex shrink-0 items-center gap-1">
