@@ -217,7 +217,8 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
             className={compactCls(likeActive)}
             onClick={() => void navigate({ to: "/like-songs" })}
           >
-            <Heart size={18} className="text-[var(--met-primary)]" aria-hidden />
+            {/* 颜色随 compactCls 走(非激活 dim/激活主题色),与 rail 导航项一致 */}
+            <Heart size={18} aria-hidden />
           </button>
         ) : null}
         <button
