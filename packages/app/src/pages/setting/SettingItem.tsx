@@ -9,7 +9,7 @@ export interface SettingSectionProps {
 }
 
 export const SettingSection = ({ title, note, children }: SettingSectionProps) => (
-  <section>
+  <section className="pt-8 first:pt-0">
     <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-[var(--met-fg)]">
       <span className="h-4 w-1 rounded-full bg-[var(--met-primary)]" aria-hidden />
       {title}
