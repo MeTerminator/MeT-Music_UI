@@ -1,0 +1,27 @@
+{
+  "name": "@met/core",
+  "version": "6.0.0",
+  "private": true,
+  "description": "MeT-Music 框架无关核心:播放引擎、歌词解析、API 客户端、一起听协议",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@applemusic-like-lyrics/lyric": "^1.0.2",
+    "howler": "^2.2.4",
+    "ky": "^2.0.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.13",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

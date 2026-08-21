@@ -1,0 +1,148 @@
+import { useMemo } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { api, formatNumber } from "@met/core";
+import formatData from "@/lib/formatData";
+import { PrevNextPager } from "@/components/ui/pagination";
+import { useSettingsStore } from "@/stores/settings";
+
+/** MV 卡片数据(formatData mv 分支;coverSize 为字符串) */
+interface MvCard {
+  id?: number | string;
+  name?: string;
+  artists?: { name?: string }[] | string;
+  cover?: string;
+  coverSize?: string;
+  playCount?: number;
+}
+
+/** MV 歌手展示文本 */
+const mvArtistsText = (artists: MvCard["artists"]): string => {
+  if (!artists) return "";
+  if (typeof artists === "string") return artists;
+  return artists.map((a) => a?.name).filter(Boolean).join(" / ");
+};
+
+/** 歌手 - 视频(卡片栅格 + 分页,对照旧 views/Artist/videos.vue) */
+export default function Videos() {
+  const search = useSearch({ strict: false }) as { id?: number | string; page?: string };
+  const id = search.id;
+  const navigate = useNavigate();
+  const loadSize = useSettingsStore((s) => s.loadSize);
+  const pageSize = loadSize > 0 ? loadSize : 50;
+  // 页码以 URL 为准(旧契约 Number(query.page) || 1,parseInt 容错)
+  const parsedPage = Number.parseInt(search.page ?? "", 10);
+  const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
+  const setPage = (next: number) =>
+    void navigate({ to: ".", search: (prev) => ({ ...prev, page: String(next) }), replace: true });
+
+  // 切换歌手(id 变化)时回到第一页:站内所有更改 id 的导航均显式传 search
+  // (不携带 page),URL 天然回到第一页;不做 effect 重置(替代原 setPage(1)),
+  // 以保证浏览器回退/前进能按历史还原页码(对照旧 songs.vue 亦无重置逻辑)。
+
+  // 视频总数取自歌手详情(与旧实现的 mvSize prop 一致;query key 与布局层共享缓存)
+  const detailQuery = useQuery({
+    queryKey: ["artist", "detail", id],
+    queryFn: () => api.getArtistDetail(id as number | string),
+    enabled: id != null && id !== "",
+  });
+
+  const { data, isLoading, isError, isFetching } = useQuery({
+    queryKey: ["artist", "videos", id, page, pageSize],
+    queryFn: () => api.getArtistVideos(id as number | string, pageSize, (page - 1) * pageSize),
+    enabled: id != null && id !== "",
+    placeholderData: keepPreviousData,
+  });
+
+  // 原始接口字段访问豁免点
+  const raw = data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const detailRaw = (detailQuery.data as any)?.data; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const total: number = detailRaw?.artist?.mvSize ?? detailRaw?.videoCount ?? 0;
+  const videos = useMemo<MvCard[]>(
+    () => (formatData(raw?.mvs, "mv") ?? []) as unknown as MvCard[],
+    [raw],
+  );
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  if (isError) {
+    return (
+      <div className="py-16 text-center text-sm text-[var(--met-fg-dim)]">
+        获取歌手视频失败,请稍后重试
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="animate-pulse">
+            <div className="aspect-video w-full rounded-xl bg-[var(--met-bg-elevated)]" />
+            <div className="mt-2 h-3 w-3/4 rounded bg-[var(--met-bg-elevated)]" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!videos.length) {
+    return (
+      <div className="py-16 text-center text-sm text-[var(--met-fg-dim)]">当前歌手暂无视频</div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col pt-4">
+      {/* MV 栅格 */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {videos.map((video, index) => (
+          <button
+            key={`${video.id}-${index}`}
+            type="button"
+            onClick={() =>
+              video.id != null &&
+              navigate({ to: "/videos-player", search: { id: String(video.id) } })
+            }
+            className="group flex flex-col text-left"
+          >
+            <div className="relative w-full overflow-hidden rounded-xl">
+              <img
+                src={video.coverSize || video.cover}
+                alt=""
+                loading="lazy"
+                className="aspect-video w-full bg-[var(--met-bg-elevated)] object-cover transition-transform group-hover:scale-[1.02]"
+              />
+              {video.playCount ? (
+                <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white">
+                  {formatNumber(video.playCount)} 次播放
+                </span>
+              ) : null}
+            </div>
+            <span
+              className="mt-2 truncate text-sm text-[var(--met-fg)] transition-colors group-hover:text-[var(--met-primary)]"
+              title={video.name}
+            >
+              {video.name || "未知视频"}
+            </span>
+            {mvArtistsText(video.artists) ? (
+              <span className="mt-0.5 truncate text-xs text-[var(--met-fg-dim)]">
+                {mvArtistsText(video.artists)}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      {/* 分页 */}
+      {total > pageSize ? (
+        <PrevNextPager
+          className="py-6"
+          label={`${page} / ${totalPages} 页`}
+          prevDisabled={page <= 1 || isFetching}
+          nextDisabled={page >= totalPages || isFetching}
+          onPrev={() => setPage(Math.max(1, page - 1))}
+          onNext={() => setPage(Math.min(totalPages, page + 1))}
+        />
+      ) : null}
+    </div>
+  );
+}

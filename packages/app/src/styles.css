@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* 设计 token(U3 全量视觉阶段再扩展;暗色为默认,与旧 UI 一致) */
+:root {
+  --met-bg: #16161a;
+  --met-bg-elevated: #1f1f24;
+  --met-bg-hover: #2a2a31;
+  --met-fg: #e6e6ea;
+  --met-fg-dim: #9a9aa3;
+  --met-primary: #6dd48c;
+  /* 主色上的文字色:亮主色配深字、深主色反白,theme.ts 按主色亮度动态覆写 */
+  --met-primary-fg: #10241a;
+  --met-border: #2c2c33;
+  --met-danger: #e5484d;
+  /* 封面取色主题(coverTheme)运行期覆写以下变量,见 platform/theme.ts */
+  --met-cover-primary: var(--met-primary);
+  --met-cover-bg: var(--met-bg);
+  --met-cover-shade: var(--met-bg-elevated);
+}
+
+/* 浅色模式(themeType=light 时挂在 html 上) */
+:root[data-theme="light"] {
+  --met-bg: #f5f5f7;
+  --met-bg-elevated: #ffffff;
+  --met-bg-hover: #e9e9ee;
+  --met-fg: #1c1c21;
+  --met-fg-dim: #6d6d76;
+  --met-border: #d9d9e0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--met-bg);
+  color: var(--met-fg);
+  /* --met-site-font 由 platform/fonts.ts 按 settings.siteFont 写入(html 上) */
+  font-family: var(
+    --met-site-font,
+    "HarmonyOS Sans SC",
+    "PingFang SC",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif
+  );
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 歌词字体工具类(settings.lyricFont → platform/fonts.ts 写入变量;
+   歌词容器〔LyricScroll / FullPlayer 等〕加 .lyric-font 即生效) */
+.lyric-font {
+  font-family: var(
+    --met-lyric-font,
+    "HarmonyOS Sans SC",
+    "PingFang SC",
+    system-ui,
+    sans-serif
+  );
+  font-weight: var(--met-lyric-font-weight, bold);
+}
+
+/* 路由切换过渡:内容淡入 + 轻微上移(包裹层以 pathname 为 key 重放) */
+@keyframes met-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.met-page-in {
+  animation: met-page-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 全屏播放器进场:自底部滑入(退场由 transition + translate-y-full 完成) */
+@keyframes met-fp-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+.met-fp-in {
+  animation: met-fp-in 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 懒加载图片占位:图片就绪前显示底色块(透明贴图加 .met-img-plain 豁免) */
+img[loading="lazy"]:not(.met-img-plain) {
+  background-color: var(--met-bg-elevated);
+}
+
+/* 底栏歌词切行动画:新行淡入上移(行节点以歌词索引为 key 重放) */
+@keyframes met-lyric-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.met-lyric-in {
+  animation: met-lyric-in 0.35s ease;
+}

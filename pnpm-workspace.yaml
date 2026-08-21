@@ -1,10 +1,16 @@
+packages:
+  - packages/*
+
+# 均为项目既有依赖,放行其安装期构建脚本(与迁移前 npm 行为一致)
 allowBuilds:
   '@applemusic-like-lyrics/core': true
   '@applemusic-like-lyrics/lyric': true
   '@applemusic-like-lyrics/vue': true
   '@parcel/watcher': true
   core-js: true
-  esbuild: true
   sharp: true
+
+# music-metadata@11.15.0 已在既有 lockfile 中(2026-08-18 依赖升级引入),
+# 仅比 pnpm 默认的发布冷静期窗口新约 1 小时;豁免以解除安装阻塞,可随时移除。
 minimumReleaseAgeExclude:
-  - music-metadata@11.15.0
+  - music-metadata
