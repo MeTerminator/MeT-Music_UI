@@ -8,6 +8,21 @@
  */
 @custom-variant coarse (@media (pointer: coarse));
 
+/**
+ * Electron 无边框窗口的拖拽区(主窗是 frame: false,窗口只能靠这些区域拖动)。
+ * 浏览器里 -webkit-app-region 无任何效果,故不必判环境,直接标类即可。
+ * 目前两处:顶栏整条,以及全屏播放器的封面(全屏层盖住顶栏后仍要能拖窗口)。
+ * 注意:drag 区域内的一切都不再接收鼠标事件(连 mousemove 也不会派发),
+ * 所以里面每个可点元素都必须显式标 .met-no-drag,
+ * 否则按钮/输入框会变成"只能拖不能点"。
+ */
+.met-drag {
+  -webkit-app-region: drag;
+}
+.met-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* 触屏基础手感:去掉点按的蓝色高亮方块;
    manipulation 关掉双击缩放,顺带消除它带来的 ~300ms 点击延迟
    (仍保留单指滚动与双指缩放) */

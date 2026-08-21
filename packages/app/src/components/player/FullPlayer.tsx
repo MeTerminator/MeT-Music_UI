@@ -899,11 +899,15 @@ function FullPlayerInner() {
           aria-hidden={purelyLyric}
         >
           <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-10">
-            {/* 封面(cover/record 两种模式,见 PlayerCover) */}
+            {/* 封面(cover/record 两种模式,见 PlayerCover)。
+                met-drag:全屏播放器铺满整个窗口,顶栏那条拖拽区被它盖住,
+                桌面宿主里就没地方拖窗口了,故把封面本身当拖拽区。
+                封面内部没有可点元素,不必再标 no-drag;窄屏那份封面在横向分页里,
+                标成拖拽区会把滑动手势吃掉,所以只给桌面分栏这一份。 */}
             <PlayerCover
-              className={
+              className={`met-drag ${
                 playCoverType === "record" ? "max-w-[min(46vh,420px)]" : "max-w-[420px]"
-              }
+              }`}
             />
             {renderSongInfo({
               className: "w-full max-w-[420px] text-center",

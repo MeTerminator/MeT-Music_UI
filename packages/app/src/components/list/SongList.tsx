@@ -409,6 +409,9 @@ export default function SongList({
           const menuItems = rowMenuItems(song, index);
           const mvId = getMvId(song);
           const fee = getFee(song);
+          /** 本行是否有任何标签(窄屏折行时,没标签就不渲染那一行,免得多出空隙) */
+          const hasTags =
+            hasTtml(song) || (fee === 1 && vipType !== 11) || fee === 4 || Boolean(mvId);
           const albumId = getAlbumId(song.album);
           return (
             <BaseContextMenu.Root key={`${song.id}-${index}`}>
@@ -459,7 +462,10 @@ export default function SongList({
               ) : null}
               {/* 歌名 / 歌手 */}
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5">
+                {/* 窄屏(手机竖屏)把标签折到歌名下一行:标签留在同一行会挤占歌名宽度,
+                    歌名被截得只剩两三个字。md+ 用 display:contents 让标签容器透明,
+                    还原成与原来完全一致的单行布局 */}
+                <div className="flex min-w-0 flex-col gap-0.5 md:flex-row md:items-center md:gap-1.5">
                   <div
                     className={`truncate text-sm ${
                       isPlaying ? "text-[var(--met-primary)]" : "text-[var(--met-fg)]"
@@ -468,6 +474,8 @@ export default function SongList({
                   >
                     {song.name}
                   </div>
+                  {hasTags ? (
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:contents">
                   {/* TTML 标签(对照旧 tags-wrap 的 item.ttml === 1,逐词歌词标记) */}
                   {hasTtml(song) ? (
                     <span
@@ -506,6 +514,8 @@ export default function SongList({
                     >
                       MV
                     </button>
+                  ) : null}
+                  </div>
                   ) : null}
                 </div>
                 {/* 歌手(对照旧 .artist:数组时逐个可点跳转 /artist?id=,"/" 分隔) */}

@@ -38,9 +38,12 @@ import {
   History,
   Home,
   Menu,
+  Minus,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  Square,
+  Copy,
   Users,
   X,
 } from "lucide-react";
@@ -226,6 +229,8 @@ const SidebarContent = ({
 const RootLayout = () => {
   const router = useRouter();
   const isHosted = useHostStore((s) => s.isHosted);
+  /** 主窗最大化状态(宿主经 $MeTMusic_setWindowState 回推,决定最大化/还原图标) */
+  const windowMaximized = useHostStore((s) => s.windowMaximized);
   const callbacks = useHostStore((s) => s.callbacks);
   const showSider = useSettingsStore((s) => s.showSider);
   /** 桌面侧栏展开态(持久化;展开后与窄屏抽屉同一形态) */
@@ -275,24 +280,29 @@ const RootLayout = () => {
 
   return (
     <div className="flex h-full flex-col bg-[var(--met-bg)] text-[var(--met-fg)]">
-      {/* 顶栏 */}
-      <header className="relative flex h-14 shrink-0 items-center gap-2 border-b border-[var(--met-border)] px-4">
+      {/* 顶栏。桌面宿主的主窗是 frame: false,窗口全靠这里拖动,
+          故整条标为 met-drag;内部每个可点元素都要单独 met-no-drag,
+          否则会变成「只能拖不能点」(浏览器里这两个类无任何效果)。 */}
+      <header className="met-drag relative flex h-14 shrink-0 items-center gap-2 border-b border-[var(--met-border)] px-4">
         {/* 窄屏:汉堡开抽屉 */}
         <button
           type="button"
           title="菜单"
           aria-label="打开菜单"
           onClick={() => setDrawerOpen(true)}
-          className={`${iconBtnCls} md:hidden`}
+          className={`${iconBtnCls} met-no-drag md:hidden`}
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <Link to="/" className="flex shrink-0 items-center gap-2 text-sm font-bold tracking-wide">
+        <Link
+          to="/"
+          className="met-no-drag flex shrink-0 items-center gap-2 text-sm font-bold tracking-wide"
+        >
           <Logo size={24} />
           MeT Music
         </Link>
         {/* 前进/后退(旧 MainNav router.go(±1);窄屏下让位给搜索框) */}
-        <div className="hidden shrink-0 items-center gap-1 md:flex">
+        <div className="met-no-drag hidden shrink-0 items-center gap-1 md:flex">
           <button
             type="button"
             title="后退"
@@ -318,10 +328,10 @@ const RootLayout = () => {
             流内居中会随剩余空间偏移);窄屏保持流内布局 */}
         {/* md:z-40:transform 让本容器成为独立 stacking context,z 必须显式高于
             body 下 z-30 的聚焦遮罩,否则输入框与面板会被全屏模糊盖住 */}
-        <div className="flex min-w-0 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:z-40 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
+        <div className="met-no-drag flex min-w-0 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:z-40 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
           <SearchSuggest />
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="met-no-drag flex shrink-0 items-center gap-1">
           {/* 「一起听中」常驻脉冲徽标(旧 UserData quick-listen) */}
           {isInRoom ? (
             <Link
@@ -359,15 +369,56 @@ const RootLayout = () => {
               >
                 <Settings className="h-5 w-5" aria-hidden />
               </button>
-              <button
-                type="button"
-                title="隐藏"
-                aria-label="隐藏"
-                onClick={() => callbacks?.onHideWindow?.()}
-                className={iconBtnCls}
-              >
-                <X className="h-5 w-5" aria-hidden />
-              </button>
+              {/* 窗口控制。逐个按回调是否存在渲染:装着旧版桌面端的用户
+                  拿到的是同一份远端 UI,回调缺席时这里自动退回原来的「隐藏」按钮,
+                  表现与改动前一致(见 contract.ts 里为何不升版本号的说明)。 */}
+              {callbacks?.onMinimizeWindow ? (
+                <button
+                  type="button"
+                  title="最小化"
+                  aria-label="最小化"
+                  onClick={() => callbacks.onMinimizeWindow?.()}
+                  className={iconBtnCls}
+                >
+                  <Minus className="h-5 w-5" aria-hidden />
+                </button>
+              ) : null}
+              {callbacks?.onToggleMaximize ? (
+                <button
+                  type="button"
+                  title={windowMaximized ? "还原" : "最大化"}
+                  aria-label={windowMaximized ? "还原" : "最大化"}
+                  onClick={() => callbacks.onToggleMaximize?.()}
+                  className={iconBtnCls}
+                >
+                  {windowMaximized ? (
+                    <Copy className="h-4 w-4" aria-hidden />
+                  ) : (
+                    <Square className="h-4 w-4" aria-hidden />
+                  )}
+                </button>
+              ) : null}
+              {callbacks?.onCloseWindow ? (
+                <button
+                  type="button"
+                  title="关闭"
+                  aria-label="关闭"
+                  onClick={() => callbacks.onCloseWindow?.()}
+                  className={`${iconBtnCls} hover:!bg-[var(--met-danger)] hover:!text-white`}
+                >
+                  <X className="h-5 w-5" aria-hidden />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  title="隐藏"
+                  aria-label="隐藏"
+                  onClick={() => callbacks?.onHideWindow?.()}
+                  className={iconBtnCls}
+                >
+                  <X className="h-5 w-5" aria-hidden />
+                </button>
+              )}
             </>
           ) : null}
         </div>

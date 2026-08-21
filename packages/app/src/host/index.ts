@@ -20,11 +20,14 @@ import { cleanAll } from "@/platform/web";
 interface HostState {
   isHosted: boolean;
   callbacks: HostCallbacks | null;
+  /** 主窗是否最大化(由宿主经 $MeTMusic_setWindowState 回推,决定最大化/还原图标) */
+  windowMaximized: boolean;
 }
 
 export const useHostStore = create<HostState>()(() => ({
   isHosted: false,
   callbacks: null,
+  windowMaximized: false,
 }));
 
 /** 组装 HookPayload(旧 updateHookData 逻辑 + contractVersion 字段) */
@@ -133,6 +136,11 @@ export const initHostGlobals = (): void => {
   // v2 新增:宿主注册(UI 判定桌面宿主环境的唯一依据)
   window.$MeTMusic_registerHost = (callbacks: HostCallbacks) => {
     useHostStore.setState({ isHosted: true, callbacks });
+  };
+
+  // 宿主回推主窗最大化状态(双击拖拽区/系统快捷键改变状态时,UI 靠它对齐图标)
+  window.$MeTMusic_setWindowState = (state) => {
+    useHostStore.setState({ windowMaximized: Boolean(state?.maximized) });
   };
 
   // 程序重置

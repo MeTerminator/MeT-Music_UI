@@ -45,8 +45,9 @@ test.describe("触屏(pointer: coarse)", () => {
     await expect.poll(() => rows.count(), { timeout: 20_000 }).toBeGreaterThan(5);
 
     const before = await playingName(page);
-    // 点歌名区域(不是任何按钮),模拟真实手指点击
-    await rows.nth(2).locator("div.min-w-0").first().tap();
+    // 直接点歌名本身:信息列的几何中心在窄屏下会落到标签行(甚至 MV 按钮)上,
+    // 那里点了是跳 MV 而不是起播 —— 那是预期行为,不该拿来当「点行起播」的靶子
+    await rows.nth(2).locator("div.min-w-0.flex-1 > div > div").first().tap();
     await expect.poll(() => playingName(page), { timeout: 15_000 }).not.toBe(before);
     console.log("tap 后播放:", await playingName(page));
   });
