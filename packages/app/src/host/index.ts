@@ -6,11 +6,29 @@
  *   2. 播放 tick 时组装 HookPayload 并广播(旧 Player.js updateHookData 的移植,
  *      逐字 percent 计算已抽为 core 的 computeWordProgress);
  *   3. $MeTMusic_registerHost:宿主注册后 UI 判定运行于桌面壳内,
- *      导航栏渲染设置/隐藏按钮(替代 v1 的 DOM 注入)。
+ *      导航栏渲染设置/隐藏按钮(替代 v1 的 DOM 注入);
+ *   4. 外部 API 支撑函数($MeTMusic_getState / getLyrics / seek / setVolume / stop):
+ *      App 的 HTTP / WebSocket 外部接口经 executeJavaScript 调它们取数与控制播放。
  */
 import { create } from "zustand";
-import { changePlayIndex, computeWordProgress, playOrPause } from "@met/core";
-import { CONTRACT_VERSION, type HookPayload, type HostCallbacks } from "./contract";
+import {
+  changePlayIndex,
+  computeWordProgress,
+  getSeek,
+  playOrPause,
+  setSeek,
+  setVolume,
+  soundStop,
+} from "@met/core";
+import {
+  CONTRACT_VERSION,
+  type HookPayload,
+  type HostCallbacks,
+  type LyricLine,
+  type LyricsSnapshot,
+  type NowPlaying,
+  type PlaybackSnapshot,
+} from "./contract";
 import { getPlaySongData, useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
@@ -109,6 +127,107 @@ export const broadcastHook = (): void => {
   }
 };
 
+/**
+ * 播放状态快照(外部 API 的 GET /api/status 数据源)。
+ * 现取 store,不复用 hook payload —— 后者由播放 tick 驱动,暂停后不再刷新。
+ */
+export const buildPlaybackSnapshot = (): PlaybackSnapshot => {
+  const status = useStatusStore.getState();
+  const { duration } = status.playTimeData;
+  const hasSong = Boolean(getPlaySongData()?.id);
+  // 进度取引擎的 getSeek 而非 playTimeData.currentTime:
+  // 模拟播放暂停时 setAudioTime 直接 return,currentTime 会停在暂停前那一刻,
+  // 此后 seek 也刷不动它;getSeek 两种模式下都返回真实进度。
+  const currentTime = Math.max(0, getSeek());
+  // 播完停在末尾(下一首尚未开始)也算结束,给外部轮询一个明确信号
+  const isFinished = !status.playState && duration > 0 && currentTime >= duration - 0.5;
+  return {
+    state: !hasSong ? "stopped" : status.playState ? "playing" : "paused",
+    position: Math.round(currentTime * 1000),
+    duration: Math.round((duration || 0) * 1000),
+    volume: status.playVolume,
+    isFinished,
+  };
+};
+
+/**
+ * 轻量播放快照(外部 API 的 GET /api/now-playing 数据源)。
+ * 在播放状态之上补曲目信息与当前歌词行;歌词正文全量走 buildLyricsSnapshot。
+ */
+export const buildNowPlaying = (): NowPlaying => {
+  const status = useStatusStore.getState();
+  const settings = useSettingsStore.getState();
+  const lyric = useMusicStore.getState().playSongLyric;
+  const song = getPlaySongData();
+
+  const useYrc = settings.showYrc && lyric.hasYrc && lyric.yrc.length > 0;
+  const lines: Array<{ content: unknown; tran?: string }> = useYrc ? lyric.yrc : lyric.lrc;
+  const line = lines[status.playSongLyricIndex];
+  const lyricText = !line
+    ? ""
+    : Array.isArray(line.content)
+      ? (line.content as Array<{ content: string }>).map((word) => word.content).join("")
+      : String(line.content ?? "");
+
+  const artists = song?.artists;
+  const album = song?.album;
+
+  return {
+    ...buildPlaybackSnapshot(),
+    id: song?.id ?? "Unknown",
+    name: song?.name || "未知曲目",
+    artist: Array.isArray(artists)
+      ? artists.map((ar) => ar.name).join(" / ")
+      : (artists as string) || "未知歌手",
+    album: typeof album === "string" ? album : album?.name,
+    cover: song?.coverSize?.l ?? song?.cover,
+    lyricAvailable: lines.length > 0,
+    lyricLineCount: lines.length,
+    lyricText,
+    lyricTrans: line?.tran ?? "",
+  };
+};
+
+/**
+ * 完整歌词快照(外部 API 的 GET /api/lyrics 数据源)。
+ * 与 hook 同款 lrcType 分支:开启逐字且本曲有 yrc 才给 yrc,否则回退 lrc。
+ * 时间统一转毫秒(store 内是秒)。
+ */
+export const buildLyricsSnapshot = (): LyricsSnapshot => {
+  const settings = useSettingsStore.getState();
+  const lyric = useMusicStore.getState().playSongLyric;
+  const offset = Math.round((settings.lyricsOffset || 0) * 1000);
+  const toMs = (value: number | undefined): number => Math.round((value || 0) * 1000);
+
+  if (settings.showYrc && lyric.hasYrc && lyric.yrc.length > 0) {
+    const lines: LyricLine[] = lyric.yrc.map((line) => ({
+      time: toMs(line.time),
+      endTime: toMs(line.endTime),
+      content: line.content.map((word) => word.content).join(""),
+      tran: line.tran,
+      roma: line.roma,
+      words: line.content.map((word) => ({
+        content: word.content,
+        start: toMs(word.time),
+        end: toMs(word.time + word.duration),
+      })),
+    }));
+    return { source: "yrc", offset, lines };
+  }
+
+  if (lyric.lrc.length > 0) {
+    const lines: LyricLine[] = lyric.lrc.map((line) => ({
+      time: toMs(line.time),
+      content: line.content,
+      tran: line.tran,
+      roma: line.roma,
+    }));
+    return { source: "lrc", offset, lines };
+  }
+
+  return { source: "none", offset, lines: [] };
+};
+
 /** 挂载全部宿主契约全局;应用启动时调用一次 */
 export const initHostGlobals = (): void => {
   // 暴露给外部脚本(初始为空骨架,与旧 main.js 一致)
@@ -132,6 +251,36 @@ export const initHostGlobals = (): void => {
   window.$MeTMusic_prev = () => {
     changePlayIndex("prev", true);
   };
+
+  /* ---- 外部 API 支撑(见 contract.ts 末尾;宿主判空后调用) ---- */
+  // 外部接口的 play / pause 是幂等语义,不能复用「切换」的 playOrPause:
+  // 连发两次 play 会把刚播上的歌又暂停掉。状态判定放在 UI 侧(store 即事实)。
+  window.$MeTMusic_play = () => {
+    if (!useStatusStore.getState().playState) void playOrPause();
+  };
+  window.$MeTMusic_pause = () => {
+    if (useStatusStore.getState().playState) void playOrPause();
+  };
+  window.$MeTMusic_stop = () => {
+    soundStop();
+  };
+  window.$MeTMusic_seek = (seconds) => {
+    if (!Number.isFinite(seconds)) return;
+    const { duration } = useStatusStore.getState().playTimeData;
+    // 越界的目标进度直接夹到 [0, duration];duration 未知(0)时只保证非负
+    const max = duration > 0 ? duration : Number.POSITIVE_INFINITY;
+    setSeek(Math.min(Math.max(0, seconds), max));
+  };
+  window.$MeTMusic_setVolume = (volume) => {
+    if (!Number.isFinite(volume)) return;
+    const value = Math.min(Math.max(0, volume), 1);
+    // 引擎只改 Howler 音量,持久化的 playVolume 得自己同步,否则刷新后回弹
+    useStatusStore.setState({ playVolume: value });
+    setVolume(value);
+  };
+  window.$MeTMusic_getState = buildPlaybackSnapshot;
+  window.$MeTMusic_getNowPlaying = buildNowPlaying;
+  window.$MeTMusic_getLyrics = buildLyricsSnapshot;
 
   // v2 新增:宿主注册(UI 判定桌面宿主环境的唯一依据)
   window.$MeTMusic_registerHost = (callbacks: HostCallbacks) => {
