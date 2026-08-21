@@ -920,26 +920,39 @@ const lyricShiftSeconds = (settings: { lyricsShiftMs?: number }): number =>
   (settings.lyricsShiftMs || 0) / 1000;
 
 /**
+ * 当前歌词行索引(原 setAudioTime 内三处同样的内联逻辑)。
+ *
+ * 逐字歌词只在「确实解析出了行」时才用:接口对没有逐字时间轴的歌曲会在 qrc 字段里
+ * 回落一份 base64 的普通 lrc(见 lyrics/parse.ts 对 hasYrc 的修正),历史持久化的
+ * playSongLyric 里可能仍留着 hasYrc=true 而 yrc 为空的组合。那种组合下会在空数组上
+ * findIndex,结果恒为 -1 → 索引恒 -1,整首歌不高亮、不滚动、底栏也没有歌词。
+ *
+ * 空数组返回 -1,与原实现(findIndex 得 -1 → lyrics.length - 1 = -1)一致。
+ */
+const computeLyricIndex = (currentTime: number): number => {
+  const { hasYrc, lrc, yrc } = deps.music().playSongLyric;
+  const settings = deps.settings();
+  const lyrics = hasYrc && settings.showYrc && yrc?.length ? yrc : lrc;
+  if (!lyrics?.length) return -1;
+  const offsetTime = currentTime + settings.lyricsOffset - lyricShiftSeconds(settings);
+  const index = lyrics.findIndex((v) => v?.time >= offsetTime);
+  return index === -1 ? lyrics.length - 1 : index - 1;
+};
+
+/**
  * 更改播放进度
  */
 const setAudioTime = (force = false): void => {
   // --- 模拟播放 ---
   if (isSimulating) {
     const status = deps.status();
-    const music = deps.music();
-    const settings = deps.settings();
 
     // 确保在暂停时 currentTime 不会自己增长
     if (!status.playState) {
       // 如果暂停了，我们仍然需要保持歌词索引，但不更新时间
       const currentTime = simulationPausedSeek;
       // 计算当前歌词播放索引
-      const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
-      const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-      const lyricsIndex = lyrics?.findIndex(
-        (v) => v?.time >= currentTime + settings.lyricsOffset - lyricShiftSeconds(settings),
-      );
-      status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+      status.playSongLyricIndex = computeLyricIndex(currentTime);
       return; // 暂停时退出
     }
 
@@ -964,15 +977,9 @@ const setAudioTime = (force = false): void => {
     const bar = duration ? ((currentTime / duration) * 100).toFixed(2) : 0;
     const played = getSongPlayTime(currentTime);
     const durationTime = getSongPlayTime(duration);
-    // 计算当前歌词播放索引
-    const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
-    const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-    const lyricsIndex = lyrics?.findIndex(
-      (v) => v?.time >= currentTime + settings.lyricsOffset - lyricShiftSeconds(settings),
-    );
     // 赋值数据
     status.playTimeData = { currentTime, duration, bar, played, durationTime };
-    status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+    status.playSongLyricIndex = computeLyricIndex(currentTime);
     deps.env.setTitle(getPlaySongName());
     deps.env.onTick?.();
     syncMediaSessionPosition();
@@ -981,9 +988,7 @@ const setAudioTime = (force = false): void => {
   // --- 模拟播放结束 ---
 
   if (player && (player.playing() || force)) {
-    const music = deps.music();
     const status = deps.status();
-    const settings = deps.settings();
     const currentTime = player.seek();
     const seekVal = typeof currentTime === "number" ? currentTime : 0;
     const duration = player.duration() || (player as any)._duration || 0;
@@ -991,15 +996,9 @@ const setAudioTime = (force = false): void => {
     const bar = duration ? ((seekVal / duration) * 100).toFixed(2) : 0;
     const played = getSongPlayTime(seekVal);
     const durationTime = getSongPlayTime(duration);
-    // 计算当前歌词播放索引
-    const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
-    const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-    const lyricsIndex = lyrics?.findIndex(
-      (v) => v?.time >= seekVal + settings.lyricsOffset - lyricShiftSeconds(settings),
-    );
     // 赋值数据
     status.playTimeData = { currentTime: seekVal, duration, bar, played, durationTime };
-    status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+    status.playSongLyricIndex = computeLyricIndex(seekVal);
     deps.env.setTitle(getPlaySongName());
     deps.env.onTick?.();
     syncMediaSessionPosition();
