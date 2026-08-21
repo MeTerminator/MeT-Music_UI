@@ -321,14 +321,17 @@ function FullPlayerInner() {
     if (!status.playState && !status.isInRoom) fadePlayOrPause("play");
     // AMLL 靠连续的时间推进重排;seek(尤其暂停态)必须显式立即对位,
     // 否则滚动停留在旧行、当前行落在视界之外,视觉上"歌词消失",
-    // 直到自然行进两三行后才自行校正。官方流程:
-    // resetScroll → setCurrentTime(ms, isSeek=true) → calcLayout
-    const core = lyricPlayerRef.current?.lyricPlayer;
-    if (core) {
-      core.resetScroll();
-      core.setCurrentTime(startMs, true);
-      void core.calcLayout(true, true);
-    }
+    // 直到自然行进两三行后才自行校正。
+    //
+    // 交给库自带的 seek 通路即可:setCurrentTime(ms, isSeek=true) 内部会
+    // 重算 scrollToIndex(pickScrollToIndexForSeek)、resetScroll(清掉用户
+    // 手动滚动的偏移),再自行 calcLayout() —— 不带 force,走 seek 专用的
+    // 弹簧参数(stiffness 90 / damping 15)平滑滚到目标行。
+    // 这里千万不能再补一发 calcLayout(_, force=true):force 会让每行绕过
+    // 弹簧直接 setPosition,表现就是歌词"闪现"到目标位置。
+    // 动画的逐帧 update 由 react 绑定的 rAF 循环负责(只受 disabled 影响,
+    // 与 playing 无关),故暂停态点击同样是平滑过渡。
+    lyricPlayerRef.current?.lyricPlayer?.setCurrentTime(startMs, true);
   }, []);
 
   // ===== 歌词数据 =====

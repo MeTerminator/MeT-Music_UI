@@ -226,18 +226,21 @@ export default function PlayerBar() {
           {showBottomLyric ? (
             <div
               key={playSongLyricIndex}
-              className="met-lyric-in lyric-font truncate text-xs"
+              className="met-lyric-in lyric-font text-xs"
               style={{ color: "var(--met-fg-dim)" }}
             >
-              {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本 */}
+              {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本。
+                  逐字行走 autoScroll:整行超宽时横向滚动,当前字保持居中
+                  (故此处不能再套 truncate,由 KtvLine 自己 overflow-hidden) */}
               {yrcLine && showYrcAnimation ? (
                 <KtvLine
                   line={yrcLine}
                   activeColor="var(--met-primary)"
                   inactiveColor="var(--met-fg-dim)"
+                  autoScroll
                 />
               ) : (
-                lyricLine
+                <div className="truncate">{lyricLine}</div>
               )}
             </div>
           ) : (
