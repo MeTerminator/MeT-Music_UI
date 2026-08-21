@@ -355,9 +355,9 @@ const RootLayout = () => {
           </aside>
         ) : null}
 
-        {/* 主内容区(底部预留 72px 给播放条);
+        {/* 主内容区(底部预留播放条高度:桌面 72px,窄屏两行 96px);
             no-sider 时内容居中窄版(对照旧 .no-sider .main-router max-width) */}
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto pb-[72px]">
+        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto pb-[72px] max-md:pb-[96px]">
           {/* key=pathname:路由切换时重放淡入动画(search 变化不触发,避免翻页闪动) */}
           <div
             key={pathname}
@@ -368,14 +368,14 @@ const RootLayout = () => {
         </main>
       </div>
 
-      {/* 回顶按钮(滚动超 400px 浮现;bottom 90px 避让播放条) */}
+      {/* 回顶按钮(滚动超 400px 浮现;bottom 避让播放条:桌面 90px / 窄屏 114px) */}
       <button
         type="button"
         title="回到顶部"
         aria-label="回到顶部"
         tabIndex={showBackTop ? 0 : -1}
         onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-        className={`fixed right-6 bottom-[90px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
+        className={`fixed right-6 bottom-[90px] max-md:right-4 max-md:bottom-[114px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
           showBackTop ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         }`}
       >

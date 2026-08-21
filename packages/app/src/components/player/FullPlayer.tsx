@@ -6,17 +6,20 @@ import {
 } from "@applemusic-like-lyrics/react";
 import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
-import { X } from "lucide-react";
+import { ChevronDown, Ellipsis, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { fadePlayOrPause, setSeek, type AMLine, type Artist } from "@met/core";
 import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
 import type { OnCoverColors } from "@/platform/cover-color";
+import { useIsMobile } from "@/platform/use-media-query";
+import { DropdownMenu } from "@/components/ui/menu";
 import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
 import LyricScroll from "./LyricScroll";
 import PlayerCover from "./PlayerCover";
+import { useSongMoreItems } from "./songMenu";
 
 /** 歌词区上下渐隐遮罩(对齐旧 AMLyric.vue / Lyric.vue) */
 const LYRIC_MASK =
@@ -52,6 +55,10 @@ const ANIMATION_BG_QUADRANTS: {
   { pos: { bottom: "50%", right: 0 }, duration: 58, reverse: true },
   { pos: { bottom: 0, right: 0 }, duration: 65, reverse: false },
 ];
+
+/** 窄屏顶部条图标按钮(封面主题色前景 + 轻触反馈) */
+const mobileIconBtnCls =
+  "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-[rgba(var(--fp-main-rgb),0.75)] transition-colors active:bg-[rgba(var(--fp-main-rgb),0.14)]";
 
 const FULL_PLAYER_CSS = `
 @keyframes met-fp-cover-rotate {
@@ -187,6 +194,23 @@ function FullPlayerInner() {
   const lyricsBlur = useSettingsStore((s) => s.lyricsBlur);
   const lyricsBlock = useSettingsStore((s) => s.lyricsBlock);
 
+  /** 窄屏(<768px)走两页式手机布局,与桌面左右分栏 DOM 结构不同,故用 JS 断点分支 */
+  const isMobile = useIsMobile();
+
+  // ===== 窄屏两页分页(横向 scroll-snap;0=封面页,1=歌词页) =====
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const [page, setPage] = useState(0);
+  const onPagerScroll = useCallback(() => {
+    const el = pagerRef.current;
+    if (!el || el.clientWidth <= 0) return;
+    setPage(el.scrollLeft > el.clientWidth / 2 ? 1 : 0);
+  }, []);
+  const goPage = useCallback((index: number) => {
+    const el = pagerRef.current;
+    if (!el) return;
+    el.scrollTo({ left: index * el.clientWidth, behavior: "smooth" });
+  }, []);
+
   /**
    * 修复(缺陷 B):挂载时 store 已有歌词但 LyricPlayer 空白。
    * 根因见文件底部注释。三层防护:
@@ -254,10 +278,13 @@ function FullPlayerInner() {
     lastMoveRef.current = now;
     useStatusStore.setState({ playerControlShow: true });
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+    // 触屏没有「鼠标静止」可言,窄屏下控制条常驻,不再定时淡出
+    if (isMobile) return;
     hideTimerRef.current = window.setTimeout(() => {
       useStatusStore.setState({ playerControlShow: false });
     }, 2000);
-  }, []);
+  }, [isMobile]);
 
   /** 悬停控制条时保持可见(清除隐藏计时器) */
   const keepControlsVisible = useCallback(() => {
@@ -331,6 +358,11 @@ function FullPlayerInner() {
   const useAM = useAMLyrics && amLines.length > 0;
   const hasLyric = useAM || hasPlainLyric;
   const purelyLyric = pureLyricMode && hasLyric;
+
+  // 切到无歌词的歌曲时第二页随之卸载(滚动位置由浏览器夹回 0),页码状态一并复位
+  useEffect(() => {
+    if (!hasLyric) setPage(0);
+  }, [hasLyric]);
 
   // currentTime 偏移修正(对齐旧 AMLyric.vue 三元):仅 TTML 歌词且开启
   // lyricsAMttmlUseOffset 时叠加 lyricsAMOffset,其余路径用原始 playSeekMs
@@ -416,6 +448,11 @@ function FullPlayerInner() {
   // record 唱片模式下歌词区高度 70vh(对照旧 AMLyric.vue getDynamicHeight)
   const lyricHeightCls = playCoverType === "record" ? "h-[70vh]" : "h-[86%]";
 
+  // 「更多操作」菜单(窄屏顶部条;与控制条同一份定义,跳转前先收起全屏播放器)
+  const { items: moreItems, disabled: moreDisabled } = useSongMoreItems(playSongData, {
+    beforeNavigate: () => useStatusStore.setState({ showFullPlayer: false }),
+  });
+
   const navigate = useNavigate();
   const gotoArtist = useCallback(
     (id: number | string) => {
@@ -432,73 +469,333 @@ function FullPlayerInner() {
     [navigate],
   );
 
-  return (
-    <div
-      className="fixed inset-0 z-40 select-none overflow-hidden"
-      style={
-        {
-          background: "var(--met-bg)",
-          cursor: playerControlShow ? "auto" : "none",
-          // 局部主题色变量(对照旧 --cover-main-color / --cover-second-color)
-          "--fp-main-rgb": mainRgb,
-          "--fp-primary-rgb": primaryRgb,
-        } as CSSProperties
-      }
-      onMouseMove={pokeControls}
-      onTouchStart={pokeControls}
-      onMouseLeave={hideControls}
-    >
-      <style>{FULL_PLAYER_CSS}</style>
-      {/* ===== 背景层(按 settings.playerBackgroundType 分支) ===== */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        {showAmllBackground ? (
-          <div className="absolute inset-0">
-            <BackgroundRender
-              album={amllAlbum}
-              albumIsVideo={false}
-              playing={playState}
-              fps={30}
-              flowSpeed={amllPlayerBackgroundFlowSpeed}
-              renderScale={0.5}
-              hasLyric={hasLyric}
+  // ===== 背景层(桌面/窄屏共用;按 settings.playerBackgroundType 分支) =====
+  const backgroundNode = (
+    <div className="absolute inset-0 z-0 overflow-hidden">
+      {showAmllBackground ? (
+        <div className="absolute inset-0">
+          <BackgroundRender
+            album={amllAlbum}
+            albumIsVideo={false}
+            playing={playState}
+            fps={30}
+            flowSpeed={amllPlayerBackgroundFlowSpeed}
+            renderScale={0.5}
+            hasLyric={hasLyric}
+          />
+        </div>
+      ) : showAnimationBackground ? (
+        // animation:四象限旋转模糊大图(对照旧 FullPlayer.vue 417-451 行 CSS)
+        <div className="absolute inset-0" style={{ transform: "scale(1.3)" }}>
+          {ANIMATION_BG_QUADRANTS.map((q, i) => (
+            <img
+              key={i}
+              src={coverSmall}
+              alt=""
+              aria-hidden
+              className="absolute h-1/2 w-1/2 max-w-none object-cover"
+              style={{
+                ...q.pos,
+                filter: "blur(80px) contrast(1.75)",
+                animation: `met-fp-cover-rotate ${q.duration}s linear infinite${
+                  q.reverse ? " reverse" : ""
+                }`,
+                // 暂停冻结
+                animationPlayState: playState ? "running" : "paused",
+              }}
             />
-          </div>
-        ) : showAnimationBackground ? (
-          // animation:四象限旋转模糊大图(对照旧 FullPlayer.vue 417-451 行 CSS)
-          <div className="absolute inset-0" style={{ transform: "scale(1.3)" }}>
-            {ANIMATION_BG_QUADRANTS.map((q, i) => (
-              <img
+          ))}
+        </div>
+      ) : showBlurBackground ? (
+        <img
+          src={coverSmall}
+          alt=""
+          aria-hidden
+          className="absolute left-1/2 top-1/2 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover blur-3xl"
+          style={{ filter: "blur(80px) contrast(1.2)" }}
+        />
+      ) : (
+        <div className="absolute inset-0" style={{ background: gradientBackground }} />
+      )}
+      {/* 暗化遮罩,保证前景可读性(对齐旧 .overlay::after) */}
+      <div className="absolute inset-0" style={{ background: "rgba(0, 0, 0, 0.4)" }} />
+    </div>
+  );
+
+  /**
+   * 歌词本体(桌面/窄屏共用):自身撑满,高度由外层容器决定。
+   * AM 歌词字号在窄屏收窄(设置项默认 46px 是给桌面大屏的,手机上会溢出)。
+   */
+  const lyricNode = !hasLyric ? null : useAM ? (
+    <div
+      className="relative h-full w-full overflow-hidden"
+      style={{
+        maskImage: LYRIC_MASK,
+        WebkitMaskImage: LYRIC_MASK,
+        filter: "drop-shadow(0px 4px 6px rgba(0, 0, 0, 0.2))",
+        mixBlendMode: "plus-lighter",
+      }}
+    >
+      {lyricReady && (
+        <LyricPlayer
+          // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
+          key={`${playSongData.id}-${amLyricMode}-${amLines.length}`}
+          ref={lyricPlayerRef}
+          className="lyric-font h-full w-full"
+          style={
+            {
+              fontSize: `${
+                isMobile ? Math.max(18, Math.min(lyricsFontSize, 28)) : lyricsFontSize
+              }px`,
+              // 对照旧 AMLyric.vue 109-112:coverTheme shadeTwo rgba 0.95
+              "--amll-lp-color": amLyricColor,
+            } as CSSProperties
+          }
+          lyricLines={amLines}
+          currentTime={amCurrentTime}
+          playing={playState}
+          enableSpring={useAMSpring}
+          enableScale={useAMScale}
+          enableBlur={lyricsBlur}
+          alignPosition={lyricsBlock === "center" ? 0.5 : 0.25}
+          onLyricLineClick={onLyricLineClick}
+        />
+      )}
+    </div>
+  ) : (
+    <LyricScroll />
+  );
+
+  /**
+   * 歌曲信息块(标题 / 别名 / 歌手 / 专辑)。
+   * 歌手与专辑带 id 时可点跳转(对照旧 FullPlayer.vue 66-99 行);
+   * 桌面居中大字,窄屏两页各用不同紧凑度,故字号类由调用方传入。
+   */
+  const renderSongInfo = ({
+    className = "",
+    titleCls,
+    aliaCls,
+    artistCls,
+    albumCls,
+  }: {
+    className?: string;
+    titleCls: string;
+    aliaCls: string;
+    artistCls: string;
+    /** null 表示该处不显示专辑行(窄屏歌词页顶部信息栏) */
+    albumCls: string | null;
+  }) => (
+    <div className={className}>
+      <div
+        className={`truncate font-bold ${titleCls}`}
+        style={{ color: "rgb(var(--fp-main-rgb))" }}
+      >
+        {playSongData.name || "未知曲目"}
+      </div>
+      {aliaText && (
+        <div
+          className={`truncate ${aliaCls}`}
+          style={{ color: "rgba(var(--fp-main-rgb), 0.6)" }}
+        >
+          {aliaText}
+        </div>
+      )}
+      {/* 歌手:有 id 时可点跳转 /artist */}
+      <div
+        className={`truncate ${artistCls}`}
+        style={{ color: "rgba(var(--fp-main-rgb), 0.7)" }}
+      >
+        {artistList && artistList.length > 0
+          ? artistList.map((ar, index) => (
+              <span key={`${ar.id ?? "no-id"}-${index}`}>
+                {index > 0 && <span> / </span>}
+                {ar.id != null ? (
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      gotoArtist(ar.id as number | string);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") gotoArtist(ar.id as number | string);
+                    }}
+                  >
+                    {ar.name}
+                  </span>
+                ) : (
+                  <span>{ar.name}</span>
+                )}
+              </span>
+            ))
+          : artistsText || "未知艺术家"}
+      </div>
+      {/* 专辑:album.id 存在时可点跳转 /album */}
+      {albumCls !== null && albumText && (
+        <div
+          className={`truncate ${albumCls}`}
+          style={{ color: "rgba(var(--fp-main-rgb), 0.5)" }}
+        >
+          {albumData?.id != null ? (
+            <span
+              role="link"
+              tabIndex={0}
+              className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                gotoAlbum(albumData.id as number | string);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") gotoAlbum(albumData.id as number | string);
+              }}
+            >
+              {albumText}
+            </span>
+          ) : (
+            albumText
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const rootStyle = {
+    background: "var(--met-bg)",
+    // 局部主题色变量(对照旧 --cover-main-color / --cover-second-color)
+    "--fp-main-rgb": mainRgb,
+    "--fp-primary-rgb": primaryRgb,
+  } as CSSProperties;
+
+  // ===================== 窄屏(手机)两页式布局,参考 Apple Music =====================
+  // 第一页:大封面 + 歌曲信息;第二页:左上小封面 + 右上歌曲信息 + 下方歌词。
+  // 横向 scroll-snap 分页(原生惯性/回弹,无需手写拖拽),底部圆点可点跳页;
+  // 控制条常驻在分页区之下(不参与横向滚动)。
+  if (isMobile) {
+    return (
+      <div
+        className="fixed inset-0 z-40 flex select-none flex-col overflow-hidden"
+        style={rootStyle}
+      >
+        <style>{FULL_PLAYER_CSS}</style>
+        {backgroundNode}
+
+        {/* 顶部条:收起 + 抓手 + 更多操作 */}
+        <div className="relative z-20 flex shrink-0 items-center justify-between px-4 pb-2 pt-[calc(env(safe-area-inset-top,0px)+12px)]">
+          <button
+            type="button"
+            className={mobileIconBtnCls}
+            title="收起播放器"
+            aria-label="收起播放器"
+            onClick={() => useStatusStore.setState({ showFullPlayer: false })}
+          >
+            <ChevronDown size={22} aria-hidden="true" />
+          </button>
+          <span
+            className="h-1 w-9 rounded-full bg-[rgba(var(--fp-main-rgb),0.35)]"
+            aria-hidden
+          />
+          <DropdownMenu
+            items={moreItems}
+            disabled={moreDisabled}
+            side="bottom"
+            align="end"
+            ariaLabel="更多操作"
+            title="更多操作"
+            triggerClassName={mobileIconBtnCls}
+          >
+            <Ellipsis size={22} aria-hidden="true" />
+          </DropdownMenu>
+        </div>
+
+        {/* 分页区(无歌词时只有第一页,不显示圆点) */}
+        <div
+          ref={pagerRef}
+          onScroll={onPagerScroll}
+          className="relative z-10 flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {/* 第一页:封面 + 歌曲信息 */}
+          <section className="flex h-full w-full min-w-full shrink-0 snap-center flex-col items-center justify-center gap-7 px-8">
+            <PlayerCover
+              className={
+                playCoverType === "record"
+                  ? "max-w-[min(72vw,300px)]"
+                  : "max-w-[min(76vw,340px)]"
+              }
+            />
+            {renderSongInfo({
+              className: "w-full text-center",
+              titleCls: "text-xl",
+              aliaCls: "mt-1 text-sm",
+              artistCls: "mt-1.5 text-sm",
+              albumCls: "mt-1 text-xs",
+            })}
+          </section>
+
+          {/* 第二页:顶部左封面 + 右信息,下方歌词 */}
+          {hasLyric && (
+            <section className="flex h-full w-full min-w-full shrink-0 snap-center flex-col px-5">
+              <div className="flex shrink-0 items-center gap-3 pb-2">
+                {coverSmall ? (
+                  <img
+                    src={coverSmall}
+                    alt="封面"
+                    className="h-14 w-14 shrink-0 rounded-lg object-cover shadow-lg"
+                  />
+                ) : (
+                  <div
+                    className="h-14 w-14 shrink-0 rounded-lg"
+                    style={{ background: "rgba(255, 255, 255, 0.08)" }}
+                  />
+                )}
+                {renderSongInfo({
+                  className: "min-w-0 flex-1 text-left",
+                  titleCls: "text-base",
+                  aliaCls: "text-xs",
+                  artistCls: "mt-0.5 text-xs",
+                  albumCls: null,
+                })}
+              </div>
+              <div className="min-h-0 flex-1">{lyricNode}</div>
+            </section>
+          )}
+        </div>
+
+        {/* 页码圆点(点按跳页) */}
+        {hasLyric && (
+          <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 py-2">
+            {[0, 1].map((i) => (
+              <button
                 key={i}
-                src={coverSmall}
-                alt=""
-                aria-hidden
-                className="absolute h-1/2 w-1/2 max-w-none object-cover"
-                style={{
-                  ...q.pos,
-                  filter: "blur(80px) contrast(1.75)",
-                  animation: `met-fp-cover-rotate ${q.duration}s linear infinite${
-                    q.reverse ? " reverse" : ""
-                  }`,
-                  // 暂停冻结
-                  animationPlayState: playState ? "running" : "paused",
-                }}
+                type="button"
+                className={`h-1.5 cursor-pointer rounded-full p-0 transition-all ${
+                  page === i
+                    ? "w-5 bg-[rgba(var(--fp-main-rgb),0.9)]"
+                    : "w-1.5 bg-[rgba(var(--fp-main-rgb),0.35)]"
+                }`}
+                aria-label={i === 0 ? "封面页" : "歌词页"}
+                aria-current={page === i}
+                onClick={() => goPage(i)}
               />
             ))}
           </div>
-        ) : showBlurBackground ? (
-          <img
-            src={coverSmall}
-            alt=""
-            aria-hidden
-            className="absolute left-1/2 top-1/2 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover blur-3xl"
-            style={{ filter: "blur(80px) contrast(1.2)" }}
-          />
-        ) : (
-          <div className="absolute inset-0" style={{ background: gradientBackground }} />
         )}
-        {/* 暗化遮罩,保证前景可读性(对齐旧 .overlay::after) */}
-        <div className="absolute inset-0" style={{ background: "rgba(0, 0, 0, 0.4)" }} />
+
+        <FullPlayerControls onKeepVisible={keepControlsVisible} mobile />
       </div>
+    );
+  }
+
+  // ===================== 桌面(md+)左右分栏布局 =====================
+  return (
+    <div
+      className="fixed inset-0 z-40 select-none overflow-hidden"
+      style={{ ...rootStyle, cursor: playerControlShow ? "auto" : "none" }}
+      onMouseMove={pokeControls}
+      onMouseLeave={hideControls}
+    >
+      <style>{FULL_PLAYER_CSS}</style>
+      {backgroundNode}
 
       {/* ===== 顶部菜单:纯净歌词切换 + 关闭(随控制条显隐) ===== */}
       <div
@@ -535,154 +832,40 @@ function FullPlayerInner() {
         )}
       </div>
 
-      {/* ===== 主体(窄屏/竖屏 max-md 时上下堆叠,对齐旧页 700px 断点) ===== */}
-      <div className="relative z-10 flex h-full w-full items-center max-md:flex-col max-md:items-stretch">
-        {/* 左半:大封面 + 歌曲信息(纯净歌词模式下隐藏;窄屏有歌词时缩小并置顶) */}
+      {/* ===== 主体:左封面 + 右歌词 ===== */}
+      <div className="relative z-10 flex h-full w-full items-center">
+        {/* 左半:大封面 + 歌曲信息(纯净歌词模式下隐藏) */}
         {!purelyLyric && (
           <div
             className={`flex h-full flex-col items-center justify-center gap-6 px-10 ${
-              hasLyric
-                ? "w-[45%] max-md:h-auto max-md:w-full max-md:shrink-0 max-md:justify-start max-md:gap-3 max-md:px-6 max-md:pb-1 max-md:pt-20"
-                : "w-full max-md:px-6"
+              hasLyric ? "w-[45%]" : "w-full"
             }`}
           >
             {/* 封面(cover/record 两种模式,见 PlayerCover) */}
             <PlayerCover
               className={
-                playCoverType === "record"
-                  ? `max-w-[min(46vh,420px)] ${
-                      hasLyric ? "max-md:max-w-[min(180px,30vh)]" : "max-md:max-w-[60vw]"
-                    }`
-                  : `max-w-[420px] ${
-                      hasLyric ? "max-md:max-w-[min(200px,32vh)]" : "max-md:max-w-[70vw]"
-                    }`
+                playCoverType === "record" ? "max-w-[min(46vh,420px)]" : "max-w-[420px]"
               }
             />
-            <div className="w-full max-w-[420px] text-center">
-              <div
-                className="truncate text-2xl font-bold max-md:text-lg"
-                style={{ color: "rgb(var(--fp-main-rgb))" }}
-              >
-                {playSongData.name || "未知曲目"}
-              </div>
-              {aliaText && (
-                <div
-                  className="mt-1 truncate text-base max-md:text-sm"
-                  style={{ color: "rgba(var(--fp-main-rgb), 0.6)" }}
-                >
-                  {aliaText}
-                </div>
-              )}
-              {/* 歌手:有 id 时可点跳转 /artist(对照旧 FullPlayer.vue 66-99 行) */}
-              <div
-                className="mt-2 truncate text-sm max-md:mt-1 max-md:text-xs"
-                style={{ color: "rgba(var(--fp-main-rgb), 0.7)" }}
-              >
-                {artistList && artistList.length > 0
-                  ? artistList.map((ar, index) => (
-                      <span key={`${ar.id ?? "no-id"}-${index}`}>
-                        {index > 0 && <span> / </span>}
-                        {ar.id != null ? (
-                          <span
-                            role="link"
-                            tabIndex={0}
-                            className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              gotoArtist(ar.id as number | string);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") gotoArtist(ar.id as number | string);
-                            }}
-                          >
-                            {ar.name}
-                          </span>
-                        ) : (
-                          <span>{ar.name}</span>
-                        )}
-                      </span>
-                    ))
-                  : artistsText || "未知艺术家"}
-              </div>
-              {/* 专辑:album.id 存在时可点跳转 /album */}
-              {albumText && (
-                <div
-                  className="mt-1 truncate text-sm max-md:hidden"
-                  style={{ color: "rgba(var(--fp-main-rgb), 0.5)" }}
-                >
-                  {albumData?.id != null ? (
-                    <span
-                      role="link"
-                      tabIndex={0}
-                      className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        gotoAlbum(albumData.id as number | string);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") gotoAlbum(albumData.id as number | string);
-                      }}
-                    >
-                      {albumText}
-                    </span>
-                  ) : (
-                    albumText
-                  )}
-                </div>
-              )}
-            </div>
+            {renderSongInfo({
+              className: "w-full max-w-[420px] text-center",
+              titleCls: "text-2xl",
+              aliaCls: "mt-1 text-base",
+              artistCls: "mt-2 text-sm",
+              albumCls: "mt-1 text-sm",
+            })}
           </div>
         )}
 
-        {/* 右半:歌词区(纯净模式下占满居中;窄屏堆叠时占据剩余高度) */}
+        {/* 右半:歌词区(纯净模式下占满居中) */}
         {/* record 唱片模式歌词区高度 70vh(对照旧 AMLyric.vue getDynamicHeight 76-84) */}
         {hasLyric && (
           <div
             className={`flex h-full min-w-0 flex-col justify-center ${
-              purelyLyric
-                ? "w-full px-[12%] max-md:px-6"
-                : "flex-1 pr-10 max-md:h-auto max-md:min-h-0 max-md:w-full max-md:px-6 max-md:pr-6"
+              purelyLyric ? "w-full px-[12%]" : "flex-1 pr-10"
             }`}
           >
-            {useAM ? (
-              <div
-                className={`relative ${lyricHeightCls} w-full overflow-hidden max-md:h-full`}
-                style={{
-                  maskImage: LYRIC_MASK,
-                  WebkitMaskImage: LYRIC_MASK,
-                  filter: "drop-shadow(0px 4px 6px rgba(0, 0, 0, 0.2))",
-                  mixBlendMode: "plus-lighter",
-                }}
-              >
-                {lyricReady && (
-                  <LyricPlayer
-                    // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
-                    key={`${playSongData.id}-${amLyricMode}-${amLines.length}`}
-                    ref={lyricPlayerRef}
-                    className="lyric-font h-full w-full"
-                    style={
-                      {
-                        fontSize: `${lyricsFontSize}px`,
-                        // 对照旧 AMLyric.vue 109-112:coverTheme shadeTwo rgba 0.95
-                        "--amll-lp-color": amLyricColor,
-                      } as CSSProperties
-                    }
-                    lyricLines={amLines}
-                    currentTime={amCurrentTime}
-                    playing={playState}
-                    enableSpring={useAMSpring}
-                    enableScale={useAMScale}
-                    enableBlur={lyricsBlur}
-                    alignPosition={lyricsBlock === "center" ? 0.5 : 0.25}
-                    onLyricLineClick={onLyricLineClick}
-                  />
-                )}
-              </div>
-            ) : (
-              <div className={`${lyricHeightCls} w-full max-md:h-full`}>
-                <LyricScroll />
-              </div>
-            )}
+            <div className={`${lyricHeightCls} w-full`}>{lyricNode}</div>
           </div>
         )}
       </div>

@@ -82,7 +82,11 @@ const handleVolumeWheel = (e: WheelEvent) => {
 
 /**
  * 底部播放条(U3:对齐旧 MainControl.vue 功能)。
- * 由 RootLayout 放置于布局底部;自身高度 72px、宽度 100%。
+ * 由 RootLayout 放置于布局底部;宽度 100%,桌面高 72px。
+ * 窄屏(max-md)改为上下两行(对齐 Apple Music 迷你播放器):
+ * 第一行 封面/歌曲信息 + 紧凑控制(播放·下一曲·播放列表),第二行 进度条;
+ * 放不下的次要控件(播放模式/倍速/音量/更多)在窄屏隐藏,统一去全屏播放器操作。
+ * 高度随之变为 96px,RootLayout 的内容留白与回顶按钮偏移同步走 max-md 分支。
  * 内部渲染 PlaylistDrawer(受 status.playListShow 驱动)。
  */
 export default function PlayerBar() {
@@ -177,7 +181,7 @@ export default function PlayerBar() {
     {/* showPlayBar=false 时向下平移全隐(对照旧 bottom -90 动画;
         transform 会让 fixed 后代以其为包含块,故 PlaylistDrawer 置于本节点之外) */}
     <div
-      className={`flex h-[72px] w-full items-center gap-4 border-t px-4 transition-transform duration-300 ${
+      className={`flex h-[72px] w-full items-center gap-4 border-t px-4 transition-transform duration-300 max-md:h-[96px] max-md:flex-col max-md:items-stretch max-md:justify-center max-md:gap-1.5 max-md:px-3 ${
         showPlayBar ? "translate-y-0" : "pointer-events-none translate-y-full"
       }`}
       aria-hidden={!showPlayBar}
@@ -186,6 +190,8 @@ export default function PlayerBar() {
         borderColor: "var(--met-border)",
       }}
     >
+      {/* 窄屏第一行:歌曲信息 + 紧凑控制;md+ 用 display:contents 还原为原来的直接子元素 */}
+      <div className="flex min-w-0 items-center gap-3 md:contents">
       {/* 左区:封面 + 歌曲信息,点击打开全屏播放器 */}
       <div
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-3"
@@ -244,9 +250,55 @@ export default function PlayerBar() {
         </div>
       </div>
 
-      {/* 中区:控制按钮 + 进度条 */}
-      <div className="flex w-[420px] max-w-[46%] flex-col items-center gap-1">
-        <div className="flex items-center gap-4">
+      {/* 窄屏紧凑控制:播放/暂停 + 下一曲 + 播放列表(其余控件收进全屏播放器) */}
+      <div className="flex shrink-0 items-center gap-1 md:hidden">
+        <button
+          type="button"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full"
+          style={{ background: "var(--met-primary)", color: "var(--met-primary-fg)" }}
+          title={playState ? "暂停" : "播放"}
+          onClick={() => void playOrPause()}
+        >
+          {playLoading ? (
+            <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+          ) : playState ? (
+            <Pause size={18} fill="currentColor" aria-hidden="true" />
+          ) : (
+            <Play size={18} fill="currentColor" aria-hidden="true" />
+          )}
+        </button>
+        <button
+          type="button"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center bg-transparent"
+          style={{ color: "var(--met-fg)" }}
+          title="下一曲"
+          onClick={() => switchSong("next")}
+        >
+          <SkipForward size={18} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="flex h-9 cursor-pointer items-center gap-1 bg-transparent px-1"
+          style={{ color: playListShow ? "var(--met-primary)" : "var(--met-fg)" }}
+          title="播放列表"
+          onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
+        >
+          <ListMusic size={18} aria-hidden="true" />
+          {showPlaylistCount && playList.length > 0 && (
+            <span
+              className="text-[11px] leading-4 tabular-nums"
+              style={{ color: "var(--met-fg-dim)" }}
+            >
+              {playList.length > 999 ? "999+" : playList.length}
+            </span>
+          )}
+        </button>
+      </div>
+      </div>
+
+      {/* 中区:控制按钮 + 进度条(窄屏为第二行,只留进度条) */}
+      <div className="flex w-[420px] max-w-[46%] flex-col items-center gap-1 max-md:w-full max-md:max-w-none">
+        <div className="flex items-center gap-4 max-md:hidden">
           <button
             type="button"
             className="cursor-pointer bg-transparent"
@@ -313,8 +365,8 @@ export default function PlayerBar() {
         )}
       </div>
 
-      {/* 右区:播放模式 + 倍速 + 音量 + 播放列表 */}
-      <div className="flex flex-1 items-center justify-end gap-3">
+      {/* 右区:播放模式 + 倍速 + 音量 + 播放列表(窄屏放不下,统一去全屏播放器操作) */}
+      <div className="flex flex-1 items-center justify-end gap-3 max-md:hidden">
         {/* 播放模式(点击循环切换;hover 弹出三项直接选,对照旧 n-dropdown) */}
         <div
           className="relative flex items-center"

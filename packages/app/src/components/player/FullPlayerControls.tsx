@@ -74,6 +74,11 @@ const handleVolumeWheel = (e: WheelEvent) => {
 export interface FullPlayerControlsProps {
   /** 悬停控制条时保持其可见(清除父级 2 秒隐藏计时器) */
   onKeepVisible: () => void;
+  /**
+   * 窄屏(手机)版:常驻在两页分页区之下的流内控制条,
+   * 只保留 进度 + 模式/上一曲/播放/下一曲/播放列表(其余去顶部「更多」)。
+   */
+  mobile?: boolean;
 }
 
 /**
@@ -82,7 +87,10 @@ export interface FullPlayerControlsProps {
  * 窄屏(max-md)下隐藏播放模式与音量等次要控件,保留核心播放控制。
  * 随 status.playerControlShow 淡入淡出(鼠标静止 2 秒后由 FullPlayer 隐藏)。
  */
-export default function FullPlayerControls({ onKeepVisible }: FullPlayerControlsProps) {
+export default function FullPlayerControls({
+  onKeepVisible,
+  mobile = false,
+}: FullPlayerControlsProps) {
   const playerControlShow = useStatusStore((s) => s.playerControlShow);
   const playState = useStatusStore((s) => s.playState);
   const playLoading = useStatusStore((s) => s.playLoading);
@@ -164,6 +172,98 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
 
   const iconBtnCls =
     "flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-transparent text-white/80 transition-all hover:scale-105 hover:bg-white/10 hover:text-white active:scale-100";
+
+  // ===== 窄屏(手机)控制条:参与流内布局,不做悬浮卡片、不自动淡出 =====
+  if (mobile) {
+    const mobileBtnCls =
+      "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-white/85 transition-colors active:bg-white/10";
+    return (
+      <div className="relative z-20 w-full shrink-0 px-6 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] pt-1">
+        {/* 进度(缓存下载中时临时充当下载进度显示器) */}
+        {caching ? (
+          <CacheProgressBar percent={songCacheProgress} variant="overlay" />
+        ) : (
+          <>
+            <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="overlay">
+              <Slider
+                value={barValue}
+                min={0}
+                max={100}
+                step={0.1}
+                ariaLabel="播放进度"
+                onValueChange={(v) => setDragBar(v)}
+                onValueCommitted={commitSeek}
+              />
+            </SeekTooltipArea>
+            {/* 时间读数移到进度条下方两端(横排放不下) */}
+            <div className="flex items-center justify-between px-1 text-[11px] tabular-nums text-white/55">
+              <span>{playTimeData.played}</span>
+              <span>{playTimeData.durationTime}</span>
+            </div>
+          </>
+        )}
+
+        {/* 播放控制:模式 / 上一曲 / 播放暂停 / 下一曲 / 播放列表 */}
+        <div className="mt-3 flex items-center justify-between">
+          <button
+            type="button"
+            className={mobileBtnCls}
+            title={modeMeta.label}
+            aria-label={modeMeta.label}
+            onClick={() =>
+              useStatusStore.setState({ playSongMode: NEXT_SONG_MODE[playSongMode] })
+            }
+          >
+            <ModeIcon size={20} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={mobileBtnCls}
+            title="上一曲"
+            aria-label="上一曲"
+            onClick={() => switchSong("prev")}
+          >
+            <SkipBack size={26} fill="currentColor" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center rounded-full text-white transition-transform active:scale-95"
+            style={{ background: "rgba(255, 255, 255, 0.16)" }}
+            title={playState ? "暂停" : "播放"}
+            aria-label={playState ? "暂停" : "播放"}
+            onClick={() => void playOrPause()}
+          >
+            {playLoading ? (
+              <Loader2 size={28} className="animate-spin" aria-hidden="true" />
+            ) : playState ? (
+              <Pause size={28} fill="currentColor" aria-hidden="true" />
+            ) : (
+              <Play size={28} fill="currentColor" aria-hidden="true" />
+            )}
+          </button>
+          <button
+            type="button"
+            className={mobileBtnCls}
+            title="下一曲"
+            aria-label="下一曲"
+            onClick={() => switchSong("next")}
+          >
+            <SkipForward size={26} fill="currentColor" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={mobileBtnCls}
+            style={playListShow ? { color: "var(--met-primary)" } : undefined}
+            title="播放列表"
+            aria-label="播放列表"
+            onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
+          >
+            <ListMusic size={20} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
