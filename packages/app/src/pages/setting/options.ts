@@ -74,6 +74,23 @@ export const fontOptions: SelectOption[] = [
   { label: "系统默认", value: "system" },
 ];
 
+/**
+ * 歌词字重。0 = 跟随所选歌词字体自带的字重(HarmonyOS Bold 为 bold、
+ * Regular 为 normal……),保持不设置时的原有观感;其余为 CSS font-weight 数值。
+ */
+export const lyricFontWeightOptions: SelectOption[] = [
+  { label: "跟随字体", value: "0" },
+  { label: "100 纤细", value: "100" },
+  { label: "200 特细", value: "200" },
+  { label: "300 细体", value: "300" },
+  { label: "400 常规", value: "400" },
+  { label: "500 中等", value: "500" },
+  { label: "600 半粗", value: "600" },
+  { label: "700 粗体", value: "700" },
+  { label: "800 特粗", value: "800" },
+  { label: "900 黑体", value: "900" },
+];
+
 /** 明暗模式 */
 export const themeTypeOptions: SelectOption<"light" | "dark">[] = [
   { label: "浅色模式", value: "light" },
@@ -130,8 +147,3 @@ export const searchLoadSizeOptions: SelectOption[] = [
   { label: "我要很多（ 100 条 ）", value: "100" },
 ];
 
-/** 关闭方式(Electron 专属,文案对齐旧 stores/siteSettings.js 注释与关闭弹窗) */
-export const closeTypeOptions: SelectOption<"close" | "hide">[] = [
-  { label: "最小化到任务栏", value: "hide" },
-  { label: "直接关闭", value: "close" },
-];

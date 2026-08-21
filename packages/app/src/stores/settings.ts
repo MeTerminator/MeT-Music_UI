@@ -7,9 +7,6 @@ import { legacyStorage } from "./persist";
  */
 export interface SettingsState {
   // 基础配置
-  closeTip: boolean;
-  closeType: "close" | "hide";
-  showTaskbarProgress: boolean;
   showSearchHistory: boolean;
   showSider: boolean;
   siderShowCover: boolean;
@@ -57,6 +54,8 @@ export interface SettingsState {
   removeAMInfo: boolean;
   lrcMousePause: boolean;
   lyricsFontSize: number;
+  /** 歌词字重;0 表示跟随所选歌词字体自带的字重(不覆盖),否则为 100-900 */
+  lyricFontWeight: number;
   lyricsBlur: boolean;
   showYrc: boolean;
   showYrcAnimation: boolean;
@@ -67,9 +66,6 @@ export interface SettingsState {
 }
 
 export const defaultSettings: SettingsState = {
-  closeTip: true,
-  closeType: "hide",
-  showTaskbarProgress: false,
   showSearchHistory: true,
   showSider: true,
   siderShowCover: true,
@@ -112,6 +108,7 @@ export const defaultSettings: SettingsState = {
   removeAMInfo: true,
   lrcMousePause: true,
   lyricsFontSize: 46,
+  lyricFontWeight: 0,
   lyricsBlur: false,
   showYrc: true,
   showYrcAnimation: true,

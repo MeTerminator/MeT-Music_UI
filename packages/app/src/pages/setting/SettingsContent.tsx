@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import { soundStop } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
-import { useHostStore } from "@/host";
 import { cleanAll, getSessionId } from "@/platform/web";
 import { copyText } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
@@ -22,8 +21,8 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { SettingItem, SettingSection, SliderMarks } from "./SettingItem";
 import {
-  closeTypeOptions,
   fontOptions,
+  lyricFontWeightOptions,
   loadSizeOptions,
   lyricsBlockOptions,
   lyricsPositionOptions,
@@ -41,7 +40,7 @@ import packageJson from "../../../package.json";
 const set = useSettingsStore.setState;
 
 /** 分区导航(点击滚动至对应分组) */
-const sections = ["常规", "桌面客户端", "播放", "歌词", "其他", "关于"] as const;
+const sections = ["常规", "播放", "歌词", "其他", "关于"] as const;
 type SectionName = (typeof sections)[number];
 
 export interface SettingsContentProps {
@@ -52,7 +51,6 @@ export interface SettingsContentProps {
 const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const settings = useSettingsStore();
   const coverTheme = useStatusStore((s) => s.coverTheme);
-  const isHosted = useHostStore((s) => s.isHosted);
 
   const [activeTab, setActiveTab] = useState<SectionName>("常规");
   const [resetOpen, setResetOpen] = useState(false);
@@ -293,35 +291,6 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
         </SettingSection>
       </div>
 
-      {/* 桌面客户端(Electron 专属,浏览器中置灰展示) */}
-      <div className="mt-8 scroll-mt-20" ref={bindSection("桌面客户端")}>
-        <SettingSection title="桌面客户端" note={isHosted ? undefined : "桌面客户端生效"}>
-          <SettingItem name="关闭软件提醒弹窗" tip="关闭软件时是否弹窗询问" dimmed={!isHosted}>
-            <Switch
-              checked={settings.closeTip}
-              disabled={!isHosted}
-              onCheckedChange={(v) => set({ closeTip: v })}
-            />
-          </SettingItem>
-          <SettingItem name="关闭软件方式" tip="点击关闭按钮时的默认行为" dimmed={!isHosted}>
-            <Select
-              value={settings.closeType}
-              options={closeTypeOptions}
-              disabled={!isHosted}
-              onValueChange={(v) => set({ closeType: v })}
-              className="w-52"
-            />
-          </SettingItem>
-          <SettingItem name="显示歌曲任务栏进度" tip="在任务栏图标上显示播放进度" dimmed={!isHosted}>
-            <Switch
-              checked={settings.showTaskbarProgress}
-              disabled={!isHosted}
-              onCheckedChange={(v) => set({ showTaskbarProgress: v })}
-            />
-          </SettingItem>
-        </SettingSection>
-      </div>
-
       {/* 播放 */}
       <div className="mt-8 scroll-mt-20" ref={bindSection("播放")}>
         <SettingSection title="播放">
@@ -496,6 +465,14 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               value={settings.lyricFont}
               options={fontOptions}
               onValueChange={(v) => set({ lyricFont: v })}
+              className="w-52"
+            />
+          </SettingItem>
+          <SettingItem name="歌词字重" tip="覆盖歌词字体自带的粗细;跟随字体则不覆盖">
+            <Select
+              value={String(settings.lyricFontWeight)}
+              options={lyricFontWeightOptions}
+              onValueChange={(v) => set({ lyricFontWeight: Number(v) })}
               className="w-52"
             />
           </SettingItem>

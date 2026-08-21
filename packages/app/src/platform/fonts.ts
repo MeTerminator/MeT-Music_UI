@@ -26,7 +26,7 @@ const fontConfigs: Record<string, { family: string; weight: string }> = {
 };
 
 const applyFonts = (): void => {
-  const { siteFont, lyricFont } = useSettingsStore.getState();
+  const { siteFont, lyricFont, lyricFontWeight } = useSettingsStore.getState();
   const style = document.documentElement.style;
 
   const siteConfig = fontConfigs[siteFont];
@@ -40,9 +40,16 @@ const applyFonts = (): void => {
   const lyricConfig = fontConfigs[lyricFont];
   if (lyricConfig) {
     style.setProperty("--met-lyric-font", lyricConfig.family);
-    style.setProperty("--met-lyric-font-weight", lyricConfig.weight);
   } else {
     style.removeProperty("--met-lyric-font");
+  }
+  // 字重:settings.lyricFontWeight 为 0 时跟随字体自带字重(旧行为),
+  // 否则由用户自由指定;字体枚举未知且未指定字重时交还 styles.css 的默认值
+  if (lyricFontWeight > 0) {
+    style.setProperty("--met-lyric-font-weight", String(lyricFontWeight));
+  } else if (lyricConfig) {
+    style.setProperty("--met-lyric-font-weight", lyricConfig.weight);
+  } else {
     style.removeProperty("--met-lyric-font-weight");
   }
 };
@@ -51,11 +58,17 @@ const applyFonts = (): void => {
 export const initFonts = (): void => {
   let lastSiteFont = useSettingsStore.getState().siteFont;
   let lastLyricFont = useSettingsStore.getState().lyricFont;
+  let lastLyricWeight = useSettingsStore.getState().lyricFontWeight;
 
   useSettingsStore.subscribe((s) => {
-    if (s.siteFont !== lastSiteFont || s.lyricFont !== lastLyricFont) {
+    if (
+      s.siteFont !== lastSiteFont ||
+      s.lyricFont !== lastLyricFont ||
+      s.lyricFontWeight !== lastLyricWeight
+    ) {
       lastSiteFont = s.siteFont;
       lastLyricFont = s.lyricFont;
+      lastLyricWeight = s.lyricFontWeight;
       applyFonts();
     }
   });
