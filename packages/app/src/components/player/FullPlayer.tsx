@@ -6,10 +6,10 @@ import {
 } from "@applemusic-like-lyrics/react";
 import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
-import { ChevronDown, Ellipsis, X } from "lucide-react";
+import { Captions, CaptionsOff, ChevronDown, Columns2, Ellipsis, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { fadePlayOrPause, setSeek, type AMLine, type Artist } from "@met/core";
-import { useStatusStore } from "../../stores/status";
+import { useStatusStore, type LyricViewMode } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
 import type { OnCoverColors } from "@/platform/cover-color";
@@ -56,16 +56,46 @@ const ANIMATION_BG_QUADRANTS: {
   { pos: { bottom: 0, right: 0 }, duration: 65, reverse: false },
 ];
 
+/**
+ * 歌词视图三态的循环顺序与展示(点击按“歌词占比递增”推进:
+ * 关闭 → 封面+歌词 → 仅歌词 → 关闭)。
+ */
+const LYRIC_VIEW_META: Record<
+  LyricViewMode,
+  { icon: typeof Captions; label: string; next: LyricViewMode }
+> = {
+  hidden: { icon: CaptionsOff, label: "关闭歌词", next: "both" },
+  both: { icon: Columns2, label: "封面 + 歌词", next: "only" },
+  only: { icon: Captions, label: "仅歌词", next: "hidden" },
+};
+
 /** 窄屏顶部条图标按钮(封面主题色前景 + 轻触反馈) */
 const mobileIconBtnCls =
   "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-[rgba(var(--fp-main-rgb),0.75)] transition-colors active:bg-[rgba(var(--fp-main-rgb),0.14)]";
+
+/** 歌词视图三态切换的宽度过渡时长与缓动(两栏共用,保证同步) */
+const VIEW_TRANSITION_MS = 520;
+const VIEW_TRANSITION_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 const FULL_PLAYER_CSS = `
 @keyframes met-fp-cover-rotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+@keyframes met-fp-icon-in {
+  from { opacity: 0; transform: scale(0.6) rotate(-25deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+.met-fp-icon-in {
+  animation: met-fp-icon-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 `;
+
+/** 歌词视图三态图标(挂载即播一次弹入,配合外层 key 让每次切换都有反馈) */
+function LyricViewIcon({ mode }: { mode: LyricViewMode }) {
+  const Icon = LYRIC_VIEW_META[mode].icon;
+  return <Icon size={18} className="met-fp-icon-in" aria-hidden="true" />;
+}
 
 /**
  * AMLL 流体背景的封面地址(对齐旧 FullPlayer.vue 的 AmllAlbum computed):
@@ -173,7 +203,7 @@ function FullPlayerInner() {
   const playState = useStatusStore((s) => s.playState);
   const playSeekMs = useStatusStore((s) => s.playSeekMs);
   const playerControlShow = useStatusStore((s) => s.playerControlShow);
-  const pureLyricMode = useStatusStore((s) => s.pureLyricMode);
+  const lyricViewMode = useStatusStore((s) => s.lyricViewMode);
   const playSongData = useMusicStore((s) => s.playSongData);
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
 
@@ -365,7 +395,14 @@ function FullPlayerInner() {
   const hasPlainLyric = Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
   const useAM = useAMLyrics && amLines.length > 0;
   const hasLyric = useAM || hasPlainLyric;
-  const purelyLyric = pureLyricMode && hasLyric;
+  // 无歌词的歌曲强制退回“只有封面”的排布(三态按钮此时也不渲染)
+  const viewMode: LyricViewMode = hasLyric ? lyricViewMode : "hidden";
+  const purelyLyric = viewMode === "only";
+  /**
+   * 封面栏宽度(百分比):歌词栏是 flex-1,宽度由本值反推,
+   * 所以只要给封面栏的 width 做过渡,两栏就会一起平滑伸缩。
+   */
+  const coverPaneWidth = viewMode === "only" ? "0%" : viewMode === "both" ? "45%" : "100%";
 
   // 切到无歌词的歌曲时第二页随之卸载(滚动位置由浏览器夹回 0),页码状态一并复位
   useEffect(() => {
@@ -807,7 +844,7 @@ function FullPlayerInner() {
       <style>{FULL_PLAYER_CSS}</style>
       {backgroundNode}
 
-      {/* ===== 顶部菜单:纯净歌词切换 + 关闭(随控制条显隐) ===== */}
+      {/* ===== 顶部菜单:歌词视图三态切换 + 关闭(随控制条显隐) ===== */}
       <div
         className={`absolute left-0 top-0 z-20 flex w-full items-center justify-between p-5 transition-opacity duration-300 ${
           playerControlShow ? "opacity-100" : "pointer-events-none opacity-0"
@@ -817,15 +854,17 @@ function FullPlayerInner() {
           {hasLyric && (
             <button
               type="button"
-              className={`flex h-9 cursor-pointer items-center rounded-lg px-3 text-sm transition-all hover:bg-[rgba(var(--fp-main-rgb),0.14)] ${
-                pureLyricMode
-                  ? "bg-[rgba(var(--fp-main-rgb),0.14)] text-[rgb(var(--fp-main-rgb))]"
-                  : "text-[rgba(var(--fp-main-rgb),0.5)] hover:text-[rgb(var(--fp-main-rgb))]"
-              }`}
-              title={pureLyricMode ? "退出纯净歌词模式" : "纯净歌词模式"}
-              onClick={() => useStatusStore.setState({ pureLyricMode: !pureLyricMode })}
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[rgba(var(--fp-main-rgb),0.7)] transition-all hover:scale-105 hover:bg-[rgba(var(--fp-main-rgb),0.14)] hover:text-[rgb(var(--fp-main-rgb))]"
+              title={`歌词视图:${LYRIC_VIEW_META[viewMode].label}(点击切换到${
+                LYRIC_VIEW_META[LYRIC_VIEW_META[viewMode].next].label
+              })`}
+              aria-label={`歌词视图:${LYRIC_VIEW_META[viewMode].label}`}
+              onClick={() =>
+                useStatusStore.setState({ lyricViewMode: LYRIC_VIEW_META[viewMode].next })
+              }
             >
-              纯净歌词
+              {/* key 让图标随模式重播一次淡入缩放,切换有反馈 */}
+              <LyricViewIcon key={viewMode} mode={viewMode} />
             </button>
           )}
         </div>
@@ -842,15 +881,24 @@ function FullPlayerInner() {
         )}
       </div>
 
-      {/* ===== 主体:左封面 + 右歌词 ===== */}
+      {/* ===== 主体:左封面 + 右歌词 =====
+          三态之间靠「封面栏宽度」一个量驱动:歌词栏是 flex-1,宽度由它反推,
+          于是两栏同步伸缩。两栏都常驻挂载(不 mount/unmount),否则没有退场动画;
+          淡出比宽度收拢更快,收到 0 之前内容已经透明,不会看到被压扁的一瞬。 */}
       <div className="relative z-10 flex h-full w-full items-center">
-        {/* 左半:大封面 + 歌曲信息(纯净歌词模式下隐藏) */}
-        {!purelyLyric && (
-          <div
-            className={`flex h-full flex-col items-center justify-center gap-6 px-10 ${
-              hasLyric ? "w-[45%]" : "w-full"
-            }`}
-          >
+        {/* 左半:大封面 + 歌曲信息(仅歌词模式下宽度收到 0 并淡出) */}
+        <div
+          className="h-full shrink-0 overflow-hidden"
+          style={{
+            width: coverPaneWidth,
+            opacity: purelyLyric ? 0 : 1,
+            transition: `width ${VIEW_TRANSITION_MS}ms ${VIEW_TRANSITION_EASE}, opacity ${
+              purelyLyric ? 220 : 380
+            }ms ease`,
+          }}
+          aria-hidden={purelyLyric}
+        >
+          <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-10">
             {/* 封面(cover/record 两种模式,见 PlayerCover) */}
             <PlayerCover
               className={
@@ -865,17 +913,26 @@ function FullPlayerInner() {
               albumCls: "mt-1 text-sm",
             })}
           </div>
-        )}
+        </div>
 
-        {/* 右半:歌词区(纯净模式下占满居中) */}
+        {/* 右半:歌词区(关闭歌词时被封面栏挤到 0 宽并淡出) */}
         {/* record 唱片模式歌词区高度 70vh(对照旧 AMLyric.vue getDynamicHeight 76-84) */}
         {hasLyric && (
           <div
-            className={`flex h-full min-w-0 flex-col justify-center ${
-              purelyLyric ? "w-full px-[12%]" : "flex-1 pr-10"
-            }`}
+            className="flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden"
+            style={{
+              opacity: viewMode === "hidden" ? 0 : 1,
+              transition: `opacity ${viewMode === "hidden" ? 220 : 380}ms ease`,
+            }}
+            aria-hidden={viewMode === "hidden"}
           >
-            <div className={`${lyricHeightCls} w-full`}>{lyricNode}</div>
+            {/* 左右留白放在内层:外层带 padding 的话(border-box)宽度收不到 0,
+                关闭歌词时会留下一条 40px 的空栏把封面栏顶出屏幕 */}
+            <div
+              className={`${lyricHeightCls} w-full ${purelyLyric ? "px-[12%]" : "pr-10"}`}
+            >
+              {lyricNode}
+            </div>
           </div>
         )}
       </div>

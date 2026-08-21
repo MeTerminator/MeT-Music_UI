@@ -4,11 +4,25 @@ import type { PlayTimeData } from "@met/core";
 import { legacyStorage } from "./persist";
 
 /**
+ * 全屏播放器的歌词视图三态(取代原来的布尔 pureLyricMode):
+ * hidden 只有封面 / both 封面 + 歌词 / only 只有歌词。
+ * 旧的 pureLyricMode 只能表达 both 与 only 两态,故整体替换;
+ * 老数据里残留的 pureLyricMode 不再被读取,升级后统一从 both 起步。
+ */
+export type LyricViewMode = "hidden" | "both" | "only";
+
+/**
  * 站点状态。字段与旧 stores/siteStatus.js 一致(persist key "siteStatus",
  * 且仅持久化旧 paths 列出的子集)。
  */
 export interface StatusStoreState {
   asideMenuCollapsed: boolean;
+  /**
+   * 桌面左侧栏是否展开为完整菜单(展开后与窄屏抽屉同一形态)。
+   * 没有复用旧的 asideMenuCollapsed:它已持久化且默认 false,
+   * 按「collapsed」语义解读会让所有老用户升级后直接变成展开态。
+   */
+  asideMenuExpanded: boolean;
   searchInputFocus: boolean;
   showPlayBar: boolean;
   playState: boolean;
@@ -24,7 +38,7 @@ export interface StatusStoreState {
   hasNextSong: boolean;
   coverTheme: Record<string, unknown>;
   coverBackground: string | null;
-  pureLyricMode: boolean;
+  lyricViewMode: LyricViewMode;
   playSongLyricIndex: number;
   playTimeData: PlayTimeData;
   playRate: number;
@@ -44,7 +58,8 @@ export interface StatusStoreState {
 /** 旧 pinia persist 的 paths 白名单,保持一致 */
 const PERSIST_PATHS = [
   "asideMenuCollapsed",
-  "pureLyricMode",
+  "asideMenuExpanded",
+  "lyricViewMode",
   "playRate",
   "playVolume",
   "playVolumeMute",
@@ -61,6 +76,7 @@ export const useStatusStore = create<StatusStoreState>()(
   persist(
     (): StatusStoreState => ({
       asideMenuCollapsed: false,
+      asideMenuExpanded: false,
       searchInputFocus: false,
       showPlayBar: true,
       playState: false,
@@ -75,7 +91,7 @@ export const useStatusStore = create<StatusStoreState>()(
       hasNextSong: false,
       coverTheme: {},
       coverBackground: null,
-      pureLyricMode: false,
+      lyricViewMode: "both" as LyricViewMode,
       playSongLyricIndex: -1,
       playTimeData: {
         currentTime: 0,

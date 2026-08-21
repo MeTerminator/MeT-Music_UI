@@ -38,6 +38,8 @@ import {
   History,
   Home,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Users,
   X,
@@ -146,6 +148,18 @@ const RouteProgress = () => {
  * 侧栏内容(nav 项 + 设置 + 用户面板 + 隔空播放),
  * rail = 桌面窄侧栏(纵向图标列),drawer = 窄屏抽屉(横向整行)。
  */
+/**
+ * 侧栏条目样式(rail = 桌面窄栏纵向图标 / drawer = 整行图标 + 文字)。
+ * 提到模块级是为了让 aside 上的「展开/收起」按钮与导航项保持同一套尺寸与配色。
+ */
+const sidebarItemBase = (isRail: boolean): string =>
+  isRail
+    ? "flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs"
+    : "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm";
+const SIDEBAR_ITEM_IDLE =
+  "text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]";
+const SIDEBAR_ITEM_ACTIVE = "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]";
+
 const SidebarContent = ({
   variant,
   onNavigate,
@@ -159,12 +173,9 @@ const SidebarContent = ({
   // 是拼接关系,激活项会残留 idle 的 hover 变色(hover 时压过主题色显示黑字)
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  const itemBase = isRail
-    ? "flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs"
-    : "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm";
-  const itemIdle =
-    "text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]";
-  const itemActive = "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]";
+  const itemBase = sidebarItemBase(isRail);
+  const itemIdle = SIDEBAR_ITEM_IDLE;
+  const itemActive = SIDEBAR_ITEM_ACTIVE;
 
   return (
     <>
@@ -217,6 +228,8 @@ const RootLayout = () => {
   const isHosted = useHostStore((s) => s.isHosted);
   const callbacks = useHostStore((s) => s.callbacks);
   const showSider = useSettingsStore((s) => s.showSider);
+  /** 桌面侧栏展开态(持久化;展开后与窄屏抽屉同一形态) */
+  const asideMenuExpanded = useStatusStore((s) => s.asideMenuExpanded);
   const isInRoom = useStatusStore((s) => s.isInRoom);
 
   // 窄屏抽屉
@@ -346,12 +359,52 @@ const RootLayout = () => {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* 左侧窄侧边栏:<768px 隐藏(改走抽屉);showSider=false 时桌面亦隐藏
-            (no-sider,窄屏汉堡抽屉不受影响);
-            asideMenuCollapsed 的完整宽度联动留待 U3,此处固定窄栏 */}
+        {/* 左侧边栏:<768px 隐藏(改走抽屉);showSider=false 时桌面亦隐藏
+            (no-sider,窄屏汉堡抽屉不受影响)。
+            两态:窄栏(纵向图标)与展开(与窄屏抽屉同一形态)。
+            过渡只动 aside 的宽度;内层固定为目标宽度并由 aside 的 overflow-hidden
+            裁切,这样内容从第一帧起就按最终宽度排版,不会在动画期间折行/挤压。
+            内层不加 key:换 variant 走的是 update 而非 remount,
+            否则 UserPanel 每次切换都会重挂载并重新拉一次用户资料。 */}
         {showSider ? (
-          <aside className="hidden w-16 shrink-0 flex-col border-r border-[var(--met-border)] py-3 md:flex">
-            <SidebarContent variant="rail" />
+          <aside
+            className={`hidden shrink-0 flex-col overflow-hidden border-r border-[var(--met-border)] py-3 transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex ${
+              asideMenuExpanded ? "w-64" : "w-16"
+            }`}
+          >
+            <div
+              className={`flex min-h-0 flex-1 shrink-0 flex-col ${
+                asideMenuExpanded ? "w-64" : "w-16"
+              }`}
+            >
+              {/* 展开 / 收起(样式与导航项同源,视觉上是菜单的第一项) */}
+              <div
+                className={
+                  asideMenuExpanded
+                    ? "shrink-0 px-2 pb-1"
+                    : "flex shrink-0 justify-center pb-1"
+                }
+              >
+                <button
+                  type="button"
+                  title={asideMenuExpanded ? "收起菜单" : "展开菜单"}
+                  aria-label={asideMenuExpanded ? "收起菜单" : "展开菜单"}
+                  aria-expanded={asideMenuExpanded}
+                  onClick={() =>
+                    useStatusStore.setState({ asideMenuExpanded: !asideMenuExpanded })
+                  }
+                  className={`${sidebarItemBase(!asideMenuExpanded)} cursor-pointer ${SIDEBAR_ITEM_IDLE}`}
+                >
+                  {asideMenuExpanded ? (
+                    <PanelLeftClose className="h-5 w-5" aria-hidden />
+                  ) : (
+                    <PanelLeftOpen className="h-5 w-5" aria-hidden />
+                  )}
+                  {asideMenuExpanded ? "收起" : "展开"}
+                </button>
+              </div>
+              <SidebarContent variant={asideMenuExpanded ? "drawer" : "rail"} />
+            </div>
           </aside>
         ) : null}
 
