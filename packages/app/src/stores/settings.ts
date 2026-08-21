@@ -35,7 +35,6 @@ export interface SettingsState {
   memorySeek: boolean;
   playSearch: boolean;
   showPlaylistCount: boolean;
-  showSpectrums: boolean;
   useMusicCache: boolean;
   simulationPlaying: boolean;
   listenTogetherSyncThreshold: number;
@@ -44,6 +43,8 @@ export interface SettingsState {
   searchLoadSize: number;
   // 歌词部分
   lyricsOffset: number;
+  /** 歌词时间平移(ms,可负):正值让歌词整体延后出现 */
+  lyricsShiftMs: number;
   lyricsAMOffset: number;
   lyricsAMEndTimeOffset: number;
   lyricsAMttmlUseOffset: boolean;
@@ -92,13 +93,13 @@ export const defaultSettings: SettingsState = {
   memorySeek: true,
   playSearch: false,
   showPlaylistCount: true,
-  showSpectrums: true,
   useMusicCache: false,
   simulationPlaying: false,
   listenTogetherSyncThreshold: 300,
   loadSize: 100,
   searchLoadSize: 30,
   lyricsOffset: 0.4,
+  lyricsShiftMs: 0,
   lyricsAMOffset: 150,
   lyricsAMEndTimeOffset: 250,
   lyricsAMttmlUseOffset: false,
@@ -120,9 +121,17 @@ export const defaultSettings: SettingsState = {
   showRoma: true,
 };
 
+/** 已下线的设置项:恢复持久化数据时一并抹掉(下次写回即从 localStorage 消失) */
+const REMOVED_KEYS = ["showSpectrums"] as const;
+
 export const useSettingsStore = create<SettingsState>()(
   persist(() => ({ ...defaultSettings }), {
     name: "siteSettings",
     storage: legacyStorage<SettingsState>(),
+    merge: (persisted, current) => {
+      const rest = { ...((persisted ?? {}) as Partial<SettingsState>) } as Record<string, unknown>;
+      for (const key of REMOVED_KEYS) delete rest[key];
+      return { ...current, ...rest } as SettingsState;
+    },
   }),
 );

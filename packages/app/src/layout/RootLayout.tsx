@@ -38,6 +38,8 @@ import {
   History,
   Home,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Users,
   X,
@@ -146,6 +148,18 @@ const RouteProgress = () => {
  * 侧栏内容(nav 项 + 设置 + 用户面板 + 隔空播放),
  * rail = 桌面窄侧栏(纵向图标列),drawer = 窄屏抽屉(横向整行)。
  */
+/**
+ * 侧栏条目样式(rail = 桌面窄栏纵向图标 / drawer = 整行图标 + 文字)。
+ * 提到模块级是为了让 aside 上的「展开/收起」按钮与导航项保持同一套尺寸与配色。
+ */
+const sidebarItemBase = (isRail: boolean): string =>
+  isRail
+    ? "flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs"
+    : "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm";
+const SIDEBAR_ITEM_IDLE =
+  "text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]";
+const SIDEBAR_ITEM_ACTIVE = "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]";
+
 const SidebarContent = ({
   variant,
   onNavigate,
@@ -159,12 +173,9 @@ const SidebarContent = ({
   // 是拼接关系,激活项会残留 idle 的 hover 变色(hover 时压过主题色显示黑字)
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  const itemBase = isRail
-    ? "flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-xs"
-    : "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm";
-  const itemIdle =
-    "text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-elevated)] hover:text-[var(--met-fg)]";
-  const itemActive = "bg-[var(--met-bg-elevated)] font-semibold text-[var(--met-primary)]";
+  const itemBase = sidebarItemBase(isRail);
+  const itemIdle = SIDEBAR_ITEM_IDLE;
+  const itemActive = SIDEBAR_ITEM_ACTIVE;
 
   return (
     <>
@@ -217,10 +228,27 @@ const RootLayout = () => {
   const isHosted = useHostStore((s) => s.isHosted);
   const callbacks = useHostStore((s) => s.callbacks);
   const showSider = useSettingsStore((s) => s.showSider);
+  /** 桌面侧栏展开态(持久化;展开后与窄屏抽屉同一形态) */
+  const asideMenuExpanded = useStatusStore((s) => s.asideMenuExpanded);
   const isInRoom = useStatusStore((s) => s.isInRoom);
 
   // 窄屏抽屉
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /**
+   * 抽屉退场期间保持挂载(与 FullPlayer 同一套路):
+   * 进场用 CSS animation(挂载即自动播放,不依赖 rAF 时序),
+   * 退场用 transition + -translate-x-full,transitionend 后才真正卸载。
+   * 超时兜底防 transitionend 在后台标签页等场景不触发。
+   */
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  useEffect(() => {
+    if (drawerOpen) {
+      setDrawerMounted(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setDrawerMounted(false), 450);
+    return () => window.clearTimeout(timer);
+  }, [drawerOpen]);
 
   // 路由切换回顶:仅 pathname 变化(search 变化如翻页不回顶,翻页各页自理)
   const mainRef = useRef<HTMLElement | null>(null);
@@ -346,18 +374,58 @@ const RootLayout = () => {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* 左侧窄侧边栏:<768px 隐藏(改走抽屉);showSider=false 时桌面亦隐藏
-            (no-sider,窄屏汉堡抽屉不受影响);
-            asideMenuCollapsed 的完整宽度联动留待 U3,此处固定窄栏 */}
+        {/* 左侧边栏:<768px 隐藏(改走抽屉);showSider=false 时桌面亦隐藏
+            (no-sider,窄屏汉堡抽屉不受影响)。
+            两态:窄栏(纵向图标)与展开(与窄屏抽屉同一形态)。
+            过渡只动 aside 的宽度;内层固定为目标宽度并由 aside 的 overflow-hidden
+            裁切,这样内容从第一帧起就按最终宽度排版,不会在动画期间折行/挤压。
+            内层不加 key:换 variant 走的是 update 而非 remount,
+            否则 UserPanel 每次切换都会重挂载并重新拉一次用户资料。 */}
         {showSider ? (
-          <aside className="hidden w-16 shrink-0 flex-col border-r border-[var(--met-border)] py-3 md:flex">
-            <SidebarContent variant="rail" />
+          <aside
+            className={`hidden shrink-0 flex-col overflow-hidden border-r border-[var(--met-border)] py-3 transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex ${
+              asideMenuExpanded ? "w-64" : "w-16"
+            }`}
+          >
+            <div
+              className={`flex min-h-0 flex-1 shrink-0 flex-col ${
+                asideMenuExpanded ? "w-64" : "w-16"
+              }`}
+            >
+              {/* 展开 / 收起(样式与导航项同源,视觉上是菜单的第一项) */}
+              <div
+                className={
+                  asideMenuExpanded
+                    ? "shrink-0 px-2 pb-1"
+                    : "flex shrink-0 justify-center pb-1"
+                }
+              >
+                <button
+                  type="button"
+                  title={asideMenuExpanded ? "收起菜单" : "展开菜单"}
+                  aria-label={asideMenuExpanded ? "收起菜单" : "展开菜单"}
+                  aria-expanded={asideMenuExpanded}
+                  onClick={() =>
+                    useStatusStore.setState({ asideMenuExpanded: !asideMenuExpanded })
+                  }
+                  className={`${sidebarItemBase(!asideMenuExpanded)} cursor-pointer ${SIDEBAR_ITEM_IDLE}`}
+                >
+                  {asideMenuExpanded ? (
+                    <PanelLeftClose className="h-5 w-5" aria-hidden />
+                  ) : (
+                    <PanelLeftOpen className="h-5 w-5" aria-hidden />
+                  )}
+                  {asideMenuExpanded ? "收起" : "展开"}
+                </button>
+              </div>
+              <SidebarContent variant={asideMenuExpanded ? "drawer" : "rail"} />
+            </div>
           </aside>
         ) : null}
 
-        {/* 主内容区(底部预留 72px 给播放条);
+        {/* 主内容区(底部预留播放条高度:桌面 72px,窄屏两行 96px);
             no-sider 时内容居中窄版(对照旧 .no-sider .main-router max-width) */}
-        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto pb-[72px]">
+        <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto pb-[72px] max-md:pb-[96px]">
           {/* key=pathname:路由切换时重放淡入动画(search 变化不触发,避免翻页闪动) */}
           <div
             key={pathname}
@@ -368,14 +436,14 @@ const RootLayout = () => {
         </main>
       </div>
 
-      {/* 回顶按钮(滚动超 400px 浮现;bottom 90px 避让播放条) */}
+      {/* 回顶按钮(滚动超 400px 浮现;bottom 避让播放条:桌面 90px / 窄屏 114px) */}
       <button
         type="button"
         title="回到顶部"
         aria-label="回到顶部"
         tabIndex={showBackTop ? 0 : -1}
         onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-        className={`fixed right-6 bottom-[90px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
+        className={`fixed right-6 bottom-[90px] max-md:right-4 max-md:bottom-[114px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
           showBackTop ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         }`}
       >
@@ -385,15 +453,26 @@ const RootLayout = () => {
       {/* 顶部路由加载进度条 */}
       <RouteProgress />
 
-      {/* 窄屏左侧抽屉(遮罩 + 侧栏内容复用) */}
-      {drawerOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden">
+      {/* 窄屏左侧抽屉(遮罩 + 侧栏内容复用;自左滑入,遮罩同步淡入淡出) */}
+      {drawerMounted ? (
+        <div
+          className={`fixed inset-0 z-40 md:hidden ${drawerOpen ? "" : "pointer-events-none"}`}
+        >
           <div
-            className="absolute inset-0 bg-black/50"
+            className={`met-fade-in absolute inset-0 bg-black/50 transition-opacity duration-300 ${
+              drawerOpen ? "opacity-100" : "opacity-0"
+            }`}
             aria-hidden
             onClick={() => setDrawerOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col border-r border-[var(--met-border)] bg-[var(--met-bg)] py-3 shadow-2xl">
+          <div
+            className={`met-drawer-in absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col border-r border-[var(--met-border)] bg-[var(--met-bg)] py-3 shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+              drawerOpen ? "" : "-translate-x-full"
+            }`}
+            onTransitionEnd={(e) => {
+              if (e.target === e.currentTarget && !drawerOpen) setDrawerMounted(false);
+            }}
+          >
             <div className="mb-2 flex items-center justify-between px-4">
               <span className="flex items-center gap-2 text-sm font-bold tracking-wide">
                 <Logo size={22} />

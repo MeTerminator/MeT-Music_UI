@@ -85,7 +85,8 @@ function CountDownDots({ firstTime }: { firstTime: number }) {
 export default function LyricScroll() {
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
   const playSongLyricIndex = useStatusStore((s) => s.playSongLyricIndex);
-  const pureLyricMode = useStatusStore((s) => s.pureLyricMode);
+  /** 仅歌词模式:歌词占满全屏,强制居中对齐 */
+  const lyricOnly = useStatusStore((s) => s.lyricViewMode === "only");
   const showYrc = useSettingsStore((s) => s.showYrc);
   const showYrcAnimation = useSettingsStore((s) => s.showYrcAnimation);
   const showTransl = useSettingsStore((s) => s.showTransl);
@@ -161,7 +162,7 @@ export default function LyricScroll() {
   // 行切换 / 歌词或布局变化时滚动(纯净模式切换会改变布局)
   useEffect(() => {
     scrollToLine(playSongLyricIndex);
-  }, [playSongLyricIndex, lines, pureLyricMode, lyricsBlock]);
+  }, [playSongLyricIndex, lines, lyricOnly, lyricsBlock]);
 
   // 翻译/音译对应旧规则:hasLrcTran / hasLrcRoma(yrc 与 lrc 共用该标记)
   const showTranLine = showTransl && playSongLyric.hasLrcTran;
@@ -178,7 +179,7 @@ export default function LyricScroll() {
     ? Math.min(tranFontSize, viewportWidth * 0.045)
     : tranFontSize;
 
-  const align = pureLyricMode ? "center" : lyricsPosition;
+  const align = lyricOnly ? "center" : lyricsPosition;
   const alignCls =
     align === "center"
       ? "items-center text-center"

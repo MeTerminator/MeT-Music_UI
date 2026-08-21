@@ -104,7 +104,8 @@ export default function CoverPlayButton({
       className={`flex items-center justify-center rounded-full bg-black/45 text-white shadow-lg backdrop-blur-md transition-all hover:scale-105 hover:bg-black/60 ${
         loading
           ? "opacity-100"
-          : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+          : // coarse:触屏没有 hover,播放键必须常显,否则整个封面点不出播放
+            "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 coarse:opacity-100"
       } ${className}`}
     >
       {loading ? (

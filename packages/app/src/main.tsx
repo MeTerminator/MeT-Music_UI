@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { toast, Toaster } from "sonner";
-import { initPlayer } from "@met/core";
+import { initPlayer, setRestoreSeek } from "@met/core";
 import { initHostGlobals } from "./host";
 import { initOfflineHandler } from "./platform/offline";
 import { initGlobalShortcuts } from "./platform/shortcuts";
@@ -19,19 +19,30 @@ import "./styles.css";
 /**
  * 启动引导(对齐旧 App.vue onMounted):
  *   1. 复位持久化残留的瞬时状态(播放中/加载中/一起听房间标记);
- *   2. 若播放列表非空,恢复上次歌曲(是否自动播放由 settings.autoPlay 决定)。
+ *   2. 交付上次播放位置(记忆播放位置:playTimeData 随播放持久化在 siteStatus 中,
+ *      刷新/重新进入时把它交给引擎,由 createPlayer 装载完成后恢复一次);
+ *   3. 若播放列表非空,恢复上次歌曲(是否自动播放由 settings.autoPlay 决定)。
  * initPlayer 内部的 currentPlayId 天然防 StrictMode/重入。
  */
 const bootstrapPlayback = (): void => {
+  const status = useStatusStore.getState();
+  const settings = useSettingsStore.getState();
   useStatusStore.setState({
     playState: false,
     playLoading: false,
+    songCacheProgress: -1,
     isInRoom: false,
     roomCode: "",
     roomUuid: "",
   });
+  if (settings.memorySeek) {
+    setRestoreSeek(
+      status.playTimeData?.currentTime ?? 0,
+      useMusicStore.getState().playSongData?.id ?? null,
+    );
+  }
   if (useMusicStore.getState().playList.length) {
-    void initPlayer(useSettingsStore.getState().autoPlay);
+    void initPlayer(settings.autoPlay);
   }
 };
 
@@ -87,6 +98,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__debugStores = {
     music: useMusicStore,
     status: useStatusStore,
+    settings: useSettingsStore,
   };
 }
 

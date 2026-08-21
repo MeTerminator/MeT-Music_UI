@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/**
+ * 触屏(粗指针)变体。
+ * Tailwind v4 把 hover: / group-hover: 全部包进 @media (hover: hover),
+ * 触屏设备上这些规则永远不生效 —— 凡是「hover 才浮现」的操作按钮,
+ * 在触屏上就是永久不可见、也点不到。这类地方一律再补一条 coarse: 常显规则。
+ */
+@custom-variant coarse (@media (pointer: coarse));
+
+/* 触屏基础手感:去掉点按的蓝色高亮方块;
+   manipulation 关掉双击缩放,顺带消除它带来的 ~300ms 点击延迟
+   (仍保留单指滚动与双指缩放) */
+@media (pointer: coarse) {
+  body {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
 /* 设计 token(U3 全量视觉阶段再扩展;暗色为默认,与旧 UI 一致) */
 :root {
   --met-bg: #16161a;
@@ -73,6 +91,50 @@ body {
 }
 .met-page-in {
   animation: met-page-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 窄屏左侧抽屉进场:自左滑入(退场由 transition + -translate-x-full 完成) */
+@keyframes met-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+.met-drawer-in {
+  animation: met-drawer-in 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 通用淡入(遮罩、下拉面板等「挂载即出现」的浮层进场) */
+@keyframes met-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.met-fade-in {
+  animation: met-fade-in 0.3s ease;
+}
+
+/* 下拉面板进场:淡入 + 轻微下落。
+   只动 transform,不碰 translate/scale —— Tailwind v4 的 -translate-x-1/2 等
+   用的是独立的 translate 属性,两者叠加互不干扰,居中定位不会被动画顶掉 */
+@keyframes met-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+.met-pop-in {
+  animation: met-pop-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 同上,但用于向上弹出的浮层(hover 弹层、进度条时间气泡):位移方向反过来 */
+@keyframes met-pop-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.met-pop-in-up {
+  animation: met-pop-in-up 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* 全屏播放器进场:自底部滑入(退场由 transition + translate-y-full 完成) */

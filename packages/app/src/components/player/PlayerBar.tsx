@@ -1,5 +1,4 @@
 import { useRef, useState, type WheelEvent } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import {
   Ellipsis,
   Gauge,
@@ -27,13 +26,14 @@ import {
   setVolume,
   setVolumeMute,
 } from "@met/core";
-import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
+import { DropdownMenu } from "@/components/ui/menu";
 import { Slider } from "@/components/ui/slider";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
-import { copyText } from "@/lib/clipboard";
 import { formatArtists, getCoverUrl } from "./format";
+import CacheProgressBar from "./CacheProgress";
+import { useSongMoreItems } from "./songMenu";
 import PlaylistDrawer from "./PlaylistDrawer";
 import SeekTooltipArea from "./SeekTooltip";
 import KtvLine from "./KtvLine";
@@ -82,12 +82,17 @@ const handleVolumeWheel = (e: WheelEvent) => {
 
 /**
  * 底部播放条(U3:对齐旧 MainControl.vue 功能)。
- * 由 RootLayout 放置于布局底部;自身高度 72px、宽度 100%。
+ * 由 RootLayout 放置于布局底部;宽度 100%,桌面高 72px。
+ * 窄屏(max-md)改为上下两行(对齐 Apple Music 迷你播放器):
+ * 第一行 封面/歌曲信息 + 紧凑控制(播放·下一曲·播放列表),第二行 进度条;
+ * 放不下的次要控件(播放模式/倍速/音量/更多)在窄屏隐藏,统一去全屏播放器操作。
+ * 高度随之变为 96px,RootLayout 的内容留白与回顶按钮偏移同步走 max-md 分支。
  * 内部渲染 PlaylistDrawer(受 status.playListShow 驱动)。
  */
 export default function PlayerBar() {
   const playState = useStatusStore((s) => s.playState);
   const playLoading = useStatusStore((s) => s.playLoading);
+  const songCacheProgress = useStatusStore((s) => s.songCacheProgress);
   const playTimeData = useStatusStore((s) => s.playTimeData);
   const playSongMode = useStatusStore((s) => s.playSongMode);
   const playVolume = useStatusStore((s) => s.playVolume);
@@ -103,8 +108,6 @@ export default function PlayerBar() {
   const showYrcAnimation = useSettingsStore((s) => s.showYrcAnimation);
   const showPlaylistCount = useSettingsStore((s) => s.showPlaylistCount);
 
-  const navigate = useNavigate();
-
   const showPlayBar = useStatusStore((s) => s.showPlayBar);
 
   /** 拖动中的进度值(0-100);null 表示未在拖动,由 playTimeData.bar 驱动 */
@@ -119,6 +122,8 @@ export default function PlayerBar() {
   const modeMeta = SONG_MODE_META[playSongMode];
   const VolumeIcon = getVolumeIcon(playVolume);
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
+  /** 正在为「音乐资源自动缓存」下载整首歌(-1 表示没有在下载) */
+  const caching = songCacheProgress >= 0;
 
   // 底栏歌词:当前逐字行(showYrc 时优先)与整行文本回退
   const yrcLine =
@@ -168,77 +173,15 @@ export default function PlayerBar() {
     useStatusStore.setState({ playRate: next });
   };
 
-  // 「更多操作」菜单(对照旧 MainControl.vue 的 songMoreOptions)
-  // 无当前歌曲或为本地歌曲(旧逻辑 v-if="!path")时禁用
-  const currentSongId = playSongData?.id;
-  const moreDisabled =
-    currentSongId == null || currentSongId === "" || !!playSongData?.path;
-
-  /** 复制歌曲分享链接(对照旧「复制歌曲链接」) */
-  const copySongLink = () =>
-    copyText(
-      `https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`,
-      "复制歌曲链接成功",
-    );
-
-  // 当前歌曲 MV id(formatData 的 song.mv 字段;0 / "0" / 空值视为无 MV)
-  const rawMv = (playSongData as { mv?: unknown })?.mv;
-  const mvId =
-    typeof rawMv === "number" && rawMv !== 0
-      ? String(rawMv)
-      : typeof rawMv === "string" && rawMv !== "" && rawMv !== "0"
-        ? rawMv
-        : null;
-
-  const moreItems: MenuItemDef[] = [
-    {
-      key: "comment",
-      label: "查看评论",
-      onSelect: () => void navigate({ to: "/comments", search: { id: String(currentSongId) } }),
-    },
-    {
-      key: "original-page",
-      label: "查看原始页面",
-      onSelect: () => {
-        window.open(`https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`);
-      },
-    },
-    {
-      key: "song-detail",
-      label: "查看单曲详情",
-      onSelect: () => void navigate({ to: "/song", search: { id: String(currentSongId) } }),
-    },
-    {
-      key: "download",
-      label: "下载歌曲",
-      onSelect: () => void navigate({ to: "/download", search: { id: String(currentSongId) } }),
-    },
-    {
-      key: "share",
-      label: "复制歌曲链接",
-      onSelect: () => void copySongLink(),
-    },
-    {
-      key: "copy-id",
-      label: "复制歌曲 ID",
-      onSelect: () => void copyText(String(currentSongId), "复制歌曲 ID 成功"),
-    },
-  ];
-  // 观看 MV(对照旧 SongListDropdown 的「观看 MV」;有 MV 时插入到「查看评论」之后)
-  if (mvId) {
-    moreItems.splice(1, 0, {
-      key: "mv",
-      label: "观看 MV",
-      onSelect: () => void navigate({ to: "/videos-player", search: { id: mvId } }),
-    });
-  }
+  // 「更多操作」菜单(与全屏播放器共用同一份定义)
+  const { items: moreItems, disabled: moreDisabled } = useSongMoreItems(playSongData);
 
   return (
     <>
     {/* showPlayBar=false 时向下平移全隐(对照旧 bottom -90 动画;
         transform 会让 fixed 后代以其为包含块,故 PlaylistDrawer 置于本节点之外) */}
     <div
-      className={`flex h-[72px] w-full items-center gap-4 border-t px-4 transition-transform duration-300 ${
+      className={`flex h-[72px] w-full items-center gap-4 border-t px-4 transition-transform duration-300 max-md:h-[96px] max-md:flex-col max-md:items-stretch max-md:justify-center max-md:gap-1.5 max-md:px-3 ${
         showPlayBar ? "translate-y-0" : "pointer-events-none translate-y-full"
       }`}
       aria-hidden={!showPlayBar}
@@ -247,6 +190,8 @@ export default function PlayerBar() {
         borderColor: "var(--met-border)",
       }}
     >
+      {/* 窄屏第一行:歌曲信息 + 紧凑控制;md+ 用 display:contents 还原为原来的直接子元素 */}
+      <div className="flex min-w-0 items-center gap-3 md:contents">
       {/* 左区:封面 + 歌曲信息,点击打开全屏播放器 */}
       <div
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-3"
@@ -281,18 +226,21 @@ export default function PlayerBar() {
           {showBottomLyric ? (
             <div
               key={playSongLyricIndex}
-              className="met-lyric-in lyric-font truncate text-xs"
+              className="met-lyric-in lyric-font text-xs"
               style={{ color: "var(--met-fg-dim)" }}
             >
-              {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本 */}
+              {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本。
+                  逐字行走 autoScroll:整行超宽时横向滚动,当前字保持居中
+                  (故此处不能再套 truncate,由 KtvLine 自己 overflow-hidden) */}
               {yrcLine && showYrcAnimation ? (
                 <KtvLine
                   line={yrcLine}
                   activeColor="var(--met-primary)"
                   inactiveColor="var(--met-fg-dim)"
+                  autoScroll
                 />
               ) : (
-                lyricLine
+                <div className="truncate">{lyricLine}</div>
               )}
             </div>
           ) : (
@@ -305,9 +253,55 @@ export default function PlayerBar() {
         </div>
       </div>
 
-      {/* 中区:控制按钮 + 进度条 */}
-      <div className="flex w-[420px] max-w-[46%] flex-col items-center gap-1">
-        <div className="flex items-center gap-4">
+      {/* 窄屏紧凑控制:播放/暂停 + 下一曲 + 播放列表(其余控件收进全屏播放器) */}
+      <div className="flex shrink-0 items-center gap-1 md:hidden">
+        <button
+          type="button"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full"
+          style={{ background: "var(--met-primary)", color: "var(--met-primary-fg)" }}
+          title={playState ? "暂停" : "播放"}
+          onClick={() => void playOrPause()}
+        >
+          {playLoading ? (
+            <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+          ) : playState ? (
+            <Pause size={18} fill="currentColor" aria-hidden="true" />
+          ) : (
+            <Play size={18} fill="currentColor" aria-hidden="true" />
+          )}
+        </button>
+        <button
+          type="button"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center bg-transparent"
+          style={{ color: "var(--met-fg)" }}
+          title="下一曲"
+          onClick={() => switchSong("next")}
+        >
+          <SkipForward size={18} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="flex h-9 cursor-pointer items-center gap-1 bg-transparent px-1"
+          style={{ color: playListShow ? "var(--met-primary)" : "var(--met-fg)" }}
+          title="播放列表"
+          onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
+        >
+          <ListMusic size={18} aria-hidden="true" />
+          {showPlaylistCount && playList.length > 0 && (
+            <span
+              className="text-[11px] leading-4 tabular-nums"
+              style={{ color: "var(--met-fg-dim)" }}
+            >
+              {playList.length > 999 ? "999+" : playList.length}
+            </span>
+          )}
+        </button>
+      </div>
+      </div>
+
+      {/* 中区:控制按钮 + 进度条(窄屏为第二行,只留进度条) */}
+      <div className="flex w-[420px] max-w-[46%] flex-col items-center gap-1 max-md:w-full max-md:max-w-none">
+        <div className="flex items-center gap-4 max-md:hidden">
           <button
             type="button"
             className="cursor-pointer bg-transparent"
@@ -342,35 +336,40 @@ export default function PlayerBar() {
             <SkipForward size={18} aria-hidden="true" />
           </button>
         </div>
-        <div className="flex w-full items-center gap-2">
-          <span
-            className="w-10 shrink-0 text-right text-xs tabular-nums"
-            style={{ color: "var(--met-fg-dim)" }}
-          >
-            {playTimeData.played}
-          </span>
-          <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="bar">
-            <Slider
-              value={barValue}
-              min={0}
-              max={100}
-              step={0.1}
-              ariaLabel="播放进度"
-              onValueChange={setDragBar}
-              onValueCommitted={commitSeek}
-            />
-          </SeekTooltipArea>
-          <span
-            className="w-10 shrink-0 text-xs tabular-nums"
-            style={{ color: "var(--met-fg-dim)" }}
-          >
-            {playTimeData.durationTime}
-          </span>
-        </div>
+        {/* 缓存下载中:进度条临时充当下载进度显示器(此时还没有可用的播放进度) */}
+        {caching ? (
+          <CacheProgressBar percent={songCacheProgress} variant="bar" />
+        ) : (
+          <div className="flex w-full items-center gap-2">
+            <span
+              className="w-10 shrink-0 text-right text-xs tabular-nums"
+              style={{ color: "var(--met-fg-dim)" }}
+            >
+              {playTimeData.played}
+            </span>
+            <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="bar">
+              <Slider
+                value={barValue}
+                min={0}
+                max={100}
+                step={0.1}
+                ariaLabel="播放进度"
+                onValueChange={setDragBar}
+                onValueCommitted={commitSeek}
+              />
+            </SeekTooltipArea>
+            <span
+              className="w-10 shrink-0 text-xs tabular-nums"
+              style={{ color: "var(--met-fg-dim)" }}
+            >
+              {playTimeData.durationTime}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* 右区:播放模式 + 倍速 + 音量 + 播放列表 */}
-      <div className="flex flex-1 items-center justify-end gap-3">
+      {/* 右区:播放模式 + 倍速 + 音量 + 播放列表(窄屏放不下,统一去全屏播放器操作) */}
+      <div className="flex flex-1 items-center justify-end gap-3 max-md:hidden">
         {/* 播放模式(点击循环切换;hover 弹出三项直接选,对照旧 n-dropdown) */}
         <div
           className="relative flex items-center"
@@ -390,7 +389,7 @@ export default function PlayerBar() {
             /* 外层 pb-2 补住按钮与弹层间隙,避免 hover 穿越间隙时闪关 */
             <div className="absolute bottom-full right-0 z-20 pb-2">
               <div
-                className="w-28 rounded-lg border py-1 shadow-xl"
+                className="met-pop-in-up w-28 rounded-lg border py-1 shadow-xl"
                 style={{
                   background: "var(--met-bg-elevated)",
                   borderColor: "var(--met-border)",
@@ -445,7 +444,7 @@ export default function PlayerBar() {
               /* 外层 pb-2 补住按钮与弹层间隙,避免 hover 穿越间隙时闪关 */
               <div className="absolute bottom-full right-0 z-20 pb-2">
                 <div
-                  className="flex w-56 items-center gap-3 rounded-lg border px-3 py-2 shadow-xl"
+                  className="met-pop-in-up flex w-56 items-center gap-3 rounded-lg border px-3 py-2 shadow-xl"
                   style={{
                     background: "var(--met-bg-elevated)",
                     borderColor: "var(--met-border)",

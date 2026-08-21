@@ -118,6 +118,31 @@ describe("parseLyric 整体", () => {
     const result = await parseLyric(null as unknown as LyricApiData, null, defaultOptions);
     expect(result).toBeNull();
   });
+
+  /**
+   * 回归:接口对没有逐字时间轴的歌曲(如 004VU57w4JZWAg《爱如火》)会在 qrc 字段里
+   * 回落一份 base64 的普通 lrc。此前 hasYrc 只看字段是否存在,于是出现
+   * hasYrc=true 而 yrc/yrcAM 全空的组合,引擎在空数组上算歌词索引恒得 -1,
+   * 整首歌不高亮、不滚动、底栏也没有歌词。
+   */
+  it("qrc 回落为 base64 普通 lrc 时 hasYrc 为 false,回落到 lrc / lrcAM", async () => {
+    const result = await parseLyric(
+      { lrc: LRC, qrc: btoa(LRC) },
+      null,
+      defaultOptions,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.yrc).toEqual([]);
+    expect(result!.hasYrc).toBe(false);
+    expect(result!.lrc).toHaveLength(2);
+    expect(result!.lrcAM!.length).toBeGreaterThan(0);
+  });
+
+  it("qrc 确为逐字歌词时 hasYrc 仍为 true", async () => {
+    const result = await parseLyric({ lrc: LRC, qrc: QRC }, null, defaultOptions);
+    expect(result!.yrc.length).toBeGreaterThan(0);
+    expect(result!.hasYrc).toBe(true);
+  });
 });
 
 describe("parseLocalLrc", () => {

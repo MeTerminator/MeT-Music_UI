@@ -144,6 +144,14 @@ export const parseLyric = async (
         );
       }
     }
+    // 重写修正:hasYrc 初值只看 qrc 字段是否存在,但接口对没有逐字时间轴的歌曲
+    // 也会在 qrc 里回落一份 base64 的普通 lrc(如 004VU57w4JZWAg《爱如火》),
+    // parseYrcData / parseQrc 都解析不出行,结果是 hasYrc=true 而 yrc/yrcAM 全空。
+    // 这会让引擎的歌词索引去空数组里 findIndex(恒 -1 → playSongLyricIndex 恒 -1,
+    // 整首歌不高亮、不滚动、底栏无歌词),全屏播放器也会因 useYrcAM 命中空的
+    // yrcAM 而放弃 AMLL。故以「确实解析出了逐字行」为准。
+    result.hasYrc = result.yrc.length > 0;
+
     // 当仅有 逐字歌词 ,没有 普通歌词 时
     if (result.yrc.length && !result.lrc.length) {
       result.lrc = result.yrc.map((v) => {

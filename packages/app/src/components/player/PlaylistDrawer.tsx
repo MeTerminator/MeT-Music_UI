@@ -236,7 +236,7 @@ export default function PlaylistDrawer() {
         {/* 删除 */}
         <button
           type="button"
-          className="shrink-0 cursor-pointer rounded-md bg-transparent px-1.5 py-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--met-bg-hover)]"
+          className="shrink-0 cursor-pointer rounded-md bg-transparent px-1.5 py-1 opacity-0 transition-opacity group-hover:opacity-100 coarse:opacity-100 hover:bg-[var(--met-bg-hover)]"
           style={{ color: "var(--met-fg-dim)" }}
           title="从列表中移除"
           onClick={(e) => {

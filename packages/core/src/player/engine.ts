@@ -12,8 +12,12 @@
  *   5. mediaSession 的 clear() 只在真正终止播放的路径(mediaSession stop 动作 →
  *      内部 stopPlayback())调用;soundStop 本身不清媒体会话——与旧版一致,
  *      切歌途中的 soundStop 不得瞬断 SMTC;
- *   6. 频谱更新循环带模块级代际计数(spectrumGeneration),旧循环在切歌/重置后
- *      自行终止,修复源码中 rAF 循环累积的泄漏(仅止损,不改暂停时的循环行为)。
+ *   6. 音乐频谱(spectrum)整套逻辑已删除(设置项与配置存储一并移除);
+ *   7. 记忆播放位置改为由应用层启动时经 setRestoreSeek() 交付,createPlayer
+ *      首次装载消费一次——旧实现在 createPlayer 里先把 playTimeData 清零,
+ *      再读它做恢复,因此记忆进度永远为 0(等同失效);
+ *   8. 音乐资源自动缓存带下载进度(status.songCacheProgress,0-100/-1),
+ *      且缓存失败时回退为在线直链播放,不再整首播放失败。
  */
 import { Howl, Howler } from "howler";
 import type { CoverSize, Song } from "../types/song";
@@ -45,6 +49,31 @@ export const configurePlayer = (d: PlayerDeps): void => {
 export const getPlayerInstance = (): Howl | null => player;
 
 // ---
+// 记忆播放位置
+// ---
+
+/** 待恢复的播放位置(秒)与其所属歌曲 id;被 createPlayer 消费一次后清空 */
+let pendingRestore: { seek: number; songId: string | number | null } | null = null;
+
+/**
+ * 交付一次「上次播放位置」,供下一次装载播放器时恢复。
+ * 应用层在启动引导(读持久化的 playTimeData)时调用;songId 用于防止
+ * 首曲取链失败自动跳到下一曲后,把上一首的进度错误地套用到新歌上。
+ */
+export const setRestoreSeek = (seconds: number, songId: string | number | null = null): void => {
+  pendingRestore = seconds > 0 ? { seek: seconds, songId } : null;
+};
+
+/** 消费待恢复位置(仅当歌曲匹配);无论是否命中都会清空,保证只恢复一次 */
+const takeRestoreSeek = (songId: string | number | null): number => {
+  if (!pendingRestore) return 0;
+  const { seek, songId: memoId } = pendingRestore;
+  pendingRestore = null;
+  if (memoId != null && songId != null && String(memoId) !== String(songId)) return 0;
+  return seek;
+};
+
+// ---
 // 模拟播放相关
 // ---
 
@@ -65,19 +94,6 @@ let isPlayEnd = true;
 // (渐出未完成时再次 play,需先摘除该 handler 并取消渐出,否则渐出完成回调会把歌暂停)
 let pendingFadePause = false;
 let fadePauseHandler: (() => void) | null = null;
-// 频谱数据
-const spectrumsData: {
-  audio: MediaElementAudioSourceNode | null;
-  analyser: AnalyserNode | null;
-  audioCtx: AudioContext | null;
-} = {
-  audio: null,
-  analyser: null,
-  audioCtx: null,
-};
-// 频谱循环代际:每次起新循环 ++,旧循环发现代际不匹配即自行终止
-// (修复源码中切歌后旧 rAF 循环累积的泄漏)
-let spectrumGeneration = 0;
 // 默认标题
 const defaultTitle = "MeT-Music";
 
@@ -165,14 +181,23 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       status.playLoading = false;
       // 必须确保 playSongData.duration (mm:ss) 存在
       simulationDuration = parseDurationToSeconds(playSongData.duration as string);
-      simulationPausedSeek = 0;
+      // 记忆播放位置(模拟播放同样适用;接近结尾时不恢复)
+      const restoreSeek = takeRestoreSeek(playSongData?.id ?? null);
+      simulationPausedSeek =
+        settings.memorySeek &&
+        restoreSeek > 1 &&
+        (simulationDuration <= 0 || simulationDuration - restoreSeek > 2)
+          ? restoreSeek
+          : 0;
 
       // 初始化时间数据
       status.playTimeData = {
-        currentTime: 0,
+        currentTime: simulationPausedSeek,
         duration: simulationDuration,
-        bar: "0",
-        played: getSongPlayTime(0),
+        bar: simulationDuration
+          ? ((simulationPausedSeek / simulationDuration) * 100).toFixed(2)
+          : "0",
+        played: getSongPlayTime(simulationPausedSeek),
         durationTime: getSongPlayTime(simulationDuration),
       };
 
@@ -317,6 +342,25 @@ const getNormalSongUrl = async (
   }
 };
 
+/** Howler 能识别的音频扩展名(用于 blob: 链接的 format 提示) */
+const AUDIO_EXT = /^(mp3|mpeg|m4a|mp4|aac|ogg|oga|opus|wav|wave|flac|webm|weba)$/;
+
+/**
+ * 从原始直链推断音频格式。
+ *
+ * blob: 链接不带扩展名,Howler 的 load() 取不到扩展名就会直接
+ * `_emit('loaderror')` 并 return——此时 `_sounds` 还是空数组,后续访问
+ * `_sounds[0]._node` 抛 TypeError,整首歌播不了(开启「音乐资源自动缓存」时必现)。
+ * 故缓存播放时用原始直链的扩展名喂给 Howl 的 format。
+ */
+const guessAudioFormat = (url: string): string | undefined => {
+  const path = url.split(/[?#]/)[0];
+  const dot = path.lastIndexOf(".");
+  if (dot === -1) return undefined;
+  const ext = path.slice(dot + 1).toLowerCase();
+  return AUDIO_EXT.test(ext) ? ext : undefined;
+};
+
 /**
  * 创建播放器
  * @param src - 音频文件地址
@@ -342,11 +386,28 @@ export const createPlayer = async (
     // 当前播放歌曲数据
     const playSongData = music.getPlaySongData;
     console.log("[engine] createPlayer - playSongData id:", playSongData?.id, "playState:", status.playState);
+    // 消费一次「上次播放位置」(须在下方清零 playTimeData 之前取)
+    const restoreSeek = takeRestoreSeek(playSongData?.id ?? null);
+    // 本次装载是否仍是最新一次(并发切歌时旧装载不得再写状态)
+    const isCurrent = (): boolean => !playId || playId === currentPlayId;
     // 获取播放链接（非电台及云盘歌曲）
-    const songUrl =
-      useMusicCache && playMode !== "dj" && !playSongData.pc && deps.env.toBlobUrl
-        ? await deps.env.toBlobUrl(src)
-        : src;
+    let songUrl = src;
+    if (useMusicCache && playMode !== "dj" && !playSongData.pc && deps.env.toBlobUrl) {
+      // 需先整首下载再播放:进度条此时临时充当下载进度显示器
+      status.songCacheProgress = 0;
+      try {
+        songUrl = await deps.env.toBlobUrl(src, (percent) => {
+          if (isCurrent()) status.songCacheProgress = percent;
+        });
+      } catch (error) {
+        // 缓存失败(跨域/网络等)不应让整首歌播不了,回退在线直链
+        console.error("音乐资源缓存失败，已回退在线播放：", error);
+        if (isCurrent()) deps.notify.warning("音乐缓存失败，已改为在线播放");
+        songUrl = src;
+      } finally {
+        if (isCurrent()) status.songCacheProgress = -1;
+      }
+    }
 
     // --- Guard check after async blob url fetch ---
     if (playId && playId !== currentPlayId) {
@@ -367,28 +428,26 @@ export const createPlayer = async (
     status.playSeekMs = 0;
     status.playSongLyricIndex = -1;
     if (player) soundStop();
+    // blob: 链接没有扩展名,必须显式给 format,否则 Howler 认不出编码直接失败
+    const blobFormat = songUrl.startsWith("blob:")
+      ? [guessAudioFormat(src) ?? "mp3"]
+      : undefined;
     player = new Howl({
       src: [songUrl],
+      ...(blobFormat ? { format: blobFormat } : {}),
       html5: html5Player,
       preload: "metadata",
       volume: status.playVolume,
       rate: status.playRate,
     });
-    // 允许跨域
-    const audioDom = (player as any)._sounds[0]._node as HTMLAudioElement | undefined;
+    // 允许跨域(Howler 载入失败时 _sounds 为空,这里不能硬取下标)
+    const audioDom = (player as any)._sounds?.[0]?._node as HTMLAudioElement | undefined;
     if (audioDom) audioDom.crossOrigin = "anonymous";
     // 写入播放历史
     music.setPlayHistory(playSongData);
     // 加载完成
     player?.once("load", () => {
       console.info("🎵 加载完成", player, status.playState);
-      if (!html5Player) {
-        resetSpectrum();
-        if (settings.showSpectrums && player) {
-          processSpectrum(player);
-        }
-      }
-
       if (status.isInRoom) {
         // Sync with the room's current seek position internally
         const lt = deps.lt();
@@ -413,18 +472,14 @@ export const createPlayer = async (
           setSeek(targetSeek, true);
         }
       } else {
-        // 自动播放
-        if (autoPlay && status.playState) {
-          setSeek();
-          fadePlayOrPause("play");
-        }
-        // 恢复进度（防止播放到结尾时触发 bug）
-        if (memorySeek && status.playTimeData?.duration - status.playTimeData?.currentTime > 2) {
-          setSeek(status.playTimeData?.currentTime ?? 0);
-        } else {
-          setSeek();
-          status.playTimeData.bar = "0";
-        }
+        // 恢复上次播放位置(记忆播放位置;接近结尾时不恢复,防止刚进来就切歌)
+        const duration = player?.duration() || 0;
+        const canRestore =
+          memorySeek && restoreSeek > 1 && (duration <= 0 || duration - restoreSeek > 2);
+        setSeek(canRestore ? restoreSeek : 0);
+        if (!canRestore) status.playTimeData.bar = "0";
+        // 自动播放(先定位再起播,二者可同时开启)
+        if (autoPlay && status.playState) fadePlayOrPause("play");
       }
       // 取消加载状态
       status.playLoading = false;
@@ -466,7 +521,7 @@ export const createPlayer = async (
       }
     });
     // 加载失败
-    player?.on("loaderror", (_id: unknown, errCode: unknown) => {
+    const onLoadError = (_id: unknown, errCode: unknown): void => {
       console.log("播放出现错误：", _id, errCode);
       // 更改状态
       status.playLoading = false;
@@ -498,7 +553,16 @@ export const createPlayer = async (
           status.playState = false;
         }
       }
-    });
+    };
+    player?.on("loaderror", onLoadError);
+    // Howler 的 load() 在构造函数里同步执行,若此时就判定源不可用(如认不出格式),
+    // 它 emit 的 loaderror 早于上面的监听注册、无人接收,表现为「什么都不发生」。
+    // 用 _sounds 是否创建来补判这一次同步失败,走同一套错误处理。
+    if (!(player as any)._sounds?.length) {
+      console.warn("[engine] Howler 未能创建音频实例(源格式不被支持?)");
+      onLoadError(null, 4);
+      return;
+    }
     // 返回音频对象
     return player;
   } catch (error) {
@@ -526,7 +590,6 @@ export const changePlayIndex = async (type: "next" | "prev" = "next", play = fal
   const { simulationPlaying } = settings;
   if (simulationPlaying) play = true; // 若模拟播放，则强制播放
   // 清除定时器
-  resetSpectrum();
   cleanAllInterval();
   // 歌词归位
   status.playSongLyricIndex = -1;
@@ -754,11 +817,7 @@ export const soundStop = (): void => {
   // 清理进度数据
   status.playSeek = 0;
   status.playSeekMs = 0;
-
-  if (!settings.html5Player) resetSpectrum();
-  // html5 模式下 resetSpectrum 不执行,这里无条件 ++ 确保存量频谱循环终止
-  spectrumGeneration++;
-  status.spectrumsData = []; // 清空 UI 上的频谱条
+  status.songCacheProgress = -1;
 
   isSimulating = false;
   simulationPausedSeek = 0;
@@ -854,24 +913,46 @@ export const getSeek = (): number => {
 };
 
 /**
+ * 歌词时间平移(设置项 lyricsShiftMs,ms → s)。
+ * 正值 = 歌词整体延后出现,故从比较用的当前时间中扣除。
+ */
+const lyricShiftSeconds = (settings: { lyricsShiftMs?: number }): number =>
+  (settings.lyricsShiftMs || 0) / 1000;
+
+/**
+ * 当前歌词行索引(原 setAudioTime 内三处同样的内联逻辑)。
+ *
+ * 逐字歌词只在「确实解析出了行」时才用:接口对没有逐字时间轴的歌曲会在 qrc 字段里
+ * 回落一份 base64 的普通 lrc(见 lyrics/parse.ts 对 hasYrc 的修正),历史持久化的
+ * playSongLyric 里可能仍留着 hasYrc=true 而 yrc 为空的组合。那种组合下会在空数组上
+ * findIndex,结果恒为 -1 → 索引恒 -1,整首歌不高亮、不滚动、底栏也没有歌词。
+ *
+ * 空数组返回 -1,与原实现(findIndex 得 -1 → lyrics.length - 1 = -1)一致。
+ */
+const computeLyricIndex = (currentTime: number): number => {
+  const { hasYrc, lrc, yrc } = deps.music().playSongLyric;
+  const settings = deps.settings();
+  const lyrics = hasYrc && settings.showYrc && yrc?.length ? yrc : lrc;
+  if (!lyrics?.length) return -1;
+  const offsetTime = currentTime + settings.lyricsOffset - lyricShiftSeconds(settings);
+  const index = lyrics.findIndex((v) => v?.time >= offsetTime);
+  return index === -1 ? lyrics.length - 1 : index - 1;
+};
+
+/**
  * 更改播放进度
  */
 const setAudioTime = (force = false): void => {
   // --- 模拟播放 ---
   if (isSimulating) {
     const status = deps.status();
-    const music = deps.music();
-    const settings = deps.settings();
 
     // 确保在暂停时 currentTime 不会自己增长
     if (!status.playState) {
       // 如果暂停了，我们仍然需要保持歌词索引，但不更新时间
       const currentTime = simulationPausedSeek;
       // 计算当前歌词播放索引
-      const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
-      const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-      const lyricsIndex = lyrics?.findIndex((v) => v?.time >= currentTime + settings.lyricsOffset);
-      status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+      status.playSongLyricIndex = computeLyricIndex(currentTime);
       return; // 暂停时退出
     }
 
@@ -896,13 +977,9 @@ const setAudioTime = (force = false): void => {
     const bar = duration ? ((currentTime / duration) * 100).toFixed(2) : 0;
     const played = getSongPlayTime(currentTime);
     const durationTime = getSongPlayTime(duration);
-    // 计算当前歌词播放索引
-    const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
-    const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-    const lyricsIndex = lyrics?.findIndex((v) => v?.time >= currentTime + settings.lyricsOffset);
     // 赋值数据
     status.playTimeData = { currentTime, duration, bar, played, durationTime };
-    status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+    status.playSongLyricIndex = computeLyricIndex(currentTime);
     deps.env.setTitle(getPlaySongName());
     deps.env.onTick?.();
     syncMediaSessionPosition();
@@ -911,9 +988,7 @@ const setAudioTime = (force = false): void => {
   // --- 模拟播放结束 ---
 
   if (player && (player.playing() || force)) {
-    const music = deps.music();
     const status = deps.status();
-    const settings = deps.settings();
     const currentTime = player.seek();
     const seekVal = typeof currentTime === "number" ? currentTime : 0;
     const duration = player.duration() || (player as any)._duration || 0;
@@ -921,13 +996,9 @@ const setAudioTime = (force = false): void => {
     const bar = duration ? ((seekVal / duration) * 100).toFixed(2) : 0;
     const played = getSongPlayTime(seekVal);
     const durationTime = getSongPlayTime(duration);
-    // 计算当前歌词播放索引
-    const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
-    const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-    const lyricsIndex = lyrics?.findIndex((v) => v?.time >= seekVal + settings.lyricsOffset);
     // 赋值数据
     status.playTimeData = { currentTime: seekVal, duration, bar, played, durationTime };
-    status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+    status.playSongLyricIndex = computeLyricIndex(seekVal);
     deps.env.setTitle(getPlaySongName());
     deps.env.onTick?.();
     syncMediaSessionPosition();
@@ -967,6 +1038,18 @@ const justSetSeek = (force = false): void => {
     status.playSeek = seekVal;
     status.playSeekMs = Math.floor(seekVal * 1000);
   }
+};
+
+/**
+ * 立即重算一次进度与歌词索引。
+ *
+ * 常规更新只在播放中的 tick 里发生,因此歌词类设置(歌词偏转 / 歌词时间平移)
+ * 改完后在暂停态不会有任何反应、播放态也要等下一帧才对位。
+ * 应用层在这些设置变更后调用本函数,使其立即生效。
+ */
+export const refreshPlayProgress = (): void => {
+  setAudioTime(true);
+  justSetSeek(true);
 };
 
 /**
@@ -1122,114 +1205,6 @@ const getColorMainColor = async (islocal: boolean, cover: string | CoverSize | u
     console.error("封面颜色获取失败：", error);
     status.coverTheme = {};
   }
-};
-
-/**
- * 生成频谱数据 - 自动识别 Howler 模式
- * @param sound - Howler.js 的音频对象
- */
-export const processSpectrum = (sound: Howl): void => {
-  try {
-    const settings = deps.settings();
-
-    if (settings.html5Player) {
-      // HTML5 播放器模式
-      if (!spectrumsData.audioCtx) {
-        // 断开之前的连接(重写修正:移除旧实现中 audioCtx 必为 null 时的死代码 close 调用)
-        spectrumsData.audio?.disconnect();
-        spectrumsData.analyser?.disconnect();
-        // 创建新的连接
-        spectrumsData.audioCtx = new AudioContext();
-        // 获取音频元素
-        const audioDom = (sound as any)._sounds[0]._node as HTMLAudioElement;
-        // 允许跨域请求
-        audioDom.crossOrigin = "anonymous";
-        // 创建音频源和分析器
-        const source = spectrumsData.audioCtx.createMediaElementSource(audioDom);
-        const analyser = spectrumsData.audioCtx.createAnalyser();
-        // 频谱分析器 FFT
-        analyser.fftSize = 1024;
-        // 连接音频源和分析器，再连接至音频上下文的目标
-        source.connect(analyser);
-        analyser.connect(spectrumsData.audioCtx.destination);
-        // 更新频谱数据(携带新代际,旧循环自行终止)
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        updateSpectrums(analyser, dataArray, ++spectrumGeneration);
-        // 保存当前链接
-        spectrumsData.audio = source;
-        spectrumsData.analyser = analyser;
-      }
-    } else {
-      // Web Audio 模式
-      const ctx = Howler.ctx || spectrumsData.audioCtx || new AudioContext();
-      spectrumsData.audioCtx = ctx;
-      if (ctx.state === "suspended") ctx.resume();
-      // 如果已经有分析器了，先清理掉，确保切歌后重新连接新的 masterGain 信号源
-      if (spectrumsData.analyser) {
-        resetSpectrum();
-      }
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.8;
-      // Web Audio 模式：Howler.masterGain 在切换实例后内部节点会变化
-      // 这里重新连接确保信号通路打开
-      Howler.masterGain.connect(analyser);
-      // 无需再连 destination，Howler 内部已连
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      spectrumsData.analyser = analyser;
-      // 确保只开启一个更新循环(代际 ++ 后旧循环自行终止)
-      updateSpectrums(analyser, dataArray, ++spectrumGeneration);
-    }
-  } catch (err) {
-    console.error("音乐频谱生成失败：", err);
-  }
-};
-
-/**
- * 递归更新频谱数据
- * @param generation 循环创建时的代际;与当前代际不匹配时终止(旧循环泄漏防护)
- */
-const updateSpectrums = (
-  analyser: AnalyserNode,
-  dataArray: Uint8Array<ArrayBuffer>,
-  generation: number,
-): void => {
-  // 代际不匹配:该循环已被新循环/重置取代,终止
-  if (generation !== spectrumGeneration) return;
-
-  const status = deps.status();
-
-  // 检查分析器是否存在
-  if (!analyser) return;
-
-  // 获取频率数据
-  analyser.getByteFrequencyData(dataArray);
-
-  // 使用 Array.from 确保响应式系统能正确监测到数组变化
-  status.spectrumsData = Array.from(dataArray);
-
-  requestAnimationFrame(() => {
-    updateSpectrums(analyser, dataArray, generation);
-  });
-};
-
-/**
- * 在切歌或重置应用时调用
- */
-export const resetSpectrum = (): void => {
-  // 无条件递增代际,终止一切存量频谱循环(html5 与 Web Audio 模式皆然)
-  spectrumGeneration++;
-  const settings = deps.settings();
-  if (settings.html5Player) return;
-  // 源码亦断开 spectrumsData.source(该属性从未赋值,保留 audio 断开即可)
-  if (spectrumsData.audio) {
-    spectrumsData.audio.disconnect();
-  }
-  if (spectrumsData.analyser) {
-    spectrumsData.analyser.disconnect();
-  }
-  spectrumsData.audio = null;
-  spectrumsData.analyser = null;
 };
 
 /**

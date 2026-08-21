@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { soundStop } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { useHostStore } from "@/host";
@@ -40,7 +41,7 @@ import packageJson from "../../../package.json";
 const set = useSettingsStore.setState;
 
 /** 分区导航(点击滚动至对应分组) */
-const sections = ["常规", "桌面客户端", "播放", "歌词", "其他"] as const;
+const sections = ["常规", "桌面客户端", "播放", "歌词", "其他", "关于"] as const;
 type SectionName = (typeof sections)[number];
 
 export interface SettingsContentProps {
@@ -158,9 +159,12 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   // 复制 Session ID(对齐旧 copySessionId)
   const copySessionId = () => copyText(sessionId, "已复制 Session ID 到剪贴板");
 
-  // 程序重置(Dialog 二次确认后执行,对齐旧 resetApp)
+  // 程序重置(Dialog 二次确认后执行,对齐旧 resetApp)。
+  // 必须先停播放器:播放中的 rAF tick 每帧都在写 siteStatus,
+  // 否则 localStorage 清完立刻又被 tick 写回,重置等于没生效。
   const confirmReset = () => {
     setResetOpen(false);
+    soundStop();
     cleanAll(false);
     toast.success("重置成功，正在重启");
     setTimeout(() => {
@@ -257,7 +261,15 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               className="w-52"
             />
           </SettingItem>
-          <SettingItem name="全局动态取色" dev tip="主题色是否跟随封面，目前感觉不好看">
+          <SettingItem
+            name="全局动态取色"
+            dev
+            tip={
+              Object.keys(coverTheme).length === 0
+                ? "主题色是否跟随封面；需先播放一首带封面的歌曲取到主色后才能开启"
+                : "主题色是否跟随封面，目前感觉不好看"
+            }
+          >
             <Switch
               checked={settings.themeAutoCover}
               disabled={Object.keys(coverTheme).length === 0}
@@ -354,22 +366,21 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onCheckedChange={(v) => set({ simulationPlaying: v })}
             />
           </SettingItem>
-          <SettingItem name="自动播放" tip="自动播放上次歌曲">
+          <SettingItem name="自动播放" tip="重新进入时自动播放上次的歌曲">
             <Switch checked={settings.autoPlay} onCheckedChange={(v) => set({ autoPlay: v })} />
           </SettingItem>
           <SettingItem
             name="记忆上次播放位置"
-            tip={settings.autoPlay ? "与自动播放相冲突，已禁用" : undefined}
+            tip="刷新页面或重新进入时，从上次播放到的位置继续（可与自动播放同时开启）"
           >
             <Switch
               checked={settings.memorySeek}
-              disabled={settings.autoPlay}
               onCheckedChange={(v) => set({ memorySeek: v })}
             />
           </SettingItem>
           <SettingItem
             name="音乐资源自动缓存"
-            tip="可能会造成加载缓慢，将在下一首播放或刷新时生效"
+            tip="开启后需先下载完整首歌曲才会开始播放（此时进度条临时显示下载进度），可能造成加载缓慢；将在下一首播放或刷新时生效"
           >
             <Switch
               checked={settings.useMusicCache}
@@ -455,20 +466,6 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onCheckedChange={(v) => set({ countDownShow: v })}
             />
           </SettingItem>
-          <SettingItem
-            name="显示音乐频谱"
-            dev
-            tip={
-              settings.showSpectrums
-                ? "开启音乐频谱会极大影响性能，如遇问题请关闭"
-                : "是否在播放器底部显示音乐频谱"
-            }
-          >
-            <Switch
-              checked={settings.showSpectrums}
-              onCheckedChange={(v) => set({ showSpectrums: v })}
-            />
-          </SettingItem>
         </SettingSection>
       </div>
 
@@ -520,6 +517,30 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onValueChange={(v) => set({ lyricsOffset: Math.round(v * 100) / 100 })}
             />
             <SliderMarks marks={["无", "默认 0.4", "最大"]} />
+          </SettingItem>
+          <SettingItem
+            name="歌词时间平移"
+            column
+            tip={
+              <>
+                <span className="block">
+                  整体平移歌词时间轴，对普通歌词与 AMLL 歌词同时生效；
+                  正值让歌词更晚出现，负值更早（全屏播放器控制条上有 ±10ms 快捷按钮）
+                </span>
+                <span className="block">
+                  {settings.lyricsShiftMs > 0 ? `+${settings.lyricsShiftMs}` : settings.lyricsShiftMs} ms
+                </span>
+              </>
+            }
+          >
+            <Slider
+              value={settings.lyricsShiftMs}
+              min={-2000}
+              max={2000}
+              step={10}
+              onValueChange={(v) => set({ lyricsShiftMs: v })}
+            />
+            <SliderMarks marks={["-2000ms", "默认 0", "+2000ms"]} />
           </SettingItem>
           <SettingItem
             name="Hook 歌词偏转"
@@ -736,7 +757,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
       </div>
 
       {/* 关于 */}
-      <div className="mt-8">
+      <div className="mt-8 scroll-mt-20" ref={bindSection("关于")}>
         <SettingSection title="关于">
         <SettingItem name="版本" tip="MeT-Music">
           <span className="text-sm text-[var(--met-fg-dim)]">v{packageJson.version}</span>
