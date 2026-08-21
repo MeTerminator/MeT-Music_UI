@@ -192,7 +192,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
 
       {/* 分区导航:全宽不透明底板遮住滚动内容,内层圆角 tab 组;激活态主色高亮 */}
       <div className="sticky top-0 z-10 -mx-8 mb-4 bg-[var(--met-bg)] px-8 py-2">
-        <div className="flex gap-1 overflow-x-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-1 [scrollbar-width:none]">
+        <div className="flex gap-1 overflow-x-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((name) => (
             <button
               key={name}
