@@ -389,7 +389,7 @@ export default function PlayerBar() {
             /* 外层 pb-2 补住按钮与弹层间隙,避免 hover 穿越间隙时闪关 */
             <div className="absolute bottom-full right-0 z-20 pb-2">
               <div
-                className="w-28 rounded-lg border py-1 shadow-xl"
+                className="met-pop-in-up w-28 rounded-lg border py-1 shadow-xl"
                 style={{
                   background: "var(--met-bg-elevated)",
                   borderColor: "var(--met-border)",
@@ -444,7 +444,7 @@ export default function PlayerBar() {
               /* 外层 pb-2 补住按钮与弹层间隙,避免 hover 穿越间隙时闪关 */
               <div className="absolute bottom-full right-0 z-20 pb-2">
                 <div
-                  className="flex w-56 items-center gap-3 rounded-lg border px-3 py-2 shadow-xl"
+                  className="met-pop-in-up flex w-56 items-center gap-3 rounded-lg border px-3 py-2 shadow-xl"
                   style={{
                     background: "var(--met-bg-elevated)",
                     borderColor: "var(--met-border)",

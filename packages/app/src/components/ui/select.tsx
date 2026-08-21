@@ -38,7 +38,8 @@ export const Select = <V extends string = string>({
     </BaseSelect.Trigger>
     <BaseSelect.Portal>
       <BaseSelect.Positioner sideOffset={4} className="z-50 outline-none">
-        <BaseSelect.Popup className="max-h-72 overflow-auto rounded-lg border border-[var(--met-border)] bg-[var(--met-bg-elevated)] py-1 shadow-xl">
+        {/* 进出场与 DropdownMenu 一致:以触发点为原点缩放淡入淡出 */}
+        <BaseSelect.Popup className="max-h-72 origin-[var(--transform-origin)] overflow-auto rounded-lg border border-[var(--met-border)] bg-[var(--met-bg-elevated)] py-1 shadow-xl transition-[opacity,scale] duration-150 ease-out data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0">
           {options.map((opt) => (
             <BaseSelect.Item
               key={opt.value}

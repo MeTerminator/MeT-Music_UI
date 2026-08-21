@@ -307,7 +307,7 @@ const SearchSuggest = () => {
       {showPanel && (
         <div
           role="listbox"
-          className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
+          className="met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
         >
           {/* 直接搜索(固定首行,对齐旧组件 .direct) */}
           <button
@@ -380,7 +380,7 @@ const SearchSuggest = () => {
 
       {/* 聚焦面板:搜索历史 + 热搜榜(旧 SearchHot.vue,聚焦且关键词为空时) */}
       {showFocusPanel && (
-        <div className="absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
+        <div className="met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
           {/* 搜索历史 */}
           {historyVisible && (
             <div className="mb-4">

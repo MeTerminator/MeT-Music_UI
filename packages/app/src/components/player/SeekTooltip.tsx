@@ -67,7 +67,7 @@ export default function SeekTooltipArea({
       {children}
       {visible && (
         <div
-          className="pointer-events-none absolute bottom-full z-30 mb-2 -translate-x-1/2 rounded-md px-2 py-0.5 text-xs tabular-nums shadow-lg"
+          className="met-pop-in-up pointer-events-none absolute bottom-full z-30 mb-2 -translate-x-1/2 rounded-md px-2 py-0.5 text-xs tabular-nums shadow-lg"
           style={{ ...bubbleStyle, left: bubbleX }}
           role="tooltip"
         >

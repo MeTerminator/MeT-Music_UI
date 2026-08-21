@@ -234,6 +234,21 @@ const RootLayout = () => {
 
   // 窄屏抽屉
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /**
+   * 抽屉退场期间保持挂载(与 FullPlayer 同一套路):
+   * 进场用 CSS animation(挂载即自动播放,不依赖 rAF 时序),
+   * 退场用 transition + -translate-x-full,transitionend 后才真正卸载。
+   * 超时兜底防 transitionend 在后台标签页等场景不触发。
+   */
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  useEffect(() => {
+    if (drawerOpen) {
+      setDrawerMounted(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setDrawerMounted(false), 450);
+    return () => window.clearTimeout(timer);
+  }, [drawerOpen]);
 
   // 路由切换回顶:仅 pathname 变化(search 变化如翻页不回顶,翻页各页自理)
   const mainRef = useRef<HTMLElement | null>(null);
@@ -438,15 +453,26 @@ const RootLayout = () => {
       {/* 顶部路由加载进度条 */}
       <RouteProgress />
 
-      {/* 窄屏左侧抽屉(遮罩 + 侧栏内容复用) */}
-      {drawerOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden">
+      {/* 窄屏左侧抽屉(遮罩 + 侧栏内容复用;自左滑入,遮罩同步淡入淡出) */}
+      {drawerMounted ? (
+        <div
+          className={`fixed inset-0 z-40 md:hidden ${drawerOpen ? "" : "pointer-events-none"}`}
+        >
           <div
-            className="absolute inset-0 bg-black/50"
+            className={`met-fade-in absolute inset-0 bg-black/50 transition-opacity duration-300 ${
+              drawerOpen ? "opacity-100" : "opacity-0"
+            }`}
             aria-hidden
             onClick={() => setDrawerOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col border-r border-[var(--met-border)] bg-[var(--met-bg)] py-3 shadow-2xl">
+          <div
+            className={`met-drawer-in absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col border-r border-[var(--met-border)] bg-[var(--met-bg)] py-3 shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+              drawerOpen ? "" : "-translate-x-full"
+            }`}
+            onTransitionEnd={(e) => {
+              if (e.target === e.currentTarget && !drawerOpen) setDrawerMounted(false);
+            }}
+          >
             <div className="mb-2 flex items-center justify-between px-4">
               <span className="flex items-center gap-2 text-sm font-bold tracking-wide">
                 <Logo size={22} />
