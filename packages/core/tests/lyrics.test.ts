@@ -143,6 +143,59 @@ describe("parseLyric 整体", () => {
     expect(result!.yrc.length).toBeGreaterThan(0);
     expect(result!.hasYrc).toBe(true);
   });
+
+  /**
+   * 回归:没有填词的曲子,接口回的是一句提示占位而非空歌词。
+   * parseLrcData 只把提示行挡在 result.lrc 之外,AM 路线不经过那道过滤,
+   * lrcAM 里会留下这一行 —— 全屏播放器按 amLines.length 判「有歌词」,
+   * 于是把「此歌曲为没有填词的纯音乐，请您欣赏」当歌词滚给用户看。
+   */
+  it("纯音乐:提示行不落进 lrc / lrcAM,标志位一并归零", async () => {
+    const result = await parseLyric(
+      {
+        lrc: "[00:00:00]此歌曲为没有填词的纯音乐，请您欣赏",
+        lrctrans: "",
+        // 提示行在 qrc 里的 base64 回落(与接口实际返回一致)
+        qrc: btoa(
+          String.fromCharCode(
+            ...new TextEncoder().encode("[00:00:00]此歌曲为没有填词的纯音乐，请您欣赏"),
+          ),
+        ),
+        qrctrans: "",
+        qrcroma: "",
+      },
+      null,
+      defaultOptions,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.lrc).toEqual([]);
+    expect(result!.yrc).toEqual([]);
+    expect(result!.lrcAM).toEqual([]);
+    expect(result!.yrcAM).toEqual([]);
+    expect(result!.hasYrc).toBe(false);
+    expect(result!.hasLrcTran).toBe(false);
+    expect(result!.hasLrcRoma).toBe(false);
+  });
+
+  it("纯音乐:网易措辞(纯音乐，请欣赏)同样清空", async () => {
+    const result = await parseLyric(
+      { lrc: "[00:00.000]纯音乐，请欣赏\n" },
+      null,
+      defaultOptions,
+    );
+    expect(result!.lrc).toEqual([]);
+    expect(result!.lrcAM).toEqual([]);
+  });
+
+  it("真歌词里混着提示行不会被误清空", async () => {
+    const result = await parseLyric(
+      { lrc: "[00:00.000]纯音乐，请您欣赏\n" + LRC },
+      null,
+      defaultOptions,
+    );
+    // 首行命中旧规则 → result.lrc 为空,但 AM 路线仍有真歌词,不该整份清掉
+    expect(result!.lrcAM!.length).toBeGreaterThan(1);
+  });
 });
 
 describe("parseLocalLrc", () => {

@@ -38,6 +38,25 @@ export interface TtmlLyricData {
   [key: string]: unknown;
 }
 
+/**
+ * 「纯音乐」提示行。
+ *
+ * 接口对没有填词的曲子不会返回空歌词,而是回一句提示占位,措辞随源不同:
+ *   QQ:  [00:00:00]此歌曲为没有填词的纯音乐，请您欣赏
+ *   网易:[00:00.000]纯音乐，请欣赏
+ * 半角逗号与「请欣赏 / 请您欣赏」都见过,故一并放宽。
+ */
+const PURE_MUSIC_RE = /纯音乐[，,]?\s*请(您)?欣赏/;
+
+/** 整份歌词是否只剩提示行(空行忽略;一行真歌词都没有才算数) */
+const isPureMusicOnly = (texts: string[]): boolean => {
+  const lines = texts.map((text) => text.trim()).filter(Boolean);
+  return lines.length > 0 && lines.every((line) => PURE_MUSIC_RE.test(line));
+};
+
+/** AM 行 → 整行文本(逐字拼接) */
+const amLineText = (line: AMLine): string => (line.words ?? []).map((w) => w.word).join("");
+
 /** 可写入 tran/roma 的歌词行(LrcLine 与 YrcLine 的公共子集) */
 type TranTarget = { time: number; tran?: string; roma?: string };
 
@@ -178,6 +197,31 @@ export const parseLyric = async (
       );
     } else {
       result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false);
+    }
+
+    // 纯音乐清场:parseLrcData 只把提示行挡在 result.lrc 之外,AM 路线
+    // (parseLrc / parseQrc → parseAMData)不经过那道过滤,于是 lrcAM 里会留下
+    // 「此歌曲为没有填词的纯音乐，请您欣赏」这一行 —— 全屏播放器的 hasLyric 看的是
+    // amLines.length,一行提示就足够让它按「有歌词」排布,把提示语当歌词滚给用户看。
+    // 故在所有解析结果都只剩提示行时,整份歌词一并清空。
+    const allLineTexts = [
+      ...result.lrc.map((line) => line.content),
+      ...result.yrc.map((line) => line.content.map((word) => word.content).join("")),
+      ...result.lrcAM.map(amLineText),
+      ...result.yrcAM.map(amLineText),
+    ];
+    if (isPureMusicOnly(allLineTexts)) {
+      console.log("该歌曲为纯音乐");
+      result.lrc = [];
+      result.yrc = [];
+      result.lrcAM = [];
+      result.yrcAM = [];
+      // 提示行的翻译/音译同样没有意义,一并归零(hasTtml 不动:TTML 另有来源)
+      result.hasLrcTran = false;
+      result.hasLrcRoma = false;
+      result.hasYrc = false;
+      result.hasYrcTran = false;
+      result.hasYrcRoma = false;
     }
 
     if (lrcData.ttml) {
@@ -346,7 +390,7 @@ export const parseLrcData = (lyrics: string | null | undefined, isTrim = true): 
       })
       .filter((c) => c && c.content.trim() !== "");
     // 检查是否为纯音乐,是则返回空数组
-    if (parsedLyrics.length && /纯音乐，请您欣赏/.test(parsedLyrics[0].content)) {
+    if (parsedLyrics.length && PURE_MUSIC_RE.test(parsedLyrics[0].content)) {
       console.log("该歌曲为纯音乐");
       return [];
     }
