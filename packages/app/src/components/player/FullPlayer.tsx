@@ -13,7 +13,7 @@ import { useStatusStore } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
 import type { OnCoverColors } from "@/platform/cover-color";
-import { useIsMobile } from "@/platform/use-media-query";
+import { useIsMobile, useIsTouch } from "@/platform/use-media-query";
 import { DropdownMenu } from "@/components/ui/menu";
 import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
@@ -196,6 +196,11 @@ function FullPlayerInner() {
 
   /** 窄屏(<768px)走两页式手机布局,与桌面左右分栏 DOM 结构不同,故用 JS 断点分支 */
   const isMobile = useIsMobile();
+  /**
+   * 触屏设备(含 >= 768px 走桌面布局的平板):没有 mousemove 可唤出控制条,
+   * 一旦淡出就再也回不来,故这类设备一律不做「静止 2 秒自动隐藏」。
+   */
+  const isTouch = useIsTouch();
 
   // ===== 窄屏两页分页(横向 scroll-snap;0=封面页,1=歌词页) =====
   const pagerRef = useRef<HTMLDivElement>(null);
@@ -279,12 +284,12 @@ function FullPlayerInner() {
     useStatusStore.setState({ playerControlShow: true });
     if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = null;
-    // 触屏没有「鼠标静止」可言,窄屏下控制条常驻,不再定时淡出
-    if (isMobile) return;
+    // 触屏没有「鼠标静止」可言,也没有 mousemove 能把控制条唤回来,故常驻
+    if (isTouch || isMobile) return;
     hideTimerRef.current = window.setTimeout(() => {
       useStatusStore.setState({ playerControlShow: false });
     }, 2000);
-  }, [isMobile]);
+  }, [isTouch, isMobile]);
 
   /** 悬停控制条时保持可见(清除隐藏计时器) */
   const keepControlsVisible = useCallback(() => {
@@ -795,7 +800,9 @@ function FullPlayerInner() {
       className="fixed inset-0 z-40 select-none overflow-hidden"
       style={{ ...rootStyle, cursor: playerControlShow ? "auto" : "none" }}
       onMouseMove={pokeControls}
-      onMouseLeave={hideControls}
+      // 触屏设备不挂 mouseleave:模拟出的 mouseleave 会把控制条藏掉,
+      // 而没有 mousemove 能再把它唤回来
+      onMouseLeave={isTouch ? undefined : hideControls}
     >
       <style>{FULL_PLAYER_CSS}</style>
       {backgroundNode}

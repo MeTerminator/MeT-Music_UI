@@ -166,8 +166,8 @@ const RoomPlaylist = () => {
                   </div>
                 </div>
 
-                {/* 行操作:hover 展示 */}
-                <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                {/* 行操作:hover 展示;触屏无 hover,常显 */}
+                <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 coarse:opacity-100">
                   <button
                     type="button"
                     title="播放这首"

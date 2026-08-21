@@ -368,7 +368,9 @@ const Download = () => {
                 {/* hover 遮罩 + 下载图标(下载中常显) */}
                 <span
                   className={`absolute inset-0 flex items-center justify-center bg-black/45 transition-opacity ${
-                    coverDownloading ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    coverDownloading
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100 coarse:opacity-100"
                   }`}
                 >
                   <DownloadIcon className="h-5 w-5 text-white" />

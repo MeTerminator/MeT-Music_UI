@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/**
+ * 触屏(粗指针)变体。
+ * Tailwind v4 把 hover: / group-hover: 全部包进 @media (hover: hover),
+ * 触屏设备上这些规则永远不生效 —— 凡是「hover 才浮现」的操作按钮,
+ * 在触屏上就是永久不可见、也点不到。这类地方一律再补一条 coarse: 常显规则。
+ */
+@custom-variant coarse (@media (pointer: coarse));
+
+/* 触屏基础手感:去掉点按的蓝色高亮方块;
+   manipulation 关掉双击缩放,顺带消除它带来的 ~300ms 点击延迟
+   (仍保留单指滚动与双指缩放) */
+@media (pointer: coarse) {
+  body {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
 /* 设计 token(U3 全量视觉阶段再扩展;暗色为默认,与旧 UI 一致) */
 :root {
   --met-bg: #16161a;

@@ -17,6 +17,7 @@ import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
 import { useSiteDataStore } from "@/stores/siteData";
+import { useIsTouch } from "@/platform/use-media-query";
 import { addSong as ltAddSong } from "@/stores/listenTogether";
 import {
   DropdownMenu,
@@ -172,6 +173,8 @@ export default function SongList({
 }: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
   const isInRoom = useStatusStore((s) => s.isInRoom);
+  /** 触屏设备:没有双击与 hover,行改为单击即播、行内操作常显 */
+  const isTouch = useIsTouch();
   // 用户 VIP 类型(对照旧 userData.detail?.profile?.vipType;11 为黑胶 VIP,不再显示 VIP 徽标)
   const vipType = useSiteDataStore((s) => {
     const profile = (s.userData.detail as { profile?: { vipType?: unknown } }).profile;
@@ -393,8 +396,11 @@ export default function SongList({
         {/* 悬停操作列占位(md+ 显示,与两个 h-8 w-8 按钮 + gap-0.5 等宽) */}
         <span className="hidden w-[66px] shrink-0 md:block" aria-hidden="true" />
         <span className="w-12 shrink-0 text-right">时长</span>
-        {/* 窄屏「⋯」按钮占位 */}
-        <span className="w-8 shrink-0 md:hidden" aria-hidden="true" />
+        {/* 「⋯」按钮占位(窄屏常驻;触屏在 md+ 也保留「⋯」,占位同步) */}
+        <span
+          className={`w-8 shrink-0 ${isTouch ? "" : "md:hidden"}`}
+          aria-hidden="true"
+        />
       </div>
 
       <ul ref={listRef} className="flex flex-col">
@@ -412,6 +418,17 @@ export default function SongList({
                     data-playing={isPlaying ? "true" : undefined}
                     onDoubleClick={() =>
                       void playFromList(displaySongs, song, index, playBehavior)
+                    }
+                    // 触屏没有双击语义(双击手势会被浏览器吃掉),改为单击即播。
+                    // 行内的歌手/专辑/MV 等按钮各自 stopPropagation,但下拉菜单
+                    // 触发器不会,故统一按「点在任何按钮/链接上就不算点行」放行。
+                    onClick={
+                      isTouch
+                        ? (e) => {
+                            if ((e.target as HTMLElement).closest("button, a")) return;
+                            void playFromList(displaySongs, song, index, playBehavior);
+                          }
+                        : undefined
                     }
                     className={`group flex select-none items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-[var(--met-bg-elevated)] ${
                       isPlaying ? "border-[var(--met-border)] bg-[var(--met-bg-elevated)]" : ""
@@ -554,7 +571,7 @@ export default function SongList({
                 </div>
               ) : null}
               {/* 悬停操作:立即播放 / 下一首播放(窄屏隐藏,由行尾「⋯」菜单承接) */}
-              <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 md:flex">
+              <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 coarse:opacity-100 md:flex">
                 <button
                   type="button"
                   aria-label={isInRoom ? `添加到一起听 ${song.name}` : `播放 ${song.name}`}
@@ -587,7 +604,10 @@ export default function SongList({
                 align="end"
                 ariaLabel={`${song.name} 更多操作`}
                 title="更多操作"
-                triggerClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)] md:hidden"
+                triggerClassName={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)] ${
+                  // 触屏在 md+ 也保留「⋯」:那里既没有右键菜单也没有 hover 行内按钮
+                  isTouch ? "" : "md:hidden"
+                }`}
               >
                 <Ellipsis size={18} aria-hidden="true" />
               </DropdownMenu>
