@@ -3,7 +3,7 @@
  * 应用启动时调用一次 setupPlayer()。
  */
 import { toast } from "sonner";
-import { configurePlayer } from "@met/core";
+import { configurePlayer, refreshPlayProgress } from "@met/core";
 import type {
   MusicState,
   Notifier,
@@ -77,5 +77,17 @@ export const setupPlayer = (): void => {
       coverGradient: getCoverGradient,
       onTick: broadcastHook,
     },
+  });
+
+  // 歌词时间类设置改完立即生效:歌词索引平时只在播放 tick 里重算,
+  // 暂停态下不改这一下就完全看不出变化(全屏控制条的 ±10ms 按钮亦经此路径)。
+  useSettingsStore.subscribe((state, prev) => {
+    if (
+      state.lyricsShiftMs !== prev.lyricsShiftMs ||
+      state.lyricsOffset !== prev.lyricsOffset ||
+      state.showYrc !== prev.showYrc
+    ) {
+      refreshPlayProgress();
+    }
   });
 };

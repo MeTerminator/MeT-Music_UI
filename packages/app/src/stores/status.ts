@@ -19,11 +19,12 @@ export interface StatusStoreState {
   playerControlShow: boolean;
   playSeek: number;
   playSeekMs: number;
+  /** 音乐资源自动缓存的下载进度(0-100);-1 表示当前没有在下载 */
+  songCacheProgress: number;
   hasNextSong: boolean;
   coverTheme: Record<string, unknown>;
   coverBackground: string | null;
   pureLyricMode: boolean;
-  spectrumsData: number[];
   playSongLyricIndex: number;
   playTimeData: PlayTimeData;
   playRate: number;
@@ -70,11 +71,11 @@ export const useStatusStore = create<StatusStoreState>()(
       playerControlShow: true,
       playSeek: 0,
       playSeekMs: 0,
+      songCacheProgress: -1,
       hasNextSong: false,
       coverTheme: {},
       coverBackground: null,
       pureLyricMode: false,
-      spectrumsData: [] as number[],
       playSongLyricIndex: -1,
       playTimeData: {
         currentTime: 0,

@@ -40,10 +40,11 @@ export interface StatusState {
   playUseOtherSource: boolean;
   playSeek: number;
   playSeekMs: number;
+  /** 音乐资源自动缓存的下载进度(0-100);-1 表示当前没有在下载 */
+  songCacheProgress: number;
   hasNextSong: boolean;
   coverTheme: Record<string, unknown>;
   coverBackground: string | null;
-  spectrumsData: number[];
   playSongLyricIndex: number;
   playTimeData: PlayTimeData;
   playRate: number;
@@ -63,10 +64,11 @@ export interface PlayerSettings {
   memorySeek: boolean;
   useMusicCache: boolean;
   html5Player: boolean;
-  showSpectrums: boolean;
   simulationPlaying: boolean;
   showYrc: boolean;
   lyricsOffset: number;
+  /** 歌词时间平移(ms,可负):正值让歌词整体延后出现,负值提前 */
+  lyricsShiftMs: number;
   useAMttmlDB: boolean;
   removeInfo: boolean;
   removeAMInfo: boolean;
@@ -120,8 +122,11 @@ export interface PlayerEnv {
   reload(): void;
   /** 本地歌曲封面解析(旧 helper.getLocalCoverData,仅 Electron 宿主有实现) */
   resolveLocalCover?(path: string): Promise<string | undefined>;
-  /** 音频缓存:URL → Blob URL(旧 helper.getBlobUrlFromUrl);缺省直接返回原 URL */
-  toBlobUrl?(url: string): Promise<string>;
+  /**
+   * 音频缓存:URL → Blob URL(旧 helper.getBlobUrlFromUrl);缺省直接返回原 URL。
+   * onProgress 为下载进度回调(0-100),供 UI 把进度条临时用作下载进度显示。
+   */
+  toBlobUrl?(url: string, onProgress?: (percent: number) => void): Promise<string>;
   /** 封面渐变取色(旧 utils/cover-color.getCoverGradient,DOM 实现留在应用层) */
   coverGradient?(coverUrl: string): Promise<string>;
   /**

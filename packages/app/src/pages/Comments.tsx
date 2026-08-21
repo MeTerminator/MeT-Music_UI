@@ -20,10 +20,13 @@ export default function Comments() {
   const [cursorStack, setCursorStack] = useState<string[]>([""]);
   const cursor = cursorStack[page - 1] ?? "";
 
-  // 切换歌曲(id 变化)时复位分页与游标栈,避免沿用上一首的游标
+  // 切换歌曲(id 变化)时复位分页与游标栈,避免沿用上一首的游标。
+  // 复位值必须是 [""](第一页的空游标占位),不能是 []:
+  // 下一页会把当前页末尾 SeqNo 追加到栈尾,第 n 页读 cursorStack[n-1],
+  // 缺了这个占位槽会整体错位一位,导致翻页后仍是第一页的内容。
   useEffect(() => {
     setPage(1);
-    setCursorStack([]);
+    setCursorStack([""]);
   }, [id]);
 
   // 歌曲信息(取标题/歌手/专辑与评论所需的数字 songID)
@@ -85,7 +88,7 @@ export default function Comments() {
     [rawComments],
   );
 
-  const loading = infoQuery.isLoading || commentsQuery.isLoading;
+  const loading = infoQuery.isLoading || commentsQuery.isFetching;
 
   /**
    * 翻页回顶:页面滚动容器是 RootLayout 的 <main>(window 不滚动,
@@ -114,9 +117,12 @@ export default function Comments() {
   };
 
   const handleNextPage = (): void => {
-    const lastSeqNo = rawComments[rawComments.length - 1]?.SeqNo;
-    if (lastSeqNo == null) return;
+    // 游标 = 当前页最后一条评论的 SeqNo(对照旧 Comments.vue handleNextPage)
+    const last = rawComments[rawComments.length - 1];
+    const lastSeqNo = last?.SeqNo ?? last?.CommentId;
+    if (lastSeqNo == null || lastSeqNo === "") return;
     setCursorStack((stack) => {
+      // 截到当前页为止再追加,保证 cursorStack[page] 就是下一页的起点
       const next = stack.slice(0, page);
       next.push(String(lastSeqNo));
       return next;

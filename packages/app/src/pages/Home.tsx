@@ -12,6 +12,7 @@ import { playSongNow } from "@/player/actions";
 import { formatArtists, getCoverUrl as songCoverUrl } from "@/lib/format";
 import { getCoverUrl as picCoverUrl } from "@/lib/formatData";
 import CoverPlayButton from "@/components/cover/CoverPlayButton";
+import ScrollRow from "@/components/ui/scroll-row";
 
 /** 侧栏同源的用户歌单原始字段 */
 interface RawUserPlaylist {
@@ -114,7 +115,8 @@ const Home = () => {
       {userLoginStatus && playlists.length > 0 ? (
         <section className="mt-8">
           <SectionHeader title="我的歌单" />
-          <div className={rowCls}>
+          {/* 横滑行下方常驻细滚动条(可拖动/点击轨道),内容不足以滚动时自动隐藏 */}
+          <ScrollRow className={rowCls} ariaLabel="我的歌单横向滚动">
             {playlists.map((pl) => (
               <div key={String(pl.id)} className="group relative w-36 shrink-0 snap-start">
                 <button
@@ -147,7 +149,7 @@ const Home = () => {
                 </div>
               </div>
             ))}
-          </div>
+          </ScrollRow>
         </section>
       ) : null}
     </div>

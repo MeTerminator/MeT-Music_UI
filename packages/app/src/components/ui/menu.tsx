@@ -48,6 +48,8 @@ export interface DropdownMenuProps {
   triggerClassName?: string;
   ariaLabel?: string;
   title?: string;
+  /** 展开状态变化(全屏播放器用它在菜单打开期间保持控制条可见) */
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** 下拉菜单(Base UI Menu 薄封装;风格对齐 Select 弹层) */
@@ -60,8 +62,9 @@ export const DropdownMenu = ({
   triggerClassName = "",
   ariaLabel,
   title,
+  onOpenChange,
 }: DropdownMenuProps) => (
-  <BaseMenu.Root>
+  <BaseMenu.Root onOpenChange={onOpenChange}>
     <BaseMenu.Trigger
       disabled={disabled}
       aria-label={ariaLabel}

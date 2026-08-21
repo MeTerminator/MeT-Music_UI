@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type WheelEvent } from "react";
 import {
   ChevronDown,
+  Ellipsis,
   ListMusic,
+  MessageSquare,
   Loader2,
   Maximize2,
   Minimize2,
@@ -10,8 +12,10 @@ import {
   Repeat,
   Repeat1,
   Shuffle,
+  Settings,
   SkipBack,
   SkipForward,
+  Video,
   Volume,
   Volume1,
   Volume2,
@@ -20,8 +24,17 @@ import {
 } from "lucide-react";
 import { changePlayIndex, playOrPause, setSeek, setVolume, setVolumeMute } from "@met/core";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
+import { useMusicStore } from "../../stores/music";
+import { useSettingsStore } from "../../stores/settings";
+import { DropdownMenu } from "../ui/menu";
 import { Slider } from "../ui/slider";
+import CacheProgressBar from "./CacheProgress";
 import SeekTooltipArea from "./SeekTooltip";
+import { useSongMoreItems } from "./songMenu";
+
+/** 歌词时间平移的单次步进(ms)与上下限 */
+const LYRIC_SHIFT_STEP = 10;
+const LYRIC_SHIFT_LIMIT = 5000;
 
 /** 播放模式循环顺序(与 PlayerBar 保持一致) */
 const NEXT_SONG_MODE: Record<
@@ -73,14 +86,19 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
   const playerControlShow = useStatusStore((s) => s.playerControlShow);
   const playState = useStatusStore((s) => s.playState);
   const playLoading = useStatusStore((s) => s.playLoading);
+  const songCacheProgress = useStatusStore((s) => s.songCacheProgress);
   const playTimeData = useStatusStore((s) => s.playTimeData);
   const playSongMode = useStatusStore((s) => s.playSongMode);
   const playVolume = useStatusStore((s) => s.playVolume);
   const playListShow = useStatusStore((s) => s.playListShow);
+  const playSongData = useMusicStore((s) => s.playSongData);
+  const lyricsShiftMs = useSettingsStore((s) => s.lyricsShiftMs);
 
   /** 拖动中的进度(0-100);null 表示未拖动,由 playTimeData.bar 驱动 */
   const [dragBar, setDragBar] = useState<number | null>(null);
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
+  /** 正在为「音乐资源自动缓存」下载整首歌(-1 表示没有在下载) */
+  const caching = songCacheProgress >= 0;
   const modeMeta = SONG_MODE_META[playSongMode];
   const ModeIcon = modeMeta.icon;
   const VolumeIcon = getVolumeIcon(playVolume);
@@ -124,6 +142,26 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
     void changePlayIndex(type, true);
   };
 
+  // 「更多操作」菜单(与底部播放条同一份定义;站内跳转前先收起全屏播放器)
+  const {
+    items: moreItems,
+    disabled: moreDisabled,
+    mvId,
+    go,
+    songId,
+  } = useSongMoreItems(playSongData, {
+    beforeNavigate: () => useStatusStore.setState({ showFullPlayer: false }),
+  });
+
+  /** 歌词时间平移:+ 让歌词整体延后,- 让歌词提前(步进 10ms,上下限 ±5s) */
+  const shiftLyric = (delta: number): void => {
+    const next = Math.min(
+      LYRIC_SHIFT_LIMIT,
+      Math.max(-LYRIC_SHIFT_LIMIT, useSettingsStore.getState().lyricsShiftMs + delta),
+    );
+    useSettingsStore.setState({ lyricsShiftMs: next });
+  };
+
   const iconBtnCls =
     "flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg bg-transparent text-white/80 transition-all hover:scale-105 hover:bg-white/10 hover:text-white active:scale-100";
 
@@ -140,29 +178,33 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
       }}
     >
       <div
-        className="mx-auto mb-6 flex w-[min(760px,92%)] flex-col gap-1 rounded-2xl px-6 py-3"
+        className="mx-auto mb-6 flex w-[min(880px,94%)] flex-col gap-1 rounded-2xl px-6 py-3"
         style={{ background: "rgba(0, 0, 0, 0.35)", backdropFilter: "blur(24px)" }}
       >
-        {/* 进度条 */}
-        <div className="flex items-center gap-3 text-xs tabular-nums text-white/60">
-          <span className="shrink-0">{playTimeData.played}</span>
-          <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="overlay">
-            <Slider
-              value={barValue}
-              min={0}
-              max={100}
-              step={0.1}
-              onValueChange={(v) => setDragBar(v)}
-              onValueCommitted={commitSeek}
-            />
-          </SeekTooltipArea>
-          <span className="shrink-0">{playTimeData.durationTime}</span>
-        </div>
+        {/* 进度条(缓存下载中时临时充当下载进度显示器) */}
+        {caching ? (
+          <CacheProgressBar percent={songCacheProgress} variant="overlay" />
+        ) : (
+          <div className="flex items-center gap-3 text-xs tabular-nums text-white/60">
+            <span className="shrink-0">{playTimeData.played}</span>
+            <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="overlay">
+              <Slider
+                value={barValue}
+                min={0}
+                max={100}
+                step={0.1}
+                onValueChange={(v) => setDragBar(v)}
+                onValueCommitted={commitSeek}
+              />
+            </SeekTooltipArea>
+            <span className="shrink-0">{playTimeData.durationTime}</span>
+          </div>
+        )}
 
-        {/* 控制按钮行 */}
-        <div className="grid grid-cols-3 items-center">
+        {/* 控制按钮行(两侧列自适应,中间播放控制固定宽度居中) */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center">
           {/* 左区:播放模式 + 音量(与右区功能钮左右配重;窄屏隐藏次要控件,保核心播放控制) */}
-          <div className="flex items-center justify-start gap-2">
+          <div className="flex items-center justify-start gap-1">
             <button
               type="button"
               className={`${iconBtnCls} text-lg max-md:hidden`}
@@ -172,6 +214,25 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
               }
             >
               <ModeIcon size={20} aria-hidden="true" />
+            </button>
+            {/* 查看评论 / 观看 MV(跳转前收起全屏播放器) */}
+            <button
+              type="button"
+              className={`${iconBtnCls} max-md:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
+              title="查看评论"
+              disabled={moreDisabled}
+              onClick={() => go("/comments", songId)}
+            >
+              <MessageSquare size={20} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`${iconBtnCls} max-md:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
+              title={mvId ? "观看 MV" : "该歌曲暂无 MV"}
+              disabled={!mvId}
+              onClick={() => mvId && go("/videos-player", mvId)}
+            >
+              <Video size={20} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -235,8 +296,63 @@ export default function FullPlayerControls({ onKeepVisible }: FullPlayerControls
             </button>
           </div>
 
-          {/* 右区:播放列表 + 全屏 + 关闭 */}
-          <div className="flex items-center justify-end gap-2">
+          {/* 右区:歌词平移 + 更多操作 + 设置 + 播放列表 + 全屏 + 关闭 */}
+          <div className="flex items-center justify-end gap-1">
+            {/* 歌词时间平移:-10ms / +10ms,中间读数点按可归零(窄屏隐藏) */}
+            <div
+              className="flex items-center gap-0.5 rounded-lg bg-white/5 px-1 py-0.5 max-md:hidden"
+              aria-label="歌词时间平移"
+            >
+              <button
+                type="button"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-xs tabular-nums text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                title="歌词提前 10ms"
+                onClick={() => shiftLyric(-LYRIC_SHIFT_STEP)}
+              >
+                -10
+              </button>
+              <button
+                type="button"
+                className="min-w-[52px] cursor-pointer bg-transparent text-center text-[11px] tabular-nums text-white/50 transition-colors hover:text-white"
+                title="歌词时间平移(点击归零)"
+                onClick={() => useSettingsStore.setState({ lyricsShiftMs: 0 })}
+              >
+                {lyricsShiftMs > 0 ? `+${lyricsShiftMs}` : lyricsShiftMs}ms
+              </button>
+              <button
+                type="button"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-xs tabular-nums text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                title="歌词延后 10ms"
+                onClick={() => shiftLyric(LYRIC_SHIFT_STEP)}
+              >
+                +10
+              </button>
+            </div>
+
+            {/* 更多操作(与底部播放条一致:评论 / MV / 详情 / 下载 / 复制链接) */}
+            <DropdownMenu
+              items={moreItems}
+              disabled={moreDisabled}
+              side="top"
+              align="end"
+              ariaLabel="更多操作"
+              title="更多操作"
+              triggerClassName={iconBtnCls}
+              onOpenChange={(open) => open && onKeepVisible()}
+            >
+              <Ellipsis size={20} aria-hidden="true" />
+            </DropdownMenu>
+
+            {/* 全局设置(悬浮层 z-50,盖在全屏播放器之上,无需先收起) */}
+            <button
+              type="button"
+              className={iconBtnCls}
+              title="全局设置"
+              onClick={() => useStatusStore.setState({ showSettingsPanel: true })}
+            >
+              <Settings size={20} aria-hidden="true" />
+            </button>
+
             <button
               type="button"
               className={iconBtnCls}

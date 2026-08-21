@@ -1,5 +1,4 @@
 import { useRef, useState, type WheelEvent } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import {
   Ellipsis,
   Gauge,
@@ -27,13 +26,14 @@ import {
   setVolume,
   setVolumeMute,
 } from "@met/core";
-import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
+import { DropdownMenu } from "@/components/ui/menu";
 import { Slider } from "@/components/ui/slider";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
-import { copyText } from "@/lib/clipboard";
 import { formatArtists, getCoverUrl } from "./format";
+import CacheProgressBar from "./CacheProgress";
+import { useSongMoreItems } from "./songMenu";
 import PlaylistDrawer from "./PlaylistDrawer";
 import SeekTooltipArea from "./SeekTooltip";
 import KtvLine from "./KtvLine";
@@ -88,6 +88,7 @@ const handleVolumeWheel = (e: WheelEvent) => {
 export default function PlayerBar() {
   const playState = useStatusStore((s) => s.playState);
   const playLoading = useStatusStore((s) => s.playLoading);
+  const songCacheProgress = useStatusStore((s) => s.songCacheProgress);
   const playTimeData = useStatusStore((s) => s.playTimeData);
   const playSongMode = useStatusStore((s) => s.playSongMode);
   const playVolume = useStatusStore((s) => s.playVolume);
@@ -103,8 +104,6 @@ export default function PlayerBar() {
   const showYrcAnimation = useSettingsStore((s) => s.showYrcAnimation);
   const showPlaylistCount = useSettingsStore((s) => s.showPlaylistCount);
 
-  const navigate = useNavigate();
-
   const showPlayBar = useStatusStore((s) => s.showPlayBar);
 
   /** 拖动中的进度值(0-100);null 表示未在拖动,由 playTimeData.bar 驱动 */
@@ -119,6 +118,8 @@ export default function PlayerBar() {
   const modeMeta = SONG_MODE_META[playSongMode];
   const VolumeIcon = getVolumeIcon(playVolume);
   const barValue = dragBar ?? (Number(playTimeData.bar) || 0);
+  /** 正在为「音乐资源自动缓存」下载整首歌(-1 表示没有在下载) */
+  const caching = songCacheProgress >= 0;
 
   // 底栏歌词:当前逐字行(showYrc 时优先)与整行文本回退
   const yrcLine =
@@ -168,70 +169,8 @@ export default function PlayerBar() {
     useStatusStore.setState({ playRate: next });
   };
 
-  // 「更多操作」菜单(对照旧 MainControl.vue 的 songMoreOptions)
-  // 无当前歌曲或为本地歌曲(旧逻辑 v-if="!path")时禁用
-  const currentSongId = playSongData?.id;
-  const moreDisabled =
-    currentSongId == null || currentSongId === "" || !!playSongData?.path;
-
-  /** 复制歌曲分享链接(对照旧「复制歌曲链接」) */
-  const copySongLink = () =>
-    copyText(
-      `https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`,
-      "复制歌曲链接成功",
-    );
-
-  // 当前歌曲 MV id(formatData 的 song.mv 字段;0 / "0" / 空值视为无 MV)
-  const rawMv = (playSongData as { mv?: unknown })?.mv;
-  const mvId =
-    typeof rawMv === "number" && rawMv !== 0
-      ? String(rawMv)
-      : typeof rawMv === "string" && rawMv !== "" && rawMv !== "0"
-        ? rawMv
-        : null;
-
-  const moreItems: MenuItemDef[] = [
-    {
-      key: "comment",
-      label: "查看评论",
-      onSelect: () => void navigate({ to: "/comments", search: { id: String(currentSongId) } }),
-    },
-    {
-      key: "original-page",
-      label: "查看原始页面",
-      onSelect: () => {
-        window.open(`https://y.qq.com/n/ryqq/songDetail/${String(currentSongId)}`);
-      },
-    },
-    {
-      key: "song-detail",
-      label: "查看单曲详情",
-      onSelect: () => void navigate({ to: "/song", search: { id: String(currentSongId) } }),
-    },
-    {
-      key: "download",
-      label: "下载歌曲",
-      onSelect: () => void navigate({ to: "/download", search: { id: String(currentSongId) } }),
-    },
-    {
-      key: "share",
-      label: "复制歌曲链接",
-      onSelect: () => void copySongLink(),
-    },
-    {
-      key: "copy-id",
-      label: "复制歌曲 ID",
-      onSelect: () => void copyText(String(currentSongId), "复制歌曲 ID 成功"),
-    },
-  ];
-  // 观看 MV(对照旧 SongListDropdown 的「观看 MV」;有 MV 时插入到「查看评论」之后)
-  if (mvId) {
-    moreItems.splice(1, 0, {
-      key: "mv",
-      label: "观看 MV",
-      onSelect: () => void navigate({ to: "/videos-player", search: { id: mvId } }),
-    });
-  }
+  // 「更多操作」菜单(与全屏播放器共用同一份定义)
+  const { items: moreItems, disabled: moreDisabled } = useSongMoreItems(playSongData);
 
   return (
     <>
@@ -342,31 +281,36 @@ export default function PlayerBar() {
             <SkipForward size={18} aria-hidden="true" />
           </button>
         </div>
-        <div className="flex w-full items-center gap-2">
-          <span
-            className="w-10 shrink-0 text-right text-xs tabular-nums"
-            style={{ color: "var(--met-fg-dim)" }}
-          >
-            {playTimeData.played}
-          </span>
-          <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="bar">
-            <Slider
-              value={barValue}
-              min={0}
-              max={100}
-              step={0.1}
-              ariaLabel="播放进度"
-              onValueChange={setDragBar}
-              onValueCommitted={commitSeek}
-            />
-          </SeekTooltipArea>
-          <span
-            className="w-10 shrink-0 text-xs tabular-nums"
-            style={{ color: "var(--met-fg-dim)" }}
-          >
-            {playTimeData.durationTime}
-          </span>
-        </div>
+        {/* 缓存下载中:进度条临时充当下载进度显示器(此时还没有可用的播放进度) */}
+        {caching ? (
+          <CacheProgressBar percent={songCacheProgress} variant="bar" />
+        ) : (
+          <div className="flex w-full items-center gap-2">
+            <span
+              className="w-10 shrink-0 text-right text-xs tabular-nums"
+              style={{ color: "var(--met-fg-dim)" }}
+            >
+              {playTimeData.played}
+            </span>
+            <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="bar">
+              <Slider
+                value={barValue}
+                min={0}
+                max={100}
+                step={0.1}
+                ariaLabel="播放进度"
+                onValueChange={setDragBar}
+                onValueCommitted={commitSeek}
+              />
+            </SeekTooltipArea>
+            <span
+              className="w-10 shrink-0 text-xs tabular-nums"
+              style={{ color: "var(--met-fg-dim)" }}
+            >
+              {playTimeData.durationTime}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 右区:播放模式 + 倍速 + 音量 + 播放列表 */}

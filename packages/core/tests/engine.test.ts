@@ -61,10 +61,10 @@ const makeFixture = (overrides?: { settings?: Partial<PlayerSettings> }): Fixtur
     playUseOtherSource: false,
     playSeek: 0,
     playSeekMs: 0,
+    songCacheProgress: -1,
     hasNextSong: false,
     coverTheme: {},
     coverBackground: null,
-    spectrumsData: [],
     playSongLyricIndex: -1,
     playTimeData: { currentTime: 0, duration: 0, bar: "0", played: "00:00", durationTime: "00:00" },
     playRate: 1,
@@ -83,10 +83,10 @@ const makeFixture = (overrides?: { settings?: Partial<PlayerSettings> }): Fixtur
     memorySeek: false,
     useMusicCache: false,
     html5Player: false,
-    showSpectrums: false,
     simulationPlaying: true,
     showYrc: true,
     lyricsOffset: 0,
+    lyricsShiftMs: 0,
     useAMttmlDB: false,
     removeInfo: false,
     removeAMInfo: true,
@@ -273,14 +273,14 @@ describe("playAllSongs", () => {
 });
 
 describe("soundStop", () => {
-  it("清理进度与频谱状态", async () => {
+  it("清理进度与缓存下载进度", async () => {
     const f = makeFixture();
     f.music.playSongData = song(1);
     await initPlayer(true);
-    f.status.spectrumsData = [1, 2, 3];
+    f.status.songCacheProgress = 42;
     soundStop();
     expect(f.status.playSeek).toBe(0);
     expect(f.status.playSeekMs).toBe(0);
-    expect(f.status.spectrumsData).toEqual([]);
+    expect(f.status.songCacheProgress).toBe(-1);
   });
 });

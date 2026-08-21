@@ -17,7 +17,6 @@ import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
 import LyricScroll from "./LyricScroll";
 import PlayerCover from "./PlayerCover";
-import Spectrum from "./Spectrum";
 
 /** 歌词区上下渐隐遮罩(对齐旧 AMLyric.vue / Lyric.vue) */
 const LYRIC_MASK =
@@ -180,13 +179,13 @@ function FullPlayerInner() {
   const useAMttmlDB = useSettingsStore((s) => s.useAMttmlDB);
   const lyricsAMttmlUseOffset = useSettingsStore((s) => s.lyricsAMttmlUseOffset);
   const lyricsAMOffset = useSettingsStore((s) => s.lyricsAMOffset);
+  const lyricsShiftMs = useSettingsStore((s) => s.lyricsShiftMs);
   const lyricsAMEndTimeOffset = useSettingsStore((s) => s.lyricsAMEndTimeOffset);
   const useAMSpring = useSettingsStore((s) => s.useAMSpring);
   const useAMScale = useSettingsStore((s) => s.useAMScale);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
   const lyricsBlur = useSettingsStore((s) => s.lyricsBlur);
   const lyricsBlock = useSettingsStore((s) => s.lyricsBlock);
-  const showSpectrums = useSettingsStore((s) => s.showSpectrums);
 
   /**
    * 修复(缺陷 B):挂载时 store 已有歌词但 LyricPlayer 空白。
@@ -336,10 +335,31 @@ function FullPlayerInner() {
   // currentTime 偏移修正(对齐旧 AMLyric.vue 三元):仅 TTML 歌词且开启
   // lyricsAMttmlUseOffset 时叠加 lyricsAMOffset,其余路径用原始 playSeekMs
   const applyAMOffset = useTtml && lyricsAMttmlUseOffset;
+  // 歌词时间平移(控制条上的 -10ms / +10ms):正值让歌词整体延后,故扣减当前时间
   const amCurrentTime = Math.max(
     0,
-    Math.round(applyAMOffset ? playSeekMs + lyricsAMOffset : playSeekMs),
+    Math.round((applyAMOffset ? playSeekMs + lyricsAMOffset : playSeekMs) - lyricsShiftMs),
   );
+
+  // 歌词时间平移变更后立即对位:AMLL 暂停时不自行推进时间轴,
+  // 不显式 setCurrentTime 就要等下一次播放才看得出平移效果。
+  const shiftSyncedRef = useRef(true);
+  useEffect(() => {
+    if (shiftSyncedRef.current) {
+      shiftSyncedRef.current = false;
+      return;
+    }
+    const core = lyricPlayerRef.current?.lyricPlayer;
+    if (!core) return;
+    const seekMs = useStatusStore.getState().playSeekMs;
+    const time = Math.max(
+      0,
+      Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
+    );
+    core.setCurrentTime(time, true);
+    void core.calcLayout(true, true);
+    core.update();
+  }, [lyricsShiftMs, applyAMOffset, lyricsAMOffset]);
 
   // 缺陷 B 兜底:LyricPlayer 挂载/歌词变化后,校验 core 实例已持有歌词,缺失则补写
   useEffect(() => {
@@ -350,7 +370,7 @@ function FullPlayerInner() {
       const seekMs = useStatusStore.getState().playSeekMs;
       const time = Math.max(
         0,
-        Math.round(applyAMOffset ? seekMs + lyricsAMOffset : seekMs),
+        Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
       );
       core.setLyricLines(amLines, time);
       core.setCurrentTime(time, true);
@@ -358,7 +378,7 @@ function FullPlayerInner() {
       core.update();
     }, 100);
     return () => window.clearTimeout(timer);
-  }, [lyricReady, useAM, amLines, applyAMOffset, lyricsAMOffset]);
+  }, [lyricReady, useAM, amLines, applyAMOffset, lyricsAMOffset, lyricsShiftMs]);
 
   // ===== 封面与背景 =====
   const coverSmall = playSongData.coverSize?.s || playSongData.localCover || playSongData.cover;
@@ -667,12 +687,7 @@ function FullPlayerInner() {
         )}
       </div>
 
-      {/* ===== 底部:频谱(窄屏隐藏)+ 悬浮控制条 ===== */}
-      {showSpectrums && (
-        <div className="max-md:hidden">
-          <Spectrum visible={!playerControlShow} color={`rgba(${mainRgb}, 0.35)`} />
-        </div>
-      )}
+      {/* ===== 底部:悬浮控制条 ===== */}
       <FullPlayerControls onKeepVisible={keepControlsVisible} />
     </div>
   );
