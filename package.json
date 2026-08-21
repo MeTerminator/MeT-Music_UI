@@ -10,7 +10,7 @@
     "node": ">=18.16.0",
     "pnpm": ">=8.14.0"
   },
-  "packageManager": "pnpm@11.21.0",
+  "packageManager": "pnpm@11.22.0",
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @met/app dev",
