@@ -1,6 +1,6 @@
 {
   "name": "@met/core",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "private": true,
   "description": "MeT-Music 框架无关核心:播放引擎、歌词解析、API 客户端、一起听协议",
   "type": "module",
