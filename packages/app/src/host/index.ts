@@ -16,6 +16,7 @@ import {
   computeWordProgress,
   getSeek,
   playOrPause,
+  refreshPlayProgress,
   setSeek,
   setVolume,
   soundStop,
@@ -263,6 +264,11 @@ export const initHostGlobals = (): void => {
   };
   window.$MeTMusic_stop = () => {
     soundStop();
+    // soundStop 自己不动 playState(它也走切歌路径,动了会打断自动续播);
+    // 但外部 API 的 stop 是「真的停了」,状态得落到 false,
+    // 否则 getState 还报 playing,而 tick 早就停了没人纠正。
+    useStatusStore.setState({ playState: false });
+    refreshPlayProgress();
   };
   window.$MeTMusic_seek = (seconds) => {
     if (!Number.isFinite(seconds)) return;

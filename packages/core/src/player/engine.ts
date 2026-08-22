@@ -502,6 +502,10 @@ export const createPlayer = async (
       cleanAllInterval();
       // 更改状态
       status.playState = false;
+      // 补发一帧宿主广播。上面刚把 rAF 与 seekInterval 停掉,
+      // 而它们是 setAudioTime(→ onTick)仅有的驱动源;不补的话
+      // 「已暂停」这个状态永远发不出去(托盘、SMTC、外部 API 都收不到)。
+      setAudioTime(true);
       // 更改页面标题
       deps.env.setTitle(defaultTitle);
       // 上报播放状态
@@ -706,6 +710,7 @@ export const fadePlayOrPause = (type: "play" | "pause" = "play"): void => {
       simulationPausedSeek = (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
       status.playState = false;
       cleanAllInterval();
+      setAudioTime(true); // 同上:tick 停了,状态得手动送出去一次
       reportPlaybackStatus("pause");
       deps.media.setPlaybackState(false);
     }
@@ -746,6 +751,8 @@ export const fadePlayOrPause = (type: "play" | "pause" = "play"): void => {
       player?.pause();
       cleanAllInterval();
       status.playState = false;
+      // 加载中的 pause 未必会触发 Howler 的 "pause" 事件,这里自己补一帧
+      setAudioTime(true);
     } else {
       player?.fade(status.playVolume, 0, duration);
       const onFadeOutDone = (): void => {
@@ -953,6 +960,9 @@ const setAudioTime = (force = false): void => {
       const currentTime = simulationPausedSeek;
       // 计算当前歌词播放索引
       status.playSongLyricIndex = computeLyricIndex(currentTime);
+      // 时间不更新，但状态要广播出去：暂停后 tick 就停了，
+      // 宿主拿到的最后一帧若停在 isPlaying: true，外部会一直以为还在播
+      deps.env.onTick?.();
       return; // 暂停时退出
     }
 
