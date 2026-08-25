@@ -5,6 +5,7 @@ import { List, Play } from "lucide-react";
 import { api, formatNumber, getTimestampTime, playAllSongs, type Song } from "@met/core";
 import formatData, { getCoverUrl } from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
+import { ExpandableText } from "@/components/ExpandableText";
 import { FuzzySearchInput } from "@/components/list/FuzzySearchInput";
 import { DropdownMenu, type MenuItemDef } from "@/components/ui/menu";
 import { getAssetUrl } from "@/platform/web";
@@ -191,14 +192,8 @@ export default function Playlist() {
                 ) : null}
               </div>
             ) : null}
-            {detail.description ? (
-              <p
-                className="line-clamp-2 text-sm text-[var(--met-fg-dim)]"
-                title={detail.description}
-              >
-                {detail.description}
-              </p>
-            ) : null}
+            {/* 简介(过长时原地向下展开,替代原生 title 信息框) */}
+            {detail.description ? <ExpandableText text={detail.description} /> : null}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--met-fg-dim)]">
               <span>共 {detail.trackCount ?? songs.length} 首歌曲</span>
               {detail.playCount ? (

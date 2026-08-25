@@ -4,6 +4,7 @@ import { Link, useSearch } from "@tanstack/react-router";
 import { api, formatNumber, getTimestampTime, playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
+import { ExpandableText } from "@/components/ExpandableText";
 import { FuzzySearchInput } from "@/components/list/FuzzySearchInput";
 
 /** 专辑详情(formatData album 分支) */
@@ -115,11 +116,9 @@ export default function Album() {
                 <span>{getTimestampTime(detail.publishTime)} 发布</span>
               ) : null}
             </div>
-            {/* 简介 */}
+            {/* 简介(过长时原地向下展开,替代原生 title 信息框) */}
             {detail.description ? (
-              <p className="line-clamp-2 text-sm text-[var(--met-fg-dim)]" title={detail.description}>
-                {detail.description}
-              </p>
+              <ExpandableText text={detail.description} />
             ) : (
               <p className="text-sm text-[var(--met-fg-dim)]">太懒了吧,连简介都没写</p>
             )}
