@@ -51,6 +51,22 @@ export const songLevelOptions: SelectOption[] = Object.values(songLevelData).map
   ({ label, value }) => ({ label, value }),
 );
 
+export const neteaseSongLevelData: Record<string, { label: string; tip: string }> = {
+  standard: { label: "标准", tip: "标准音质" },
+  higher: { label: "较高", tip: "较高音质" },
+  exhigh: { label: "极高", tip: "极高音质" },
+  lossless: { label: "无损", tip: "无损音质" },
+  hires: { label: "Hi-Res", tip: "高解析度音质" },
+  jyeffect: { label: "高清臻音", tip: "高清臻音" },
+  dolby: { label: "杜比全景声", tip: "需要设备支持杜比全景声" },
+  vivid: { label: "臻音全景声", tip: "臻音全景声" },
+  jymaster: { label: "超清母带", tip: "超清母带音质" },
+  sky: { label: "沉浸环绕声", tip: "沉浸环绕声，默认使用 c51 类型" },
+};
+export const neteaseSongLevelOptions: SelectOption[] = Object.entries(neteaseSongLevelData).map(
+  ([value, { label }]) => ({ label, value }),
+);
+
 /** 主题数据 */
 export const themeColorOptions: SelectOption[] = [
   { label: "欢快派对", value: "red" },
@@ -146,4 +162,3 @@ export const searchLoadSizeOptions: SelectOption[] = [
   { label: "差不多刚刚好（ 50 条 ）", value: "50" },
   { label: "我要很多（ 100 条 ）", value: "100" },
 ];
-

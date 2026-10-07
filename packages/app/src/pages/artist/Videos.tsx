@@ -2,18 +2,18 @@ import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { formatNumber } from "@met/core";
+import { formatNumber, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import { PrevNextPager } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
 
-/** MV 卡片数据(formatData mv 分支;coverSize 为字符串) */
+/** MV 卡片数据(formatData mv 分支) */
 interface MvCard {
   id?: number | string;
   name?: string;
   artists?: { name?: string }[] | string;
   cover?: string;
-  coverSize?: string;
+  coverSize?: Song["coverSize"];
   playCount?: number;
 }
 
@@ -111,7 +111,7 @@ export default function Videos() {
           >
             <div className="relative w-full overflow-hidden rounded-xl">
               <img
-                src={video.coverSize || video.cover}
+                src={video.coverSize?.m || video.cover}
                 alt=""
                 loading="lazy"
                 className="aspect-video w-full bg-[var(--met-bg-elevated)] object-cover transition-transform group-hover:scale-[1.02]"

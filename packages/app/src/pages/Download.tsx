@@ -17,12 +17,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Download as DownloadIcon } from "lucide-react";
-import { api } from "@met/core";
+import { api, playbackLevel, type Platform } from "@met/core";
 import { Button } from "@/components/ui/button";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { copyText } from "@/lib/clipboard";
 import { deleteFile, listFileKeys } from "@/lib/filesDB";
 import { useMusicStore } from "@/stores/music";
+import { useSettingsStore } from "@/stores/settings";
+import { neteaseSongLevelData, neteaseSongLevelOptions } from "@/pages/setting/options";
 
 /** 歌词 tab 项(对照旧 Download.vue fetchLyrics 的 lyrics 数组) */
 interface LyricItem {
@@ -56,10 +58,12 @@ const QUALITY_OPTIONS: SelectOption[] = Object.entries(SONG_LEVEL_DATA).map(
 const coverFromPmid = (pmid?: string | null): string | undefined =>
   pmid ? `/api/web/album/cover/highpic?pic=T002R800x800M000${pmid}.jpg` : undefined;
 
-/** 初始音质:?music_quality= 参数(合法枚举内,忽略大小写)优先,否则 "SQ" */
-const initialQuality = (musicQuality?: string): string => {
-  const upper = typeof musicQuality === "string" ? musicQuality.toUpperCase() : "";
-  return upper && upper in SONG_LEVEL_DATA ? upper : "SQ";
+/** 初始音质:合法路由参数优先,否则读取对应平台的播放音质设置。 */
+const initialQuality = (musicQuality: string | undefined, platform: Platform): string => {
+  const levels = platform === "netease" ? neteaseSongLevelData : SONG_LEVEL_DATA;
+  const value = platform === "netease" ? musicQuality?.toLowerCase() : musicQuality?.toUpperCase();
+  const fallback = playbackLevel(useSettingsStore.getState(), platform);
+  return value && value in levels ? value : platform === "netease" ? fallback : fallback.toUpperCase();
 };
 
 /** 保存 Blob 为本地文件(blob URL + a[download],与旧页一致) */
@@ -103,7 +107,14 @@ const Download = () => {
         ? String(playSongData.id)
         : "";
 
-  const [quality, setQuality] = useState(() => initialQuality(search.music_quality));
+  const [qualities, setQualities] = useState(() => ({
+    qq: initialQuality(platform === "qq" ? search.music_quality : undefined, "qq"),
+    netease: initialQuality(platform === "netease" ? search.music_quality : undefined, "netease"),
+  }));
+  const quality = qualities[platform];
+  const setQuality = (value: string) => setQualities((previous) => ({ ...previous, [platform]: value }));
+  const qualityOptions = platform === "netease" ? neteaseSongLevelOptions : QUALITY_OPTIONS;
+  const qualityData = platform === "netease" ? neteaseSongLevelData : SONG_LEVEL_DATA;
   const [downloadPhase, setDownloadPhase] = useState<DownloadPhase>("idle");
   // 进度:Content-Length 可得时为 0-100 百分比,不可得为 null(此时仅展示已下载字节数)
   const [progressPercent, setProgressPercent] = useState<number | null>(null);
@@ -430,10 +441,10 @@ const Download = () => {
         <div className="mt-5 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-[var(--met-fg-dim)]">解析音质</span>
-            <Select value={quality} options={QUALITY_OPTIONS} onValueChange={setQuality} />
+            <Select value={quality} options={qualityOptions} onValueChange={setQuality} />
           </div>
           <p className="text-xs text-[var(--met-fg-dim)]">
-            {SONG_LEVEL_DATA[quality]?.tip || "暂无说明"}
+            {qualityData[quality]?.tip || "暂无说明"}
           </p>
           <Button
             variant="primary"

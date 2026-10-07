@@ -91,8 +91,8 @@ export const PlayModeActionDataSchema: z.ZodType<PlayModeActionData> = z.lazy(()
 export type PlayModeRoomAction = { "userId":string; "user"?:RoomUser; "action":"set_play_mode"; "data":PlayModeActionData; };
 export const PlayModeRoomActionSchema: z.ZodType<PlayModeRoomAction> = z.lazy(() => z.strictObject({ "userId": z.string(), "user": RoomUserSchema.optional(), "action": z.literal("set_play_mode"), "data": PlayModeActionDataSchema }));
 
-export type PlaybackItem = { "id":(string | number | null); "url":(string | null); "size"?:number; "track_info":QmcTrackInfo; "time":number; "level":string; "code":200; };
-export const PlaybackItemSchema: z.ZodType<PlaybackItem> = z.lazy(() => z.strictObject({ "id": z.union([z.string(), z.number().int(), z.null()]), "url": z.union([z.string(), z.null()]), "size": z.number().int().optional(), "track_info": QmcTrackInfoSchema, "time": z.number().int(), "level": z.string(), "code": z.literal(200) }));
+export type PlaybackItem = { "id":(string | number | null); "url":(string | null); "size"?:number; "track_info":QmcTrackInfo; "time":number; "level":string; "code":200; "isTrial"?:boolean; };
+export const PlaybackItemSchema: z.ZodType<PlaybackItem> = z.lazy(() => z.strictObject({ "id": z.union([z.string(), z.number().int(), z.null()]), "url": z.union([z.string(), z.null()]), "size": z.number().int().optional(), "track_info": QmcTrackInfoSchema, "time": z.number().int(), "level": z.string(), "code": z.literal(200), "isTrial": z.boolean().optional() }));
 
 export type PlaybackMessage = { "event":("play" | "pause" | "progress"); "sessionId":string; "userId"?:(string | number | null); "songMid":(string | number | null); "songSource"?:MusicSource; "status"?:boolean; "currentTime":(number | number); "systemTime":(number | number); "serverTime"?:(number | null); "clientTime"?:(number | null); "delta"?:(number | null); };
 export const PlaybackMessageSchema: z.ZodType<PlaybackMessage> = z.lazy(() => z.strictObject({ "event": z.union([z.literal("play"), z.literal("pause"), z.literal("progress")]), "sessionId": z.string(), "userId": z.union([z.string(), z.number().int(), z.null()]).optional(), "songMid": z.union([z.string(), z.number().int(), z.null()]), "songSource": MusicSourceSchema.optional(), "status": z.boolean().optional(), "currentTime": z.union([z.number(), z.number().int()]), "systemTime": z.union([z.number(), z.number().int()]), "serverTime": z.union([z.number().int(), z.null()]).optional(), "clientTime": z.union([z.number().int(), z.null()]).optional(), "delta": z.union([z.number(), z.null()]).optional() }));
@@ -313,8 +313,8 @@ export const VideoResponseSchema: z.ZodType<VideoResponse> = z.lazy(() => z.stri
 export type VideoSearchResult = { "mvs":Array<WebVideo>; "mvCount":number; };
 export const VideoSearchResultSchema: z.ZodType<VideoSearchResult> = z.lazy(() => z.strictObject({ "mvs": z.array(WebVideoSchema), "mvCount": z.number().int() }));
 
-export type VideoUrl = { "id":(string | number | null); "url":string; };
-export const VideoUrlSchema: z.ZodType<VideoUrl> = z.lazy(() => z.strictObject({ "id": z.union([z.string(), z.number().int(), z.null()]), "url": z.string() }));
+export type VideoUrl = { "id":(string | number | null); "url":string; "r"?:(number | null); };
+export const VideoUrlSchema: z.ZodType<VideoUrl> = z.lazy(() => z.strictObject({ "id": z.union([z.string(), z.number().int(), z.null()]), "url": z.string(), "r": z.union([z.number().int(), z.null()]).optional() }));
 
 export type VideoUrlResponse = { "code":200; "data":VideoUrl; };
 export const VideoUrlResponseSchema: z.ZodType<VideoUrlResponse> = z.lazy(() => z.strictObject({ "code": z.literal(200), "data": VideoUrlSchema }));

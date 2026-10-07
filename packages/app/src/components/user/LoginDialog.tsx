@@ -102,7 +102,7 @@ export default function LoginDialog({ open, onOpenChange, initialPlatform = "qq"
           className={inputCls}
         />
       </div>
-      {platform === "netease" && <p className="mt-3 text-xs text-[var(--met-fg-dim)]">在网易云个人主页链接中，id= 后的数字就是用户 ID。</p>}
+      {platform === "netease" && <p className="mt-3 text-xs text-[var(--met-fg-dim)]">在网易云个人主页链接中，id= 后的数字就是用户 ID。此处用于读取公开资料和歌单；VIP 播放需要服务器账号登录并具备对应权益。</p>}
     </Dialog>
   );
 }

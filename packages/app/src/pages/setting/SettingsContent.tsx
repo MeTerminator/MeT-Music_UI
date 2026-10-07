@@ -31,6 +31,8 @@ import {
   searchLoadSizeOptions,
   songLevelData,
   songLevelOptions,
+  neteaseSongLevelData,
+  neteaseSongLevelOptions,
   themeAutoCoverTypeOptions,
   themeColorOptions,
   themeTypeOptions,
@@ -295,13 +297,21 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
       <div className="mt-8 scroll-mt-20" ref={bindSection("播放")}>
         <SettingSection title="播放">
           <SettingItem
-            name="在线播放音质"
+            name="QQ 音乐音质选择"
             tip={songLevelData[settings.songLevel]?.tip ?? ""}
           >
             <Select
               value={settings.songLevel}
               options={songLevelOptions}
               onValueChange={(v) => set({ songLevel: v })}
+              className="w-52"
+            />
+          </SettingItem>
+          <SettingItem name="网易云音乐音质选择" tip={`${neteaseSongLevelData[settings.neteaseSongLevel]?.tip ?? ""}。实际音质取决于歌曲、账号权益和设备，缺少所选音质时由网易云回退。`}>
+            <Select
+              value={settings.neteaseSongLevel}
+              options={neteaseSongLevelOptions}
+              onValueChange={(v) => set({ neteaseSongLevel: v })}
               className="w-52"
             />
           </SettingItem>

@@ -60,6 +60,7 @@ export interface StatusState {
 /** 对应旧 stores/siteSettings.js(引擎触及的字段) */
 export interface PlayerSettings {
   songLevel: string;
+  neteaseSongLevel?: string;
   songVolumeFade: boolean;
   memorySeek: boolean;
   useMusicCache: boolean;

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { legacyStorage } from "./persist";
+import { NETEASE_LEVELS } from "@met/core";
 
 /**
  * 站点设置。字段与旧 stores/siteSettings.js 完全一致(persist key 同为 "siteSettings")。
@@ -23,6 +24,7 @@ export interface SettingsState {
   html5Player: boolean;
   playCoverType: string;
   songLevel: string;
+  neteaseSongLevel: string;
   autoPlay: boolean;
   songVolumeFade: boolean;
   countDownShow: boolean;
@@ -80,6 +82,7 @@ export const defaultSettings: SettingsState = {
   html5Player: true,
   playCoverType: "cover",
   songLevel: "hq",
+  neteaseSongLevel: "exhigh",
   autoPlay: false,
   songVolumeFade: true,
   countDownShow: true,
@@ -128,6 +131,7 @@ export const useSettingsStore = create<SettingsState>()(
     merge: (persisted, current) => {
       const rest = { ...((persisted ?? {}) as Partial<SettingsState>) } as Record<string, unknown>;
       for (const key of REMOVED_KEYS) delete rest[key];
+      if (!NETEASE_LEVELS.includes(rest.neteaseSongLevel as typeof NETEASE_LEVELS[number])) delete rest.neteaseSongLevel;
       return { ...current, ...rest } as SettingsState;
     },
   }),

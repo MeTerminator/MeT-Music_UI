@@ -297,9 +297,9 @@ describe("provider identity", () => {
     expect(f.music.playList).toHaveLength(3);
     expect(f.music.playList[1].source).toBe("netease");
   });
-  it("routes NetEase playback requests with platform=netease", async () => {
-    const f = makeFixture({ settings: { simulationPlaying: false } });
-    f.music.playSongData = { ...song(1), source: "netease" };
+  it.each(["netease", "qq"] as const)("uses the %s platform's independent playback quality", async (platform) => {
+    const f = makeFixture({ settings: { simulationPlaying: false, songLevel: "sq", neteaseSongLevel: "jymaster" } });
+    f.music.playSongData = { ...song(1), source: platform === "netease" ? "netease" : "qqmusic" };
     f.music.playList = [f.music.playSongData];
     setApiBaseURL("http://localhost/api/web");
     const fetchSpy = vi.fn(async (_input: Request) => new Response(JSON.stringify({ code: 200, data: [{ id: 1, url: null, size: 0, track_info: { id: 1, mid: "1", source: "netease" }, time: 0, level: "standard", code: 200 }] }), { headers: { "Content-Type": "application/json" } }));
@@ -307,6 +307,7 @@ describe("provider identity", () => {
     await initPlayer(true);
     expect(fetchSpy).toHaveBeenCalled();
     const request = fetchSpy.mock.calls[0]?.[0] as unknown as Request;
-    expect(new URL(request.url).searchParams.get("platform")).toBe("netease");
+    expect(new URL(request.url).searchParams.get("platform")).toBe(platform);
+    expect(new URL(request.url).searchParams.get("level")).toBe(platform === "netease" ? "jymaster" : "sq");
   });
 });

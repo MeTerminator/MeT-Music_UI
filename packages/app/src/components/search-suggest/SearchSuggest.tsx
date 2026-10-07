@@ -131,8 +131,15 @@ const SearchSuggest = () => {
   });
   // 热搜榜(聚焦且无关键词时拉取;10 分钟缓存对齐旧 getCacheData("searchHot", 10))
   const { data: hotRaw } = useQuery({
-    queryKey: ["searchHot"],
+    queryKey: ["searchHot", "qq"],
     queryFn: () => api.getSearchHot(),
+    enabled: open && kw.length === 0,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const neteaseHotQuery = useQuery({
+    queryKey: ["searchHot", "netease"],
+    queryFn: () => api.getSearchHot("netease"),
     enabled: open && kw.length === 0,
     staleTime: 10 * 60 * 1000,
   });
@@ -144,6 +151,10 @@ const SearchSuggest = () => {
       ? (list as SearchHotItem[]).filter((item) => item?.searchWord)
       : [];
   }, [hotRaw]);
+  const neteaseHotItems = useMemo<SearchHotItem[]>(() => {
+    const list = (neteaseHotQuery.data as { data?: SearchHotItem[] } | undefined)?.data;
+    return Array.isArray(list) ? list.filter((item) => item?.searchWord) : [];
+  }, [neteaseHotQuery.data]);
 
   // 原始接口字段访问豁免点
   const result = useMemo<SuggestResult | undefined>(() => {
@@ -267,10 +278,10 @@ const SearchSuggest = () => {
   const loading = (isFetching || neteaseQuery.isFetching) && sections.length === 0;
   const empty = !isFetching && !neteaseQuery.isFetching && result !== undefined && sections.length === 0;
 
-  // 聚焦面板(旧 SearchHot.vue):关键词为空时展示历史 + 热搜,任一有内容才显示
+  // 关键词为空时展示历史和两平台热搜。
   const historyVisible = showSearchHistory && searchHistory.length > 0;
   const showFocusPanel =
-    open && kw.length === 0 && (historyVisible || hotItems.length > 0);
+    open && kw.length === 0;
 
   return (
     <div
@@ -303,7 +314,7 @@ const SearchSuggest = () => {
           type="text"
           value={keywords}
           role="combobox"
-          aria-expanded={showPanel}
+          aria-expanded={showPanel || showFocusPanel}
           aria-label="搜索"
           onChange={(e) => {
             setKeywords(e.target.value);
@@ -400,7 +411,7 @@ const SearchSuggest = () => {
 
       {/* 聚焦面板:搜索历史 + 热搜榜(旧 SearchHot.vue,聚焦且关键词为空时) */}
       {showFocusPanel && (
-        <div className="met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
+        <div className="met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-[min(720px,calc(100vw-32px))] -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
           {/* 搜索历史 */}
           {historyVisible && (
             <div className="mb-4">
@@ -433,17 +444,19 @@ const SearchSuggest = () => {
           )}
 
           {/* 热搜榜 */}
-          {hotItems.length > 0 && (
-            <div>
+          <div className="grid grid-cols-2 gap-3">
+          {([{ platform: "qq", items: hotItems }, { platform: "netease", items: neteaseHotItems }] as const).map(({ platform, items }) => (
+            <section key={platform} aria-label={`${platformName(platform)}热搜榜`} className="min-w-0">
               <div className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-[var(--met-primary)]">
                 <Flame className="h-3.5 w-3.5" aria-hidden />
-                热搜榜
+                {platformName(platform)}热搜榜
               </div>
-              {hotItems.map((item, index) => (
+              {!items.length && <p className="px-2 py-3 text-xs text-[var(--met-fg-dim)]">暂无热搜</p>}
+              {items.map((item, index) => (
                 <button
                   key={`${index}-${item.searchWord}`}
                   type="button"
-                  onClick={() => goDirectSearch(item.searchWord ?? "")}
+                  onClick={() => goDirectSearch(item.searchWord ?? "", platform)}
                   className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--met-bg-hover)]"
                 >
                   <span
@@ -483,8 +496,9 @@ const SearchSuggest = () => {
                   </span>
                 </button>
               ))}
-            </div>
-          )}
+            </section>
+          ))}
+          </div>
         </div>
       )}
 

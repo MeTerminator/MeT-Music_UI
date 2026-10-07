@@ -1,4 +1,4 @@
-import { songPlatform } from "../types/platform";
+import { playbackLevel, songPlatform } from "../types/platform";
 /**
  * 播放引擎。自旧 src/utils/Player.js(1391 行)逐函数移植,逻辑照抄;
  * 全部隐式依赖(Pinia / $message / mediaSession / DOM)改经 PlayerDeps 注入,
@@ -330,9 +330,13 @@ const getNormalSongUrl = async (
 ): Promise<string | null> => {
   try {
     const settings = deps.settings();
-    const res = await getSongUrl(id, settings.songLevel, songPlatform(deps.music().getPlaySongData));
+    const platform = songPlatform(deps.music().getPlaySongData);
+    const res = await getSongUrl(id, playbackLevel(settings, platform), platform);
     // 检查是否有有效的响应数据
     if (!res.data?.[0] || !res.data?.[0]?.url) return null;
+    if (res.data[0].isTrial) {
+      deps.notify.warning("网易云当前返回试听音频，请检查服务器账号登录状态及 VIP 权益");
+    }
     // 返回歌曲地址，将 http 转换为 https
     const url: string = res.data[0].url.replace(/^http:/, "https:");
     // 更改状态

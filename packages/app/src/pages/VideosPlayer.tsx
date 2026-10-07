@@ -102,21 +102,25 @@ export default function VideosPlayer() {
   const videoData: VideoDetail | null = raw?.data ?? null;
   const brs = videoData?.brs;
 
-  // 各分辨率播放地址(对照旧页:按 brs 枚举逐个请求 mv/url)
+  // 网易云只请求最高画质;QQ 保留各分辨率播放源。
   // queryKey 带上 brs 集合,详情返回的分辨率列表变化时重新拉取
   const urlsQuery = useQuery({
     queryKey: [platform, "video", "urls", id, (brs ?? []).map((v) => v.br).join(",")],
     queryFn: async (): Promise<Plyr.Source[]> => {
+      const qualities = [...new Set((brs ?? []).map((v) => v.br))]
+        .filter((br) => br > 0)
+        .sort((a, b) => b - a);
+      const requestedQualities = platform === "netease" ? qualities.slice(0, 1) : qualities;
       const results = await Promise.all(
-        (brs ?? []).map((v) => musicApi.getVideoUrl(id as string, v.br)),
+        requestedQualities.map((br) => musicApi.getVideoUrl(id as string, br)),
       );
       return results
         // 原始接口字段访问豁免点
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((r: any): Plyr.Source => ({
+        .map((r: any, index): Plyr.Source => ({
           src: String(r?.data?.url ?? "").replace(/^http:/, "https:"),
           type: "video/mp4",
-          size: r?.data?.r as number | undefined,
+          size: r?.data?.r ?? requestedQualities[index],
         }))
         .filter((s) => !!s.src);
     },
@@ -137,12 +141,16 @@ export default function VideosPlayer() {
 
   useEffect(() => {
     const container = plyrContainerRef.current;
-    if (!container) return;
+    if (!container || !sources?.length) return;
     const video = document.createElement("video");
     video.className = "w-full";
     video.playsInline = true;
     container.appendChild(video);
-    const player = new PlyrCtor(video, playerOptions);
+    const qualities = sources.map((source) => source.size).filter((size): size is number => size != null);
+    const player = new PlyrCtor(video, {
+      ...playerOptions,
+      quality: { default: Math.max(...qualities), options: qualities },
+    });
     playerRef.current = player;
     // 视频播放时暂停音乐并隐藏底栏(对照旧页 playing/pause 事件)
     player.on("playing", () => {
@@ -165,7 +173,7 @@ export default function VideosPlayer() {
       useStatusStore.setState({ showPlayBar: true });
     };
     // id 变化或从错误态恢复时重建播放器
-  }, [id, detailQuery.isError]);
+  }, [id, detailQuery.isError, sources]);
 
   // 数据就绪后写入播放源
   useEffect(() => {
@@ -177,7 +185,10 @@ export default function VideosPlayer() {
       sources,
       poster: videoData.cover?.replace(/^http:/, "https:"),
     };
-  }, [videoData, sources]);
+    if (platform === "netease") {
+      player.quality = Math.max(...sources.map((source) => source.size ?? 0));
+    }
+  }, [videoData, sources, platform]);
 
   // 无 id(旧页 isHasVideoId:参数不完整则返回)
   if (id == null || id === "") {

@@ -1,4 +1,4 @@
-import { songIdentityKey } from "@met/core";
+import { playbackLevel, songIdentityKey } from "@met/core";
 import PlatformLabel from "@/components/PlatformLabel";
 import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import type { QmcTrackInfo, QmcInfoSection } from "@met/core";
@@ -78,7 +78,7 @@ export default function SongDetail() {
   const platform = useMusicPlatform();
   const musicApi = platformApi(platform);
   const id = search.id;
-  const songLevel = useSettingsStore((s) => s.songLevel);
+  const songLevel = useSettingsStore((s) => playbackLevel(s, platform));
   const isInRoom = useStatusStore((s) => s.isInRoom);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -91,7 +91,7 @@ export default function SongDetail() {
   // 详情补充源(旧页数据源 getMusicUrl 的 data[0].info / extras;容错:失败仅少详情网格)
   const urlInfoQuery = useQuery({
     queryKey: [platform, "song", "url-info", id, songLevel],
-    queryFn: () => musicApi.getMusicUrl(id as string, songLevel.toUpperCase()),
+    queryFn: () => musicApi.getMusicUrl(id as string, platform === "qq" ? songLevel.toUpperCase() : songLevel),
     enabled: id != null && id !== "",
     retry: 0,
   });

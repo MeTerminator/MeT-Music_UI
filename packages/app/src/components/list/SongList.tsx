@@ -1,4 +1,4 @@
-import { songPlatform, songIdentityKey } from "@met/core";
+import { playbackLevel, songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ContextMenu as BaseContextMenu } from "@base-ui-components/react/context-menu";
@@ -283,7 +283,7 @@ export default function SongList({
               to: "/download",
               search: { platform: songPlatform(song),
                 id: songId,
-                music_quality: useSettingsStore.getState().songLevel,
+                music_quality: playbackLevel(useSettingsStore.getState(), songPlatform(song)),
               },
             }),
         },
