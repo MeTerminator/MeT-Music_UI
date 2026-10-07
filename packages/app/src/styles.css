@@ -222,14 +222,3 @@ body {
 img[loading="lazy"]:not(.met-img-plain) {
   background-color: var(--met-bg-elevated);
 }
-
-/* 底栏歌词切行动画:新行淡入上移(行节点以歌词索引为 key 重放) */
-@keyframes met-lyric-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-.met-lyric-in {
-  animation: met-lyric-in 0.35s ease;
-}

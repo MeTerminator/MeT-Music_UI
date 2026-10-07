@@ -1,4 +1,5 @@
 import { useRef, useState, type WheelEvent } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Ellipsis,
   Gauge,
@@ -90,6 +91,7 @@ const handleVolumeWheel = (e: WheelEvent) => {
  * 内部渲染 PlaylistDrawer(受 status.playListShow 驱动)。
  */
 export default function PlayerBar() {
+  const reducedMotion = useReducedMotion();
   const playState = useStatusStore((s) => s.playState);
   const playLoading = useStatusStore((s) => s.playLoading);
   const songCacheProgress = useStatusStore((s) => s.songCacheProgress);
@@ -225,23 +227,34 @@ export default function PlayerBar() {
           {/* 副标题:播放中且开启底栏歌词时显示当前歌词行,否则显示歌手 */}
           {showBottomLyric ? (
             <div
-              key={playSongLyricIndex}
-              className="met-lyric-in lyric-font text-xs"
+              className="grid h-4 overflow-hidden lyric-font text-xs"
               style={{ color: "var(--met-fg-dim)" }}
             >
-              {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本。
-                  逐字行走 autoScroll:整行超宽时横向滚动,当前字保持居中
-                  (故此处不能再套 truncate,由 KtvLine 自己 overflow-hidden) */}
-              {yrcLine && showYrcAnimation ? (
-                <KtvLine
-                  line={yrcLine}
-                  activeColor="var(--met-primary)"
-                  inactiveColor="var(--met-fg-dim)"
-                  autoScroll
-                />
-              ) : (
-                <div className="truncate">{lyricLine}</div>
-              )}
+              {/* 两行占据同一格,同步上移一行高度;窗口裁掉进出部分。 */}
+              <AnimatePresence key={playSongData.id} initial={false}>
+                <motion.div
+                  key={`${playSongLyricIndex}:${lyricLine}`}
+                  className="col-start-1 row-start-1 h-4 min-w-0 leading-4"
+                  initial={{ y: reducedMotion ? 0 : "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: reducedMotion ? 0 : "-100%" }}
+                  transition={{ duration: reducedMotion ? 0 : 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本。
+                      逐字行走 autoScroll:整行超宽时横向滚动,当前字保持居中
+                      (故此处不能再套 truncate,由 KtvLine 自己 overflow-hidden) */}
+                  {yrcLine && showYrcAnimation ? (
+                    <KtvLine
+                      line={yrcLine}
+                      activeColor="var(--met-primary)"
+                      inactiveColor="var(--met-fg-dim)"
+                      autoScroll
+                    />
+                  ) : (
+                    <div className="truncate">{lyricLine}</div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
           ) : (
             artistsText && (
