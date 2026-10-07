@@ -196,13 +196,13 @@ describe("ListenTogetherClient", () => {
     expect(typeof gotRoom.receivedAt).toBe("number");
     expect(c.roomState.uuid).toBe("uuid-1");
 
-    // 第二条:无 server_time,serverTime 回退为本地时间 + offset
-    ws.message({ type: "room_state", room: { ...room, seek_position: 20 } });
+    // 第二条:新的完整状态，服务器时间来自固定协议字段
+    ws.message({ type: "room_state", room: { ...room, seek_position: 20 }, event: "sync", server_time: 222_333 });
     expect(onRoomState).toHaveBeenCalledTimes(2);
     [gotRoom, gotEvent, isFirst] = onRoomState.mock.calls[1];
     expect(isFirst).toBe(false);
-    expect(gotEvent).toBeUndefined();
-    expect(gotRoom.serverTime).toBe(Date.now() + c.serverTimeOffset);
+    expect(gotEvent).toBe("sync");
+    expect(gotRoom.serverTime).toBe(222_333);
     expect(c.roomState.seek_position).toBe(20);
   });
 
@@ -259,7 +259,7 @@ describe("ListenTogetherClient", () => {
     expect(c.isConnected).toBe(false);
   });
 
-  it("心跳:每 30s 发送 ping(不带 user 字段)", async () => {
+  it("does not send unsupported application ping messages", async () => {
     const c = makeClient();
     c.connect("ABCD", "session-1", user);
     const ws = sockets[0];
@@ -268,11 +268,10 @@ describe("ListenTogetherClient", () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
     const pings = ws.parsedSent().filter((m) => m.action === "ping");
-    expect(pings).toHaveLength(1);
-    expect(pings[0]).toEqual({ action: "ping", userId: "session-1" });
+    expect(pings).toHaveLength(0);
 
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(ws.parsedSent().filter((m) => m.action === "ping")).toHaveLength(2);
+    expect(ws.parsedSent().filter((m) => m.action === "ping")).toHaveLength(0);
   });
 
   it("onclose 触发 onClosed 回调并清理", () => {

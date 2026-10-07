@@ -1,7 +1,9 @@
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { api, formatNumber, getTimestampTime, playAllSongs, type Song } from "@met/core";
+import { formatNumber, getTimestampTime, playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
 import { ExpandableText } from "@/components/ExpandableText";
@@ -23,22 +25,25 @@ interface AlbumDetail {
 /** 专辑详情页(对照旧 views/List/album.vue) */
 export default function Album() {
   const search = useSearch({ strict: false }) as { id?: number | string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
   const [keyword, setKeyword] = useState("");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["album", "detail", id],
-    queryFn: () => api.getAlbumDetail(id as number | string),
+    queryKey: [platform, "album", "detail", id],
+    queryFn: () => musicApi.getAlbumDetail(id as number | string),
     enabled: id != null && id !== "",
   });
 
   // 原始接口字段访问豁免点
   const raw = data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const detail = useMemo<AlbumDetail | null>(
-    () => (raw?.album ? ((formatData(raw.album, "album")?.[0] ?? null) as AlbumDetail | null) : null),
+    () => (raw?.album ? ((formatPlatformData(raw.album, "album")?.[0] ?? null) as AlbumDetail | null) : null),
     [raw],
   );
-  const songs = useMemo<Song[]>(() => formatData(raw?.songs, "song") ?? [], [raw]);
+  const songs = useMemo<Song[]>(() => formatPlatformData(raw?.songs, "song") ?? [], [raw]);
 
   if (id == null || id === "") {
     return (
@@ -65,6 +70,7 @@ export default function Album() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6">
+      <PlatformLabel />
       {/* 头部信息 */}
       {isLoading || !detail ? (
         <div className="flex animate-pulse gap-5">
@@ -98,7 +104,7 @@ export default function Album() {
                   <span key={`${ar.id}-${i}`} className="flex items-center">
                     <Link
                       to="/artist"
-                      search={{ id: ar.id != null ? String(ar.id) : undefined }}
+                      search={{ platform,  id: ar.id != null ? String(ar.id) : undefined }}
                       className="transition-colors hover:text-[var(--met-primary)]"
                     >
                       {ar.name}

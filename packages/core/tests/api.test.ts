@@ -13,7 +13,7 @@ interface RecordedRequest {
 const recorded: RecordedRequest[] = [];
 
 /** 可配置的假响应 body */
-let nextResponseData: unknown = {};
+let nextResponseData: unknown = { code: 200, result: { songs: [], songCount: 0 } };
 /** 非 null 时,mock fetch 返回该状态码的错误响应 */
 let nextErrorStatus: { status: number; statusText: string } | null = null;
 /** 非 null 时,mock fetch 直接 reject(模拟网络层错误) */
@@ -55,7 +55,7 @@ beforeEach(() => {
   // 浏览器中保持默认的相对前缀 /api/web,测试改用绝对地址(顺带覆盖 setApiBaseURL 重建实例)
   setApiBaseURL("http://localhost/api/web");
   recorded.length = 0;
-  nextResponseData = {};
+  nextResponseData = { code: 200, result: { songs: [], songCount: 0 } };
   nextErrorStatus = null;
   nextNetworkError = null;
   mockFetch.mockClear();
@@ -67,11 +67,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const playback = (url = "https://x/a.mp3") => ({
+  code: 200, data: [{ id: "songmid", url, size: 100, track_info: { mid: "songmid" }, time: 180000, level: "HQ", code: 200 }],
+});
+
 describe("api client (ky)", () => {
   it("getSongUrl(1) 发出 GET 请求,URL 含 /api/web/song/url/v1 与 id/level/timestamp 参数", async () => {
-    // 消化掉 warnValidate 对空 body 的告警(空对象通过 loose 校验,不应有 warn)
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    nextResponseData = { code: 200, data: [{ url: "https://x/a.mp3" }] };
+    nextResponseData = playback();
 
     await getSongUrl(1);
 
@@ -102,7 +105,7 @@ describe("api client (ky)", () => {
   });
 
   it("JSON body 直接返回(旧 axios 拦截器剥壳语义)", async () => {
-    const payload = { code: 200, data: [{ url: "https://example.com/a.mp3" }] };
+    const payload = playback("https://example.com/a.mp3");
     nextResponseData = payload;
 
     const res = await getSongUrl(2, "exhigh");
@@ -110,16 +113,18 @@ describe("api client (ky)", () => {
     expect(res).toEqual(payload);
   });
 
-  it("getSongUrl 响应结构漂移时仅 console.warn,不拦截返回", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const payload = { code: 200, data: "not-an-array" };
-    nextResponseData = payload;
+  it("malformed playback responses reject instead of reaching the player", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    nextResponseData = { code: 200, data: "not-an-array" };
+    await expect(getSongUrl(3)).rejects.toThrow();
+    nextResponseData = { code: 200, data: [{ url: "https://example.com/a.mp3" }] };
+    await expect(getSongUrl(3)).rejects.toThrow();
+  });
 
-    const res = await getSongUrl(3);
-
-    expect(res).toEqual(payload);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(String(warnSpy.mock.calls[0]![0])).toContain("getSongUrl");
+  it("unknown response fields reject", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    nextResponseData = { ...playback(), undocumented: true };
+    await expect(getSongUrl(3)).rejects.toThrow();
   });
 
   it("404 时 reject 且 console.error 未找到资源", async () => {

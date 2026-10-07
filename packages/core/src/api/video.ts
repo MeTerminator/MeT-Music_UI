@@ -1,4 +1,6 @@
-import { request, type ApiResponse } from "./client";
+import type { Platform } from "../types/platform";
+import { request } from "./client";
+import type { ApiResponseFor } from "./contracts";
 
 /**
  * 视频
@@ -8,8 +10,9 @@ import { request, type ApiResponse } from "./client";
  * 获取指定 MV 的详细信息
  * @param mvid - MV ID
  */
-export const getVideoDetail = (mvid: number | string): Promise<ApiResponse> => {
+export const getVideoDetail = (mvid: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/mv/detail">> => {
   return request("GET", "/mv/detail", {
+    platform,
     mvid,
   });
 };
@@ -21,9 +24,9 @@ export const getVideoDetail = (mvid: number | string): Promise<ApiResponse> => {
  */
 export const getVideoUrl = (
   id: number | string,
-  r: string | number | null = null,
-): Promise<ApiResponse> => {
+  r: string | number | null = null, platform: Platform = "qq"): Promise<ApiResponseFor<"/mv/url">> => {
   return request("GET", "/mv/url", {
+    platform,
     id,
     r,
   });

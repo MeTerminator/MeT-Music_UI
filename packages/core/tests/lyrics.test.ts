@@ -260,3 +260,12 @@ describe("computeWordProgress", () => {
     expect(computeWordProgress(undefined, 1, 0)).toEqual([]);
   });
 });
+
+ describe("网易云行级音译", () => {
+  it("将 LRC 音译对齐到普通及逐字歌词", async () => {
+    const result = await parseLyric({ lrc: "[00:00.600]你好", qrc: QRC, qrcroma: "[00:00.600]ni hao" }, null, defaultOptions);
+    expect(result?.lrc[0].roma).toBe("ni hao");
+    expect(result?.yrc[0].roma).toBe("ni hao");
+    expect(result?.lrcAM?.[0].words[0].romanWord).toBe("ni hao");
+  });
+});

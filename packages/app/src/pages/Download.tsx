@@ -1,3 +1,5 @@
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 /**
  * 歌曲下载页(对照旧 src/views/Download.vue,web 能力内实现):
  * - 数据源:?id= 参数优先,否则取当前播放歌曲;api.getMusicInfo 展示歌曲卡
@@ -51,7 +53,7 @@ const QUALITY_OPTIONS: SelectOption[] = Object.entries(SONG_LEVEL_DATA).map(
 );
 
 /** 专辑 pmid → 封面地址(与旧页一致) */
-const coverFromPmid = (pmid?: string): string | undefined =>
+const coverFromPmid = (pmid?: string | null): string | undefined =>
   pmid ? `/api/web/album/cover/highpic?pic=T002R800x800M000${pmid}.jpg` : undefined;
 
 /** 初始音质:?music_quality= 参数(合法枚举内,忽略大小写)优先,否则 "SQ" */
@@ -87,8 +89,11 @@ const Download = () => {
     id?: number | string;
     music_quality?: string;
   };
+  const routePlatform = useMusicPlatform();
   const navigate = useNavigate();
   const playSongData = useMusicStore((s) => s.playSongData);
+  const platform = search.id ? routePlatform : playSongData?.source === "netease" ? "netease" : "qq";
+  const musicApi = platformApi(platform);
 
   // 数据源:?id= 参数优先,否则当前播放歌曲
   const mid =
@@ -107,30 +112,30 @@ const Download = () => {
 
   // 歌曲信息(res[mid].track_info,与旧 Comments.vue 的消费方式一致)
   const infoQuery = useQuery({
-    queryKey: ["download", "musicInfo", mid],
-    queryFn: () => api.getMusicInfo(mid),
+    queryKey: [platform, "download", "musicInfo", mid],
+    queryFn: () => musicApi.getMusicInfo(mid),
     enabled: !!mid,
   });
-  // 接口原始数据无稳定 schema,集中豁免
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const track = (infoQuery.data as any)?.[mid]?.track_info;
+
+
+  const track = infoQuery.data?.[mid]?.track_info;
   const trackName: string = track?.title || track?.name || "";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const singers: { mid?: string; name?: string; title?: string }[] = Array.isArray(
+
+  const singers: { mid?: string | null; name?: string | null; title?: string | null }[] = Array.isArray(
     track?.singer,
   )
     ? track.singer
     : [];
-  const cover = coverFromPmid(track?.album?.pmid);
+  const cover = platform === "netease" && track?.album?.mid ? `/api/web/album/cover/highpic?platform=netease&pic=${encodeURIComponent(track.album.mid)}` : coverFromPmid(track?.album?.pmid);
 
   // 歌词数据(对照旧 fetchLyrics:两接口并行,单侧失败不拖垮另一侧)
   const lyricQuery = useQuery({
-    queryKey: ["download", "lyrics", mid],
+    queryKey: [platform, "download", "lyrics", mid],
     enabled: !!mid,
     queryFn: async () => {
       const [lrcRes, ttmlRes] = await Promise.allSettled([
-        api.getSongLyric(mid),
-        api.getAMttmlLyric(mid),
+        musicApi.getSongLyric(mid),
+        musicApi.getAMttmlLyric(mid),
       ]);
       return {
         lyric: lrcRes.status === "fulfilled" ? lrcRes.value : null,
@@ -141,10 +146,10 @@ const Download = () => {
 
   // 组装 tab 列表(字段与顺序对照旧页:qrc/qrctrans/qrcroma/lrc/lrctrans/ttml)
   const lyricList = useMemo<LyricItem[]>(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = lyricQuery.data?.lyric as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ttml = lyricQuery.data?.ttml as any;
+
+    const res = lyricQuery.data?.lyric;
+
+    const ttml = lyricQuery.data?.ttml;
     const lyrics: LyricItem[] = [];
     if (res?.qrc) lyrics.push({ label: "QRC 歌词", content: res.qrc, type: "qrc", ext: "qrc" });
     if (res?.qrctrans)
@@ -248,11 +253,11 @@ const Download = () => {
     let url = "";
     let filename = "";
     try {
-      const res = await api.getMusicUrl(mid, quality);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (res as any)?.data ?? res;
+      const res = await musicApi.getMusicUrl(mid, quality);
+
+      const data = res;
       const trackInfo = data?.[0]?.track_info;
-      const fileUrl: string | undefined = trackInfo?.file_url;
+      const fileUrl = trackInfo?.file_url;
       if (!fileUrl) {
         toast.warning("该音质暂无可下载链接,请尝试其他音质");
         setDownloadPhase("idle");
@@ -343,6 +348,7 @@ const Download = () => {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
+      <PlatformLabel />
       <h1 className="text-xl font-semibold text-[var(--met-fg)]">歌曲下载</h1>
 
       {/* 歌曲卡 */}
@@ -393,7 +399,7 @@ const Download = () => {
                         type="button"
                         onClick={() =>
                           singer.mid &&
-                          navigate({ to: "/artist", search: { id: singer.mid } })
+                          navigate({ to: "/artist", search: { platform,  id: singer.mid } })
                         }
                         className="cursor-pointer transition-opacity hover:opacity-60"
                       >
@@ -409,7 +415,7 @@ const Download = () => {
                   type="button"
                   onClick={() =>
                     track?.album?.mid &&
-                    navigate({ to: "/album", search: { id: String(track.album.mid) } })
+                    navigate({ to: "/album", search: { platform,  id: String(track.album.mid) } })
                   }
                   className="mt-0.5 block max-w-full cursor-pointer truncate text-xs text-[var(--met-fg-dim)] transition-opacity hover:opacity-60"
                 >
@@ -470,7 +476,7 @@ const Download = () => {
           ) : null}
           <Button
             variant="outline"
-            onClick={() => navigate({ to: "/song", search: { id: mid } })}
+            onClick={() => navigate({ to: "/song", search: { platform,  id: mid } })}
             className="w-full"
           >
             查看单曲信息

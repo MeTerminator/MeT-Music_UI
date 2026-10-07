@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, formatNumber } from "@met/core";
+import { formatNumber } from "@met/core";
 import formatData from "@/lib/formatData";
 import { PrevNextPager } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
@@ -26,6 +27,9 @@ const mvArtistsText = (artists: MvCard["artists"]): string => {
 /** 歌手 - 视频(卡片栅格 + 分页,对照旧 views/Artist/videos.vue) */
 export default function Videos() {
   const search = useSearch({ strict: false }) as { id?: number | string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
   const navigate = useNavigate();
   const loadSize = useSettingsStore((s) => s.loadSize);
@@ -42,14 +46,14 @@ export default function Videos() {
 
   // 视频总数取自歌手详情(与旧实现的 mvSize prop 一致;query key 与布局层共享缓存)
   const detailQuery = useQuery({
-    queryKey: ["artist", "detail", id],
-    queryFn: () => api.getArtistDetail(id as number | string),
+    queryKey: [platform, "artist", "detail", id],
+    queryFn: () => musicApi.getArtistDetail(id as number | string),
     enabled: id != null && id !== "",
   });
 
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ["artist", "videos", id, page, pageSize],
-    queryFn: () => api.getArtistVideos(id as number | string, pageSize, (page - 1) * pageSize),
+    queryKey: [platform, "artist", "videos", id, page, pageSize],
+    queryFn: () => musicApi.getArtistVideos(id as number | string, pageSize, (page - 1) * pageSize),
     enabled: id != null && id !== "",
     placeholderData: keepPreviousData,
   });
@@ -59,7 +63,7 @@ export default function Videos() {
   const detailRaw = (detailQuery.data as any)?.data; // eslint-disable-line @typescript-eslint/no-explicit-any
   const total: number = detailRaw?.artist?.mvSize ?? detailRaw?.videoCount ?? 0;
   const videos = useMemo<MvCard[]>(
-    () => (formatData(raw?.mvs, "mv") ?? []) as unknown as MvCard[],
+    () => (formatPlatformData(raw?.mvs, "mv") ?? []) as unknown as MvCard[],
     [raw],
   );
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -101,7 +105,7 @@ export default function Videos() {
             type="button"
             onClick={() =>
               video.id != null &&
-              navigate({ to: "/videos-player", search: { id: String(video.id) } })
+              navigate({ to: "/videos-player", search: { platform,  id: String(video.id) } })
             }
             className="group flex flex-col text-left"
           >

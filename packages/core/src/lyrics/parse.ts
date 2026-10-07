@@ -29,13 +29,12 @@ export interface LyricApiData {
   qrc?: string | null;
   qrctrans?: string | null;
   qrcroma?: string | null;
-  [key: string]: unknown;
 }
 
 /** TTML 歌词接口原始返回 */
 export interface TtmlLyricData {
+  status?: "success" | "no_lyrics";
   content?: string | null;
-  [key: string]: unknown;
 }
 
 /**
@@ -136,11 +135,11 @@ export const parseLyric = async (
         result.lrc = parseOtherLrc(result.lrc, parseLrcData(lrcData.tlyric), "tran");
       }
       if (lrcData.yromalrc) {
-        result.lrc = parseOtherYrc(
-          result.lrc,
-          parseYrcData(lrcData.yromalrc, options.removeInfo),
-          "roma",
-        );
+        const roma = parseYrcData(lrcData.yromalrc, options.removeInfo);
+        result.lrc = roma.length
+          ? parseOtherYrc(result.lrc, roma, "roma")
+          : parseOtherLrc(result.lrc, parseLrcData(lrcData.yromalrc), "roma");
+        romalrcParseData = roma.length ? parseQrc(lrcData.yromalrc) : parseLrc(lrcData.yromalrc);
       }
     }
     // 逐字歌词
@@ -154,13 +153,12 @@ export const parseLyric = async (
       }
       if (lrcData.yromalrc) {
         // lrcAM 与 yrcAM 共用同一份 QRC 音译解析结果
-        yromalrcParseData = parseQrc(lrcData.yromalrc);
+        const roma = parseYrcData(lrcData.yromalrc, options.removeInfo);
+        yromalrcParseData = roma.length ? parseQrc(lrcData.yromalrc) : parseLrc(lrcData.yromalrc);
         romalrcParseData = yromalrcParseData;
-        result.yrc = parseOtherYrc(
-          result.yrc,
-          parseYrcData(lrcData.yromalrc, options.removeInfo),
-          "roma",
-        );
+        result.yrc = roma.length
+          ? parseOtherYrc(result.yrc, roma, "roma")
+          : parseOtherLrc(result.yrc, parseLrcData(lrcData.yromalrc), "roma");
       }
     }
     // 重写修正:hasYrc 初值只看 qrc 字段是否存在,但接口对没有逐字时间轴的歌曲

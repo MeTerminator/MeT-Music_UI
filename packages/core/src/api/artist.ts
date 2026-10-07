@@ -1,4 +1,6 @@
-import { request, type ApiResponse } from "./client";
+import type { Platform } from "../types/platform";
+import { request } from "./client";
+import type { ApiResponseFor } from "./contracts";
 
 /**
  * 歌手部分
@@ -8,8 +10,9 @@ import { request, type ApiResponse } from "./client";
  * 获取歌手详情
  * @param id - 歌手id
  */
-export const getArtistDetail = (id: number | string): Promise<ApiResponse> => {
+export const getArtistDetail = (id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/artist/detail">> => {
   return request("GET", "/artist/detail", {
+    platform,
     id,
   });
 };
@@ -18,8 +21,9 @@ export const getArtistDetail = (id: number | string): Promise<ApiResponse> => {
  * 获取歌手部分信息和热门歌曲
  * @param id - 歌手id
  */
-export const getArtistSongs = (id: number | string): Promise<ApiResponse> => {
+export const getArtistSongs = (id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/artists">> => {
   return request("GET", "/artists", {
+    platform,
     id,
     timestamp: new Date().getTime(),
   });
@@ -36,9 +40,9 @@ export const getArtistAllSongs = (
   id: number | string,
   limit: number = 50,
   offset: number = 0,
-  order: string = "hot",
-): Promise<ApiResponse> => {
+  order: string = "hot", platform: Platform = "qq"): Promise<ApiResponseFor<"/artist/songs">> => {
   return request("GET", "/artist/songs", {
+    platform,
     id,
     limit,
     offset,
@@ -56,9 +60,9 @@ export const getArtistAllSongs = (
 export const getArtistAblums = (
   id: number | string,
   limit: number = 50,
-  offset: number = 0,
-): Promise<ApiResponse> => {
+  offset: number = 0, platform: Platform = "qq"): Promise<ApiResponseFor<"/artist/album">> => {
   return request("GET", "/artist/album", {
+    platform,
     id,
     limit,
     offset,
@@ -74,9 +78,9 @@ export const getArtistAblums = (
 export const getArtistVideos = (
   id: number | string,
   limit: number = 50,
-  offset: number = 0,
-): Promise<ApiResponse> => {
+  offset: number = 0, platform: Platform = "qq"): Promise<ApiResponseFor<"/artist/mv">> => {
   return request("GET", "/artist/mv", {
+    platform,
     id,
     limit,
     offset,

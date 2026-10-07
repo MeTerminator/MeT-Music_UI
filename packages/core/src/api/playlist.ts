@@ -1,4 +1,6 @@
-import { request, type ApiResponse } from "./client";
+import type { Platform } from "../types/platform";
+import { request } from "./client";
+import type { ApiResponseFor } from "./contracts";
 
 /**
  * 歌单部分
@@ -8,8 +10,9 @@ import { request, type ApiResponse } from "./client";
  * 获取歌单详情
  * @param id - 歌单 id
  */
-export const getPlayListDetail = (id: number | string): Promise<ApiResponse> => {
+export const getPlayListDetail = (id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/playlist/detail">> => {
   return request("GET", "/playlist/detail", {
+    platform,
     id,
     timestamp: new Date().getTime(),
   });
@@ -24,9 +27,9 @@ export const getPlayListDetail = (id: number | string): Promise<ApiResponse> => 
 export const getAllPlayList = (
   id: number | string,
   limit: number = 30,
-  offset: number = 0,
-): Promise<ApiResponse> => {
+  offset: number = 0, platform: Platform = "qq"): Promise<ApiResponseFor<"/playlist/track/all">> => {
   return request("GET", "/playlist/track/all", {
+    platform,
     id,
     limit,
     offset,

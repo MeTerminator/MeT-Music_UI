@@ -161,7 +161,7 @@ const RoomPlaylist = () => {
                       {formatArtist(song.artists)}
                     </span>
                     <span className="shrink-0 rounded-full bg-[var(--met-bg-hover)] px-1.5 py-px text-[10px] text-[var(--met-fg-dim)]">
-                      {String((song as Record<string, unknown>).added_by ?? "") || "系统"}
+                      {String(song.added_by ?? "") || "系统"}
                     </span>
                   </div>
                 </div>

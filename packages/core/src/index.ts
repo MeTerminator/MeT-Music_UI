@@ -19,3 +19,7 @@ export * from "./listen-together/client";
 
 export * from "./player/deps";
 export * from "./player/engine";
+
+export type { QmcTrackInfo, QmcInfoSection, QmcArtist, QmcComment } from "./api/contracts";
+
+export * from "./types/platform";

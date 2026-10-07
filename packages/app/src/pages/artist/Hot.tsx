@@ -1,19 +1,23 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { api, playAllSongs, type Song } from "@met/core";
+import { playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
 
 /** 歌手 - 热门歌曲(对照旧 views/Artist/hot.vue,取热门前 50 首) */
 export default function Hot() {
   const search = useSearch({ strict: false }) as { id?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["artist", "hot", id],
-    queryFn: () => api.getArtistSongs(id as number | string),
+    queryKey: [platform, "artist", "hot", id],
+    queryFn: () => musicApi.getArtistSongs(id as number | string),
     enabled: id != null && id !== "",
   });
 
@@ -23,7 +27,7 @@ export default function Hot() {
     if (!raw) return [];
     // 与旧实现一致:hotSongs 首项带专辑封面时优先,否则回退 songs
     const source = raw.hotSongs?.[0]?.al?.picUrl ? raw.hotSongs : raw.songs;
-    return (formatData(source, "song") ?? []).slice(0, 50);
+    return (formatPlatformData(source, "song") ?? []).slice(0, 50);
   }, [data]);
 
   if (isError) {
@@ -40,7 +44,7 @@ export default function Hot() {
         <h2 className="text-base font-semibold text-[var(--met-fg)]">热门歌曲</h2>
         <Link
           to="/artist/songs"
-          search={{ id }}
+          search={{ platform,  id }}
           className="flex items-center gap-0.5 text-xs text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
         >
           查看全部

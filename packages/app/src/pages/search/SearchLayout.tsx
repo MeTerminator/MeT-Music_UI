@@ -1,4 +1,6 @@
-import { Link, Outlet, useSearch } from "@tanstack/react-router";
+import { platformName } from "@met/core";
+import { useMusicPlatform } from "@/lib/musicPlatform";
+import { Link, Outlet, useSearch, useNavigate, useRouterState } from "@tanstack/react-router";
 
 // tab 顺序对齐旧 Search/index.vue:单曲 / 歌手 / 专辑 / 歌单 / 视频
 const TABS = [
@@ -12,10 +14,14 @@ const TABS = [
 /** 搜索页布局:标题 + tab 导航 + 子路由出口 */
 export default function SearchLayout() {
   const search = useSearch({ strict: false }) as { keywords?: string };
+  const platform = useMusicPlatform();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: s => s.location.pathname });
   const keywords = search.keywords ?? "";
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-8 py-8 max-md:px-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
       <h1 className="text-3xl font-bold text-[var(--met-fg)]">
         {keywords ? (
           <>
@@ -25,13 +31,17 @@ export default function SearchLayout() {
           "搜索"
         )}
       </h1>
+      <div className="flex gap-1 rounded-lg bg-[var(--met-bg-elevated)] p-1" role="group" aria-label="搜索平台">
+        {(["qq", "netease"] as const).map(p => <button key={p} type="button" aria-pressed={platform === p} className={`rounded-md px-3 py-1.5 text-sm ${platform === p ? "bg-[var(--met-primary)] text-[var(--met-primary-fg)]" : "text-[var(--met-fg-dim)]"}`} onClick={() => void navigate({ to: pathname, search: { keywords, platform: p } })}>{platformName(p)}</button>)}
+      </div>
+      </div>
 
       <nav className="mt-4 flex gap-1 border-b border-[var(--met-border)]">
         {TABS.map((tab) => (
           <Link
             key={tab.to}
             to={tab.to}
-            search={{ keywords }}
+            search={{ platform,  keywords }}
             className="rounded-t-md px-4 py-2 text-sm text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-fg)]"
             activeProps={{
               className:

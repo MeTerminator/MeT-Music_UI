@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, formatNumber, getSongTime, type Song } from "@met/core";
+import { formatNumber, getSongTime, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import { formatArtists } from "@/lib/format";
 import { Pagination } from "@/components/ui/pagination";
@@ -16,6 +17,9 @@ const durationText = (duration: Song["duration"]): string => {
 /** 搜索结果 - 视频(对照旧 src/views/Search/videos.vue,type=1004,消费 result.mvs/mvCount) */
 export default function Videos() {
   const search = useSearch({ strict: false }) as { keywords?: string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const keywords = search.keywords ?? "";
   const navigate = useNavigate();
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
@@ -31,16 +35,17 @@ export default function Videos() {
   // 以保证浏览器回退/前进能按历史还原页码。
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["search", "videos", keywords, page, searchLoadSize],
+    queryKey: [platform, "search", "videos", keywords, page, searchLoadSize],
     queryFn: () =>
-      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1004),
+      musicApi.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1004),
     enabled: !!keywords,
   });
 
-  const totalCount: number = data?.result?.mvCount ?? 0;
+  const result = data?.result;
+  const totalCount = result && "mvCount" in result ? result.mvCount : 0;
   const videos = useMemo<Song[]>(
-    () => formatData(data?.result?.mvs, "mv") ?? [],
-    [data],
+    () => formatPlatformData((result && "mvs" in result ? result.mvs : undefined), "mv") ?? [],
+    [result],
   );
 
   if (!keywords) {
@@ -93,7 +98,7 @@ export default function Videos() {
               type="button"
               onClick={() =>
                 video.id != null &&
-                navigate({ to: "/videos-player", search: { id: String(video.id) } })
+                navigate({ to: "/videos-player", search: { platform,  id: String(video.id) } })
               }
               className="group flex flex-col text-left"
             >

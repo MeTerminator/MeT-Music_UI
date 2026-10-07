@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, type Song } from "@met/core";
+import { type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import CoverPlayButton from "@/components/cover/CoverPlayButton";
 import { Pagination } from "@/components/ui/pagination";
@@ -10,6 +11,9 @@ import { useSettingsStore } from "@/stores/settings";
 /** 搜索结果 - 歌单(type=1000,点击进入歌单详情页;分页对齐同目录 Videos.tsx 模式) */
 export default function Playlists() {
   const search = useSearch({ strict: false }) as { keywords?: string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const keywords = search.keywords ?? "";
   const navigate = useNavigate();
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
@@ -25,17 +29,18 @@ export default function Playlists() {
   // 以保证浏览器回退/前进能按历史还原页码。
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["search", "playlists", keywords, page, searchLoadSize],
+    queryKey: [platform, "search", "playlists", keywords, page, searchLoadSize],
     queryFn: () =>
-      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1000),
+      musicApi.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1000),
     enabled: !!keywords,
   });
 
-  const totalCount: number = data?.result?.playlistCount ?? 0;
+  const result = data?.result;
+  const totalCount = result && "playlistCount" in result ? result.playlistCount : 0;
   // formatData 的 playlist 分支输出与 Song 同为宽松形态,此处仅用 id/name/coverSize/count
   const playlists = useMemo<Song[]>(
-    () => formatData(data?.result?.playlists, "playlist", true) ?? [],
-    [data],
+    () => formatPlatformData((result && "playlists" in result ? result.playlists : undefined), "playlist", true) ?? [],
+    [result],
   );
 
   if (!keywords) {
@@ -83,7 +88,7 @@ export default function Playlists() {
           <div key={String(pl.id)} className="group relative flex flex-col">
             <button
               type="button"
-              onClick={() => navigate({ to: "/playlist", search: { id: String(pl.id) } })}
+              onClick={() => navigate({ to: "/playlist", search: { platform,  id: String(pl.id) } })}
               className="flex w-full flex-col text-left"
             >
               <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
@@ -108,7 +113,7 @@ export default function Playlists() {
             </button>
             {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
             <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
-              <CoverPlayButton id={pl.id} type="playlist" className="pointer-events-auto" />
+              <CoverPlayButton platform={platform} id={pl.id} type="playlist" className="pointer-events-auto" />
             </div>
           </div>
         ))}

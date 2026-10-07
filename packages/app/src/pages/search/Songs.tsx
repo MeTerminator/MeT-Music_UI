@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, playAllSongs, type Song } from "@met/core";
+import { playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
 import { Pagination } from "@/components/ui/pagination";
@@ -10,6 +11,9 @@ import { useSettingsStore } from "@/stores/settings";
 /** 搜索结果 - 单曲(type=1,分页对齐同目录 Videos.tsx 模式) */
 export default function Songs() {
   const search = useSearch({ strict: false }) as { keywords?: string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const keywords = search.keywords ?? "";
   const navigate = useNavigate();
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
@@ -27,16 +31,17 @@ export default function Songs() {
   // 以保证浏览器回退/前进能按历史还原页码。
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["search", "songs", keywords, page, searchLoadSize],
+    queryKey: [platform, "search", "songs", keywords, page, searchLoadSize],
     queryFn: () =>
-      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1),
+      musicApi.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 1),
     enabled: !!keywords,
   });
 
-  const totalCount: number = data?.result?.songCount ?? 0;
+  const result = data?.result;
+  const totalCount = result && "songCount" in result ? result.songCount : 0;
   const songs = useMemo<Song[]>(
-    () => formatData(data?.result?.songs, "song") ?? [],
-    [data],
+    () => formatPlatformData((result && "songs" in result ? result.songs : undefined), "song") ?? [],
+    [result],
   );
 
   if (!keywords) {

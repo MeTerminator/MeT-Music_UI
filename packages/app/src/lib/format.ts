@@ -15,11 +15,10 @@ export const formatArtists = (artists: Song["artists"]): string => {
   if (typeof artists === "string") return artists;
   return artists
     .map((artist) => {
-      const raw = artist as Record<string, unknown>;
       return (
         artist?.name ??
-        (raw?.title as string | undefined) ??
-        (raw?.userName as string | undefined) ??
+        artist.title ??
+        artist.userName ??
         ""
       );
     })

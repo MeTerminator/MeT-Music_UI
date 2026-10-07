@@ -1,6 +1,6 @@
 import ky, { isHTTPError, isNetworkError, isTimeoutError } from "ky";
 import type { KyInstance } from "ky";
-import type { z } from "zod";
+import { responseSchemas, type ApiPath, type ApiResponseFor } from "./contracts";
 
 /**
  * 旧代码 (src/utils/request.js) 直接修改 axios.defaults 全局配置;
@@ -87,13 +87,6 @@ const handleError = (error: unknown): never => {
   throw error;
 };
 
-/**
- * API 响应类型别名。响应结构尚未类型化(后续任务会收紧为各端点的具体类型),
- * 暂以 any 作为唯一的 strict 豁免点集中声明。
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ApiResponse = any;
-
 /** 端点函数可传入的查询参数值;undefined/null 会被过滤(对齐 axios params 序列化) */
 type ParamValue = string | number | boolean | null | undefined;
 
@@ -101,11 +94,11 @@ type ParamValue = string | number | boolean | null | undefined;
  * 统一请求帮助函数:过滤 undefined/null 参数后发起请求,返回 body 的 JSON。
  * path 的前导 / 会被统一剥去(ky 的 prefix 拼接约定)。
  */
-export const request = async (
+export const request = async <P extends ApiPath>(
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD",
-  path: string,
+  path: P,
   params?: Record<string, ParamValue>,
-): Promise<ApiResponse> => {
+): Promise<ApiResponseFor<P>> => {
   const searchParams = new URLSearchParams();
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -115,26 +108,12 @@ export const request = async (
     }
   }
   try {
-    return await apiClient(path.replace(/^\/+/, ""), {
+    const body: unknown = await apiClient(path.replace(/^\/+/, ""), {
       method,
       searchParams,
     }).json();
+    return responseSchemas[path].parse(body) as ApiResponseFor<P>;
   } catch (error) {
     return handleError(error);
-  }
-};
-
-/**
- * 宽松存在性校验:失败仅 console.warn(带端点名),不拦截返回。
- * 用于关键响应(播放链路)的后端结构漂移预警。
- */
-export const warnValidate = (
-  schema: z.ZodType,
-  value: unknown,
-  label: string,
-): void => {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    console.warn(`[api] ${label} 响应结构异常：`, result.error.message);
   }
 };

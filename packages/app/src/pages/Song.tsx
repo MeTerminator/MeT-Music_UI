@@ -1,3 +1,7 @@
+import { songIdentityKey } from "@met/core";
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
+import type { QmcTrackInfo, QmcInfoSection } from "@met/core";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
@@ -16,25 +20,26 @@ import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 
 /** QQ 封面地址(pmid → photo_new 规格图) */
-const qqCoverUrl = (pmid: string | undefined, size: number): string | undefined =>
+const qqCoverUrl = (pmid: string | null | undefined, size: number): string | undefined =>
   pmid ? `https://y.qq.com/music/photo_new/T002R${size}x${size}M000${pmid}.jpg` : undefined;
 
 /** 由 track_info 构造播放器所需的 Song 结构(对照旧 SongDetail.vue handlePlay) */
-// 原始接口字段访问豁免点
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const buildSong = (track: any): Song => ({
-  id: track.mid,
-  mid: track.mid,
-  name: track.name || track.title,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  artists: (track.singer ?? []).map((s: any) => ({ id: s.mid, mid: s.mid, name: s.name })),
-  album: { id: track.album?.mid, name: track.album?.name || track.album?.title || "未知专辑" },
-  duration: getSongPlayTime(track.interval),
-  cover: qqCoverUrl(track.album?.pmid, 800),
+
+
+const buildSong = (track: QmcTrackInfo): Song => ({
+  source: track.source === "netease" ? "netease" : "qqmusic",
+  id: track.mid ?? String(track.id ?? ""),
+  mid: track.mid ?? String(track.id ?? ""),
+  name: track.name || track.title || "未知歌曲",
+
+  artists: (track.singer ?? []).map((s) => ({ id: s.mid ?? undefined, mid: s.mid ?? undefined, name: s.name || s.title || "未知歌手" })),
+  album: { id: track.album?.mid ?? undefined, name: track.album?.name || track.album?.title || "未知专辑" },
+  duration: getSongPlayTime(track.interval ?? 0),
+  cover: (track.source === "netease" ? track.album?.picUrl ?? undefined : qqCoverUrl(track.album?.pmid, 800)),
   coverSize: {
-    s: qqCoverUrl(track.album?.pmid, 300),
-    m: qqCoverUrl(track.album?.pmid, 500),
-    l: qqCoverUrl(track.album?.pmid, 800),
+    s: (track.source === "netease" ? track.album?.picUrl ?? undefined : qqCoverUrl(track.album?.pmid, 300)),
+    m: (track.source === "netease" ? track.album?.picUrl ?? undefined : qqCoverUrl(track.album?.pmid, 500)),
+    l: (track.source === "netease" ? track.album?.picUrl ?? undefined : qqCoverUrl(track.album?.pmid, 800)),
   },
 });
 
@@ -48,9 +53,9 @@ interface InfoField {
  * 由原始 info 对象构造详情条目(旧 displayInfo:遍历 info,
  * 每项 { title, content: [{ value }] })。
  */
-// 原始接口字段访问豁免点
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const buildInfoFields = (info: any): InfoField[] => {
+
+
+const buildInfoFields = (info: Record<string, QmcInfoSection> | null): InfoField[] => {
   if (info == null || typeof info !== "object") return [];
   return Object.keys(info)
     .map((key) => {
@@ -59,8 +64,8 @@ const buildInfoFields = (info: any): InfoField[] => {
       return {
         title: String(item?.title ?? key),
         values: content
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((c: any) => (c?.value == null ? "" : String(c.value)))
+
+          .map((c) => (c?.value == null ? "" : String(c.value)))
           .filter(Boolean),
       };
     })
@@ -70,33 +75,34 @@ const buildInfoFields = (info: any): InfoField[] => {
 /** 歌曲详情页(对照旧 views/SongDetail.vue;数据源改为 api.getMusicInfo) */
 export default function SongDetail() {
   const search = useSearch({ strict: false }) as { id?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
   const id = search.id;
   const songLevel = useSettingsStore((s) => s.songLevel);
   const isInRoom = useStatusStore((s) => s.isInRoom);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["song", "info", id],
-    queryFn: () => api.getMusicInfo(id as number | string),
+    queryKey: [platform, "song", "info", id],
+    queryFn: () => musicApi.getMusicInfo(id as number | string),
     enabled: id != null && id !== "",
   });
 
   // 详情补充源(旧页数据源 getMusicUrl 的 data[0].info / extras;容错:失败仅少详情网格)
   const urlInfoQuery = useQuery({
-    queryKey: ["song", "url-info", id, songLevel],
-    queryFn: () => api.getMusicUrl(id as string, songLevel.toUpperCase()),
+    queryKey: [platform, "song", "url-info", id, songLevel],
+    queryFn: () => musicApi.getMusicUrl(id as string, songLevel.toUpperCase()),
     enabled: id != null && id !== "",
     retry: 0,
   });
 
-  // 原始接口字段访问豁免点(响应形如 { [mid]: { track_info, info } })
-  const raw = data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const raw = data; // eslint-disable-line @typescript-eslint/no-explicit-any
   const entry = raw?.[String(id)] ?? null;
   const track = entry?.track_info ?? null;
 
   // 旧页 getMusicUrl 消费方式:const data = res.data || res; data[0]
-  const urlRaw = urlInfoQuery.data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  const urlEntry = (urlRaw?.data || urlRaw)?.[0] ?? null;
+  const urlRaw = urlInfoQuery.data; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const urlEntry = urlRaw?.[0] ?? null;
 
   // info / 译名:优先 getMusicInfo 响应内的等价字段,否则回退 getMusicUrl
   const infoSource = entry?.info ?? urlEntry?.info ?? null;
@@ -120,14 +126,14 @@ export default function SongDetail() {
   // 当前播放歌曲为该 id 时,用 store 歌词做文本预览
   const playingId = useMusicStore((s) => s.playSongData?.id);
   const lyric = useMusicStore((s) => s.playSongLyric);
-  const isCurrent = song != null && playingId != null && playingId === song.id;
+  const isCurrent = song != null && playingId != null && songIdentityKey(useMusicStore.getState().playSongData) === songIdentityKey(song);
   const lrcLines = isCurrent ? lyric.lrc : [];
 
   const handlePlay = async (): Promise<void> => {
     if (!song) return;
     // 房内分支(对照旧 handlePlay / SongList 语义):当前歌曲切播暂停,否则入共享队列
     if (useStatusStore.getState().isInRoom) {
-      if (useMusicStore.getState().playSongData?.id === song.id) {
+      if (songIdentityKey(useMusicStore.getState().playSongData) === songIdentityKey(song)) {
         fadePlayOrPause();
       } else {
         ltAddSong(song);
@@ -195,6 +201,7 @@ export default function SongDetail() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-8">
+      <PlatformLabel />
       {/* 信息卡 */}
       <div className="flex flex-col gap-6 sm:flex-row">
         {/* 封面(点击开大图预览,替代旧 n-image preview) */}
@@ -235,7 +242,7 @@ export default function SongDetail() {
                 <span key={`${ar.id}-${i}`} className="flex items-center">
                   <Link
                     to="/artist"
-                    search={{ id: ar.id != null ? String(ar.id) : undefined }}
+                    search={{ platform,  id: ar.id != null ? String(ar.id) : undefined }}
                     className="transition-colors hover:text-[var(--met-primary)]"
                   >
                     {ar.name}
@@ -255,7 +262,7 @@ export default function SongDetail() {
             {typeof song.album === "object" && song.album?.id ? (
               <Link
                 to="/album"
-                search={{ id: String(song.album.id) }}
+                search={{ platform,  id: String(song.album.id) }}
                 className="truncate transition-colors hover:text-[var(--met-primary)]"
               >
                 {song.album.name}
@@ -288,7 +295,7 @@ export default function SongDetail() {
             </button>
             <Link
               to="/download"
-              search={{ id, music_quality: songLevel }}
+              search={{ platform,  id, music_quality: songLevel }}
               className="flex items-center gap-1.5 rounded-full border border-[var(--met-border)] px-5 py-2 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)]"
             >
               <DownloadIcon size={14} aria-hidden="true" />
@@ -296,7 +303,7 @@ export default function SongDetail() {
             </Link>
             <Link
               to="/comments"
-              search={{ id }}
+              search={{ platform,  id }}
               className="rounded-full border border-[var(--met-border)] px-5 py-2 text-sm text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)]"
             >
               查看评论

@@ -3,6 +3,7 @@
  * 字段与旧 src/stores/listenTogether.js 及后端协议保持一致,迁移期间不做字段更名。
  */
 import type { Song } from "../types/song";
+import type { RoomLog, RoomMember, RoomPlaylistSong, RoomStateMessage as WireRoomStateMessage } from "../api/contracts";
 
 /** 房间成员 / 消息中的用户信息 */
 export interface RoomUser {
@@ -17,16 +18,16 @@ export interface RoomState {
   code: string;
   uuid: string;
   playlist: Song[];
-  members: RoomUser[];
+  members: RoomMember[];
   current_song_index: number;
   is_playing: boolean;
   seek_position: number;
-  play_mode: string;
+  play_mode: "normal" | "random";
   delete_after_played: boolean;
   loop_playlist: boolean;
   /** 过期时间戳(ms) */
   expires_at: number;
-  logs: unknown[];
+  logs: RoomLog[];
   /** 运行期附加:本地收到该状态的时间戳(ms) */
   receivedAt?: number;
   /**
@@ -37,14 +38,7 @@ export interface RoomState {
 }
 
 /** 服务端 room_state 消息 */
-export interface RoomStateMessage {
-  type: "room_state";
-  room: RoomState;
-  /** 服务器生成该状态时的时间戳(ms) */
-  server_time?: number;
-  /** 触发本次状态广播的事件名(如 "seek") */
-  event?: string;
-}
+export type RoomStateMessage = Omit<WireRoomStateMessage, "room"> & { room: RoomState };
 
 /** 服务端 error 消息 */
 export interface ErrorMessage {
@@ -55,30 +49,27 @@ export interface ErrorMessage {
 /** 服务端下行消息联合类型 */
 export type ServerMessage = RoomStateMessage | ErrorMessage;
 
-/** 客户端可发送的动作名 */
-export type ClientAction =
-  | "join"
-  | "play"
-  | "pause"
-  | "next"
-  | "prev"
-  | "seek"
-  | "playlist_add"
-  | "playlist_remove"
-  | "playlist_reorder"
-  | "set_play_mode"
-  | "update_settings"
-  | "play_index"
-  | "delete_room"
-  | "ping";
-
-/** 客户端上行动作消息 */
-export interface ClientActionMessage {
-  action: ClientAction;
-  userId: string;
-  user?: RoomUser;
-  data?: Record<string, unknown>;
+/** Each action has one fixed payload; no provider extensions are accepted. */
+export interface ActionDataMap {
+  join: undefined;
+  play: undefined;
+  pause: undefined;
+  next: undefined;
+  prev: undefined;
+  seek: { currentTime: number };
+  playlist_add: { song: RoomPlaylistSong };
+  playlist_remove: { index: number };
+  playlist_reorder: { playlist: RoomPlaylistSong[] };
+  set_play_mode: { play_mode: "normal" | "random" };
+  update_settings: { settings: { delete_after_played?: boolean; loop_playlist?: boolean } };
+  play_index: { index: number };
+  delete_room: undefined;
 }
+export type ClientAction = keyof ActionDataMap;
+export type ClientActionMessage = {
+  [A in ClientAction]: { action: A; userId: string; user?: RoomUser } &
+    (ActionDataMap[A] extends undefined ? { data?: never } : { data: ActionDataMap[A] });
+}[ClientAction];
 
 /** 默认房间状态(与旧 store state() 初值一致) */
 export const createDefaultRoomState = (): RoomState => ({

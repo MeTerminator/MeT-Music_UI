@@ -1,3 +1,4 @@
+import { platformName, type Platform } from "@met/core";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { ChevronDown, Heart, ListMusic, LogIn, LogOut } from "lucide-react";
@@ -63,13 +64,13 @@ const rowCls = (active: boolean) =>
  * 挂载约定:default export、无 props,由侧栏(RootLayout)直接渲染;
  * 纵向布局,窄空间友好,歌单列表区域自带 overflow-y-auto。
  */
-export default function UserPanel({ compact = false }: { compact?: boolean }) {
+function AccountPanel({ compact = false, platform }: { compact?: boolean; platform: Platform }) {
   const navigate = useNavigate();
-  const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
-  const userId = useSiteDataStore((s) => s.userData.userId);
-  const detail = useSiteDataStore((s) => s.userData.detail) as UserDetail;
+  const userLoginStatus = useSiteDataStore((s) => platform === "qq" ? s.userLoginStatus : s.neteaseAccount.loggedIn);
+  const userId = useSiteDataStore((s) => platform === "qq" ? s.userData.userId : s.neteaseAccount.userId);
+  const detail = useSiteDataStore((s) => platform === "qq" ? s.userData.detail : s.neteaseAccount.detail) as UserDetail;
   const playlists = useSiteDataStore(
-    (s) => s.userLikeData.playlists,
+    (s) => platform === "qq" ? s.userLikeData.playlists : s.neteaseAccount.playlists,
   ) as RawUserPlaylist[];
   // 统计:最近播放数(对照旧 Nav/UserData.vue 统计区的 historyPlaylist)
   const historyCount = useMusicStore((s) => s.historyPlaylist.length);
@@ -79,8 +80,8 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
   // 当前路由高亮:/playlist?id=xx 高亮对应歌单行,/like-songs 高亮「喜欢的音乐」
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useSearch({ strict: false }) as { id?: string };
-  const activePlaylistId = pathname === "/playlist" ? search.id : undefined;
-  const likeActive = pathname === "/like-songs";
+  const activePlaylistId = pathname === "/playlist" && ((search as { platform?: Platform }).platform ?? "qq") === platform ? search.id : undefined;
+  const likeActive = pathname === "/like-songs" && ((search as { platform?: Platform }).platform ?? "qq") === platform;
 
   const [loginOpen, setLoginOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -92,8 +93,9 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
-    const { userId: uid } = useSiteDataStore.getState().userData;
-    if (uid != null && uid !== "") void setUserProfile();
+    const state = useSiteDataStore.getState();
+    const uid = platform === "qq" ? state.userData.userId : state.neteaseAccount.userId;
+    if (uid != null && uid !== "") void setUserProfile(platform);
   }, []);
 
   // 未登录:登录入口(窄栏 compact 用圆形图标钮,避免两字竖排挤压)
@@ -122,10 +124,10 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
             onClick={() => setLoginOpen(true)}
           >
             <LogIn className="h-4 w-4" aria-hidden />
-            登录
+            登录{platformName(platform)}
           </Button>
         )}
-        <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
+        <LoginDialog initialPlatform={platform} open={loginOpen} onOpenChange={setLoginOpen} />
       </div>
     );
   }
@@ -154,7 +156,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
             size="sm"
             onClick={() => {
               setLogoutOpen(false);
-              logout();
+              logout(true, platform);
             }}
           >
             登出
@@ -204,7 +206,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
                 </span>
               ),
               onSelect: () =>
-                void navigate({ to: "/playlist", search: { id: String(pl.id) } }),
+                void navigate({ to: "/playlist", search: { platform, id: String(pl.id) } }),
             }))}
           >
             <ListMusic size={18} aria-hidden />
@@ -215,7 +217,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
             type="button"
             title="喜欢的音乐"
             className={compactCls(likeActive)}
-            onClick={() => void navigate({ to: "/like-songs" })}
+            onClick={() => void navigate({ to: "/like-songs", search: { platform, id: String(likePlaylist.id) } })}
           >
             {/* 颜色随 compactCls 走(非激活 dim/激活主题色),与 rail 导航项一致 */}
             <Heart size={18} aria-hidden />
@@ -240,6 +242,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="flex min-h-0 flex-col px-2 py-2">
+      <div className="px-2 text-xs text-[var(--met-fg-dim)]">{platformName(platform)}</div>
       {/* 用户信息 + 退出 */}
       <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
         <img
@@ -278,7 +281,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
         <button
           type="button"
           className={rowCls(likeActive)}
-          onClick={() => void navigate({ to: "/like-songs" })}
+          onClick={() => void navigate({ to: "/like-songs", search: { platform, id: String(likePlaylist.id) } })}
         >
           <Heart size={16} className="shrink-0 text-[var(--met-primary)]" />
           <span className="min-w-0 flex-1 truncate">喜欢的音乐</span>
@@ -307,7 +310,7 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
                 className={rowCls(activePlaylistId === String(pl.id))}
                 title={pl.name}
                 onClick={() =>
-                  void navigate({ to: "/playlist", search: { id: String(pl.id) } })
+                  void navigate({ to: "/playlist", search: { platform, id: String(pl.id) } })
                 }
               >
                 {siderShowCover && pl.coverImgUrl ? (
@@ -331,4 +334,8 @@ export default function UserPanel({ compact = false }: { compact?: boolean }) {
       {logoutDialog}
     </div>
   );
+}
+
+export default function UserPanel({ compact = false }: { compact?: boolean }) {
+  return <div className="flex min-h-0 flex-col overflow-y-auto"><AccountPanel platform="qq" compact={compact} /><AccountPanel platform="netease" compact={compact} /></div>;
 }

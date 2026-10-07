@@ -1,3 +1,4 @@
+import { songPlatform } from "@met/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   BackgroundRender,
@@ -502,14 +503,14 @@ function FullPlayerInner() {
   const gotoArtist = useCallback(
     (id: number | string) => {
       useStatusStore.setState({ showFullPlayer: false });
-      void navigate({ to: "/artist", search: { id: String(id) } });
+      void navigate({ to: "/artist", search: { id: String(id), platform: songPlatform(useMusicStore.getState().playSongData) } });
     },
     [navigate],
   );
   const gotoAlbum = useCallback(
     (id: number | string) => {
       useStatusStore.setState({ showFullPlayer: false });
-      void navigate({ to: "/album", search: { id: String(id) } });
+      void navigate({ to: "/album", search: { id: String(id), platform: songPlatform(useMusicStore.getState().playSongData) } });
     },
     [navigate],
   );

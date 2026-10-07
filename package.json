@@ -17,6 +17,8 @@
     "build": "pnpm --filter @met/app build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @met/core test",
-    "e2e": "pnpm --filter @met/app e2e"
+    "e2e": "pnpm --filter @met/app e2e",
+    "generate:contracts": "python3 scripts/generate-contracts.py",
+    "check:contracts": "python3 scripts/generate-contracts.py --check"
   }
 }

@@ -38,3 +38,18 @@ pnpm build
   4. **免责声明：** 根据 AGPL-3.0，本项目不提供任何明示或暗示的担保。请详细阅读 [GNU Affero General Public License (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html) 以了解完整的免责声明内容
   5. **社区参与：** 欢迎社区的参与和贡献，我们鼓励开发者一同改进和维护本项目
   6. **许可证链接：** 请阅读 [GNU Affero General Public License (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html) 了解更多详情
+
+
+### QQ / 网易云双平台
+
+资源页面使用 `platform=qq|netease` 查询参数，旧链接默认 QQ。
+搜索建议同时展示两个平台，搜索结果页可切换平台；账号资料和歌单分别保存，可同时使用两个账号。
+播放器、最近播放、共享播放列表和页面导航均保留歌曲来源。
+
+本地后端使用 SQLite 并禁止凭据刷新时，UI 可连接到它：
+
+```sh
+VITE_API_PROXY_TARGET=http://127.0.0.1:7102/api pnpm dev
+```
+
+网易云系统账号的扫码登录脚本和部署配置见后端 README，系统 Cookie 不会保存到浏览器。

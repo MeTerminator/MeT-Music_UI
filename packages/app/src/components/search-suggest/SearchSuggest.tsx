@@ -23,7 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { api } from "@met/core";
+import { api, platformName, type Platform } from "@met/core";
 import {
   Disc,
   Flame,
@@ -53,6 +53,7 @@ type SuggestGroupKey = keyof typeof SUGGEST_GROUPS;
 /** 单条建议(字段按 /search/suggest 实际响应,宽松容错) */
 interface SuggestItem {
   id: number | string;
+  mid?: string;
   name?: string;
   /** 单曲:歌手列表 */
   artists?: { name?: string }[];
@@ -80,7 +81,7 @@ interface SearchHotItem {
 /** 键盘导航的扁平条目:首位固定为「直接搜索」行 */
 type FlatEntry =
   | { kind: "direct" }
-  | { kind: "item"; group: SuggestGroupKey; item: SuggestItem };
+  | { kind: "item"; group: SuggestGroupKey; item: SuggestItem; platform: Platform };
 
 /** 写入搜索历史(对齐旧 setSearchHistory:去重置顶,上限 30 条) */
 const setSearchHistory = (name: string): void => {
@@ -95,6 +96,7 @@ const setSearchHistory = (name: string): void => {
 const SearchSuggest = () => {
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [keywords, setKeywords] = useState("");
@@ -115,12 +117,18 @@ const SearchSuggest = () => {
   }, [kw]);
 
   const { data, isFetching } = useQuery({
-    queryKey: ["searchSuggest", debounced],
+    queryKey: ["searchSuggest", "qq", debounced],
     queryFn: () => api.getSearchSuggest(debounced),
     enabled: debounced.length >= 1,
     staleTime: 5 * 60 * 1000,
   });
 
+  const neteaseQuery = useQuery({
+    queryKey: ["searchSuggest", "netease", debounced],
+    queryFn: () => api.getSearchSuggest(debounced, false, "netease"),
+    enabled: debounced.length >= 1,
+    staleTime: 5 * 60 * 1000,
+  });
   // 热搜榜(聚焦且无关键词时拉取;10 分钟缓存对齐旧 getCacheData("searchHot", 10))
   const { data: hotRaw } = useQuery({
     queryKey: ["searchHot"],
@@ -148,22 +156,26 @@ const SearchSuggest = () => {
     const flatList: FlatEntry[] = [{ kind: "direct" }];
     const sectionList: {
       key: SuggestGroupKey;
+      platform: Platform;
       rows: { item: SuggestItem; index: number }[];
     }[] = [];
-    for (const key of result?.order ?? []) {
+    const neteaseResult = debounced === kw ? (neteaseQuery.data as { result?: SuggestResult } | undefined)?.result : undefined;
+    for (const [platform, currentResult] of [["qq", result], ["netease", neteaseResult]] as const) {
+    for (const key of currentResult?.order ?? []) {
       if (!(key in SUGGEST_GROUPS)) continue;
       const groupKey = key as SuggestGroupKey;
-      const items = result?.[groupKey] ?? [];
+      const items = currentResult?.[groupKey] ?? [];
       if (items.length === 0) continue;
       const rows = items.map((item) => {
         const index = flatList.length;
-        flatList.push({ kind: "item", group: groupKey, item });
+        flatList.push({ kind: "item", group: groupKey, item, platform });
         return { item, index };
       });
-      sectionList.push({ key: groupKey, rows });
+      sectionList.push({ key: groupKey, rows, platform });
+    }
     }
     return { flat: flatList, sections: sectionList };
-  }, [result]);
+  }, [result, neteaseQuery.data, debounced, kw]);
 
   // 建议列表变化时重置高亮至「直接搜索」行
   useEffect(() => {
@@ -174,7 +186,7 @@ const SearchSuggest = () => {
   useEffect(() => {
     if (!open || clearDialogOpen) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node) && !panelRef.current?.contains(e.target as Node)) {
         setOpen(false);
       }
     };
@@ -188,7 +200,7 @@ const SearchSuggest = () => {
   };
 
   // 整词搜索(对齐旧 toSearch "song" 分支)
-  const goDirectSearch = (value: string) => {
+  const goDirectSearch = (value: string, platform: Platform = "qq") => {
     const target = value.trim();
     if (!target) return;
     // 114514 彩蛋(旧 toSearch:Number(val) === 114514 → /test,不写入历史)
@@ -199,7 +211,7 @@ const SearchSuggest = () => {
     }
     setSearchHistory(target);
     close();
-    void navigate({ to: "/search/songs", search: { keywords: target } });
+    void navigate({ to: "/search/songs", search: { keywords: target, platform } });
   };
 
   // 选中某个扁平条目
@@ -208,21 +220,22 @@ const SearchSuggest = () => {
       goDirectSearch(kw);
       return;
     }
-    const id = String(entry.item.id);
+    const id = String(entry.group === "songs" ? entry.item.mid ?? entry.item.id : entry.item.id);
+    const platform = entry.platform;
     close();
     switch (entry.group) {
       case "songs":
         setSearchHistory(entry.item.name ?? "");
-        void navigate({ to: "/song", search: { id } });
+        void navigate({ to: "/song", search: { id, platform } });
         break;
       case "artists":
-        void navigate({ to: "/artist", search: { id } });
+        void navigate({ to: "/artist", search: { id, platform } });
         break;
       case "albums":
-        void navigate({ to: "/album", search: { id } });
+        void navigate({ to: "/album", search: { id, platform } });
         break;
       case "playlists":
-        void navigate({ to: "/playlist", search: { id } });
+        void navigate({ to: "/playlist", search: { id, platform } });
         break;
     }
   };
@@ -251,8 +264,8 @@ const SearchSuggest = () => {
   };
 
   const showPanel = open && kw.length >= 1;
-  const loading = isFetching && sections.length === 0;
-  const empty = !isFetching && result !== undefined && sections.length === 0;
+  const loading = (isFetching || neteaseQuery.isFetching) && sections.length === 0;
+  const empty = !isFetching && !neteaseQuery.isFetching && result !== undefined && sections.length === 0;
 
   // 聚焦面板(旧 SearchHot.vue):关键词为空时展示历史 + 热搜,任一有内容才显示
   const historyVisible = showSearchHistory && searchHistory.length > 0;
@@ -304,10 +317,10 @@ const SearchSuggest = () => {
       </div>
 
       {/* 建议下拉面板 */}
-      {showPanel && (
-        <div
+      {showPanel && createPortal(
+        <div ref={panelRef}
           role="listbox"
-          className="met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-full -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
+          className="met-pop-in fixed top-14 left-1/2 z-40 max-h-[min(60vh,480px)] w-[min(680px,94vw)] -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
         >
           {/* 直接搜索(固定首行,对齐旧组件 .direct) */}
           <button
@@ -338,7 +351,12 @@ const SearchSuggest = () => {
           )}
 
           {/* 分组建议(按 result.order 渲染) */}
-          {sections.map(({ key, rows }) => {
+          <div className="grid grid-cols-2 divide-x divide-[var(--met-border)]">
+          {(["qq", "netease"] as const).map(platform => <div key={platform} className="min-w-0 px-1">
+            <div className="px-3 py-2 text-sm font-semibold">{platformName(platform)}</div>
+            {((platform === "qq" && isFetching) || (platform === "netease" && neteaseQuery.isFetching)) && <p className="px-3 text-xs text-[var(--met-fg-dim)]">加载中…</p>}
+            {((platform === "qq" && !isFetching) || (platform === "netease" && !neteaseQuery.isFetching)) && !sections.some(s => s.platform === platform) && <p className="px-3 text-xs text-[var(--met-fg-dim)]">暂无建议</p>}
+          {sections.filter(section => section.platform === platform).map(({ key, rows }) => {
             const { name, icon: GroupIcon } = SUGGEST_GROUPS[key];
             return (
               <div key={key} className="mt-2">
@@ -360,7 +378,7 @@ const SearchSuggest = () => {
                       role="option"
                       aria-selected={highlight === index}
                       onMouseEnter={() => setHighlight(index)}
-                      onClick={() => selectEntry({ kind: "item", group: key, item })}
+                      onClick={() => selectEntry({ kind: "item", group: key, item, platform })}
                       className={`flex w-full cursor-pointer items-baseline gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
                         highlight === index ? "bg-[var(--met-bg-hover)]" : ""
                       }`}
@@ -375,7 +393,9 @@ const SearchSuggest = () => {
               </div>
             );
           })}
-        </div>
+          </div>)}
+          </div>
+        </div>, document.body
       )}
 
       {/* 聚焦面板:搜索历史 + 热搜榜(旧 SearchHot.vue,聚焦且关键词为空时) */}

@@ -1,11 +1,13 @@
+import { platformName, type Platform } from "@met/core";
 import { useState } from "react";
 import { toast } from "sonner";
 import { User } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { setUserId, setUserProfile, useSiteDataStore } from "@/stores/siteData";
+import { loginPublicAccount, useSiteDataStore } from "@/stores/siteData";
 
 export interface LoginDialogProps {
+  initialPlatform?: Platform;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -20,7 +22,8 @@ const inputCls =
  * 受控组件:open / onOpenChange 由挂载方(UserPanel)管理。
  * 流程与旧版一致:setUserId(qq) → await setUserProfile() → 成功「登录成功」并关闭。
  */
-export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
+export default function LoginDialog({ open, onOpenChange, initialPlatform = "qq" }: LoginDialogProps) {
+  const [platform, setPlatform] = useState<Platform>(initialPlatform);
   const [qq, setQq] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -38,17 +41,19 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     setLoading(true);
     try {
       // 设置用户 QQ 号
-      setUserId(value);
+
       // 获取用户信息(成功时由 store 置 userLoginStatus = true)
-      await setUserProfile();
-      if (useSiteDataStore.getState().userLoginStatus) {
+      await loginPublicAccount(value, platform);
+      if (platform === "netease" ? useSiteDataStore.getState().neteaseAccount.loggedIn : useSiteDataStore.getState().userLoginStatus) {
         toast.success("登录成功");
         setQq("");
         onOpenChange(false);
       } else {
         // 失败提示(具体错误已由 store 内部 toast)
-        toast.error("登录失败,请检查 QQ 号后重试");
+        toast.error(`登录失败，请检查${platform === "qq" ? "QQ 号" : "网易云用户 ID"}后重试`);
       }
+    } catch {
+      toast.error(`登录失败，请检查${platform === "qq" ? "QQ 号" : "网易云用户 ID"}后重试`);
     } finally {
       setLoading(false);
     }
@@ -58,7 +63,7 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="QQ号登录"
+      title={`${platformName(platform)}账号登录`}
       footer={
         <>
           <Button variant="outline" size="sm" disabled={loading} onClick={() => onOpenChange(false)}>
@@ -75,6 +80,9 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         </>
       }
     >
+      <div className="mb-4 flex gap-2" role="group" aria-label="登录平台">
+        {(["qq", "netease"] as const).map(p => <Button key={p} variant={platform === p ? "primary" : "outline"} size="sm" disabled={loading} onClick={() => { setPlatform(p); setQq(""); }}>{platformName(p)}</Button>)}
+      </div>
       <div className="relative">
         <User
           size={16}
@@ -84,7 +92,7 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           type="text"
           inputMode="numeric"
           value={qq}
-          placeholder="QQ号"
+          placeholder={platform === "qq" ? "QQ号" : "网易云音乐用户 ID"}
           disabled={loading}
           autoFocus
           onChange={(e) => setQq(e.target.value.replace(/\D/g, ""))}
@@ -94,6 +102,7 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           className={inputCls}
         />
       </div>
+      {platform === "netease" && <p className="mt-3 text-xs text-[var(--met-fg-dim)]">在网易云个人主页链接中，id= 后的数字就是用户 ID。</p>}
     </Dialog>
   );
 }

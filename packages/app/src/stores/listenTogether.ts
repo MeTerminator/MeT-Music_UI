@@ -1,3 +1,4 @@
+import { songIdentityKey } from "@met/core";
 import { create } from "zustand";
 import { toast } from "sonner";
 import {
@@ -161,7 +162,7 @@ export const syncPlayback = async (): Promise<void> => {
 
     const localPlaySong = getPlaySongData();
     // 已是同一首且播放器就绪:强制同步播放状态与进度
-    if (localPlaySong?.id === currentRoomSong.id && getPlayerInstance()) {
+    if (localPlaySong && songIdentityKey(localPlaySong) === songIdentityKey(currentRoomSong) && getPlayerInstance()) {
       const { playState } = useStatusStore.getState();
       if (room.is_playing && !playState) {
         fadePlayOrPause("play");
@@ -401,7 +402,7 @@ export const reorderPlaylist = (newPlaylist: Song[]): void => {
 };
 
 /** 设置播放模式(旧 setPlayMode) */
-export const setPlayMode = (mode: string): void => {
+export const setPlayMode = (mode: "normal" | "random"): void => {
   client?.setPlayMode(mode);
 };
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { api, type Song } from "@met/core";
+import { api, type Song, type Platform, platformName } from "@met/core";
 import formatData from "@/lib/formatData";
 import { addSong } from "@/stores/listenTogether";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { fallbackImg, formatArtist, songCover } from "./shared";
  * 搜索单曲(getSearchRes type=1)→ formatData 规范化 → 点击结果行 addSong。
  */
 const SongPicker = () => {
+  const [platform, setPlatform] = useState<Platform>("qq");
   const [keyword, setKeyword] = useState("");
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -22,7 +23,7 @@ const SongPicker = () => {
     try {
       setSearching(true);
       // API 响应无稳定 schema,集中豁免
-      const res = (await api.getSearchRes(kw, 30, 0, 1)) as any;
+      const res = (await api.getSearchRes(kw, 30, 0, 1, platform)) as any;
       setResults(formatData(res?.result?.songs, "song") ?? []);
       setSearched(true);
     } catch (err) {
@@ -43,6 +44,9 @@ const SongPicker = () => {
       </div>
 
       <div className="flex items-center gap-2 p-3">
+        <select aria-label="点歌平台" value={platform} disabled={searching} onChange={e => { setPlatform(e.target.value as Platform); setResults([]); }} className="rounded-lg bg-[var(--met-bg)] p-2 text-sm">
+          {(["qq", "netease"] as const).map(p => <option key={p} value={p}>{platformName(p)}</option>)}
+        </select>
         <input
           type="text"
           value={keyword}

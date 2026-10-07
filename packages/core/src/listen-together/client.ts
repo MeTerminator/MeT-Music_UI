@@ -18,12 +18,15 @@ import type { Song } from "../types/song";
 import type {
   ClientAction,
   ClientActionMessage,
+  ActionDataMap,
   RoomState,
   RoomUser,
-  ServerMessage,
 } from "./types";
 import { createDefaultRoomState } from "./types";
 import { computeServerTimeOffset } from "./sync";
+import { RoomStateMessageSchema, WebsocketErrorSchema, RoomActionRequestSchema, RoomRenewResponseSchema, RoomTimeResponseSchema, HttpErrorSchema } from "../api/contracts";
+import { z } from "zod";
+import { roomSongToSong, songToRoomSong } from "./song";
 
 /** WebSocket.OPEN */
 const WS_OPEN = 1;
@@ -84,7 +87,6 @@ export class ListenTogetherClient {
   private readonly wsFactory: (url: string) => WSLike;
 
   private ws: WSLike | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private syncTimeTimer: ReturnType<typeof setInterval> | null = null;
   private renewCooldownTimer: ReturnType<typeof setTimeout> | null = null;
@@ -164,15 +166,18 @@ export class ListenTogetherClient {
 
     ws.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data) as ServerMessage;
+        const payload = z.union([RoomStateMessageSchema, WebsocketErrorSchema]).parse(JSON.parse(event.data));
         if (payload.type === "room_state") {
           const isFirstState = this._expectingFirstState;
           this._expectingFirstState = false;
-          payload.room.receivedAt = Date.now();
-          payload.room.serverTime =
-            payload.server_time || Date.now() + this._serverTimeOffset;
-          this._roomState = payload.room;
-          this.events.onRoomState?.(payload.room, payload.event, isFirstState);
+          const room: RoomState = {
+            ...payload.room,
+            playlist: payload.room.playlist.map(roomSongToSong),
+            receivedAt: Date.now(),
+            serverTime: payload.server_time || Date.now() + this._serverTimeOffset,
+          };
+          this._roomState = room;
+          this.events.onRoomState?.(room, payload.event, isFirstState);
         } else if (payload.type === "error") {
           this.notify?.error(payload.message);
           this.events.onError?.(payload.message);
@@ -222,18 +227,17 @@ export class ListenTogetherClient {
 
   // ---------------------------------------------------------------- 发送方法
 
-  private sendMessage(
-    action: ClientAction,
-    data?: Record<string, unknown>,
-    withUser = true,
+  private sendMessage<A extends ClientAction>(
+    action: A,
+    ...args: ActionDataMap[A] extends undefined ? [data?: undefined] : [data: ActionDataMap[A]]
   ): void {
     if (!this.ws || this.ws.readyState !== WS_OPEN) return;
-    const msg: ClientActionMessage = {
+    const msg = RoomActionRequestSchema.parse({
       action,
       userId: this.userId,
-    };
-    if (withUser && this.userInfo) msg.user = this.userInfo;
-    if (data !== undefined) msg.data = data;
+      user: this.userInfo ?? undefined,
+      data: args[0],
+    });
     this.ws.send(JSON.stringify(msg));
   }
 
@@ -256,7 +260,7 @@ export class ListenTogetherClient {
 
   /** 添加歌曲。song 须为已格式化的歌曲对象(格式化责任在调用方) */
   addSong(song: Song): void {
-    this.sendMessage("playlist_add", { song });
+    this.sendMessage("playlist_add", { song: songToRoomSong(song) });
   }
 
   removeSong(index: number): void {
@@ -264,10 +268,10 @@ export class ListenTogetherClient {
   }
 
   reorderPlaylist(list: Song[]): void {
-    this.sendMessage("playlist_reorder", { playlist: list });
+    this.sendMessage("playlist_reorder", { playlist: list.map(songToRoomSong) });
   }
 
-  setPlayMode(mode: string): void {
+  setPlayMode(mode: "normal" | "random"): void {
     this.sendMessage("set_play_mode", { play_mode: mode });
   }
 
@@ -308,17 +312,17 @@ export class ListenTogetherClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: this.roomCode }),
       });
-      const data = (await response.json()) as {
-        status?: string;
-        expires_at?: number;
-        detail?: string;
-      };
+      if (!response.ok) {
+        const error = HttpErrorSchema.parse(await response.json());
+        throw new Error(typeof error.detail === "string" ? error.detail : "Room renew failed");
+      }
+      const data = RoomRenewResponseSchema.parse(await response.json());
       if (data && data.status === "ok" && typeof data.expires_at === "number") {
         this._roomState.expires_at = data.expires_at;
         this.notify?.success("房间已成功续期 1 小时");
         return true;
       }
-      this.notify?.error(data?.detail || "续期失败");
+      this.notify?.error("续期失败");
       return false;
     } catch (err) {
       console.error("续期出错:", err);
@@ -332,7 +336,7 @@ export class ListenTogetherClient {
       const t0 = Date.now();
       const response = await fetch(`${this.httpBase}/api/room/time`);
       if (!response.ok) throw new Error("Fetch server time failed");
-      const data = (await response.json()) as { server_time: number };
+      const data = RoomTimeResponseSchema.parse(await response.json());
       const t1 = Date.now();
       this._serverTimeOffset = computeServerTimeOffset(t0, t1, data.server_time);
       this.events.onTimeSynced?.(this._serverTimeOffset, t1 - t0);
@@ -375,22 +379,13 @@ export class ListenTogetherClient {
       }
     }, 1000);
 
-    // 每 30s 心跳(ping 不带 user 字段,与旧实现一致)
-    this.heartbeatTimer = setInterval(() => {
-      if (this.ws && this.ws.readyState === WS_OPEN) {
-        this.ws.send(JSON.stringify({ action: "ping", userId: this.userId }));
-      }
-    }, 30000);
+
   }
 
   private stopTimers(): void {
     if (this.countdownTimer) {
       clearInterval(this.countdownTimer);
       this.countdownTimer = null;
-    }
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
     }
     if (this.syncTimeTimer) {
       clearInterval(this.syncTimeTimer);

@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { api, getTimestampTime } from "@met/core";
+import { getTimestampTime } from "@met/core";
 import formatData from "@/lib/formatData";
 import CoverPlayButton from "@/components/cover/CoverPlayButton";
 import { PrevNextPager } from "@/components/ui/pagination";
@@ -19,6 +20,9 @@ interface AlbumCard {
 /** 歌手 - 专辑(卡片栅格 + 分页,对照旧 views/Artist/albums.vue) */
 export default function Albums() {
   const search = useSearch({ strict: false }) as { id?: number | string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
   const navigate = useNavigate();
   const loadSize = useSettingsStore((s) => s.loadSize);
@@ -34,8 +38,8 @@ export default function Albums() {
   // 以保证浏览器回退/前进能按历史还原页码(对照旧 songs.vue 亦无重置逻辑)。
 
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ["artist", "albums", id, page, pageSize],
-    queryFn: () => api.getArtistAblums(id as number | string, pageSize, (page - 1) * pageSize),
+    queryKey: [platform, "artist", "albums", id, page, pageSize],
+    queryFn: () => musicApi.getArtistAblums(id as number | string, pageSize, (page - 1) * pageSize),
     enabled: id != null && id !== "",
     placeholderData: keepPreviousData,
   });
@@ -44,7 +48,7 @@ export default function Albums() {
   const raw = data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const total: number = raw?.artist?.albumSize ?? 0;
   const albums = useMemo<AlbumCard[]>(
-    () => (formatData(raw?.hotAlbums, "album") ?? []) as unknown as AlbumCard[],
+    () => (formatPlatformData(raw?.hotAlbums, "album") ?? []) as unknown as AlbumCard[],
     [raw],
   );
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -85,7 +89,7 @@ export default function Albums() {
           <div key={`${album.id}-${index}`} className="group relative flex flex-col">
             <Link
               to="/album"
-              search={{ id: album.id != null ? String(album.id) : undefined }}
+              search={{ platform,  id: album.id != null ? String(album.id) : undefined }}
               className="flex flex-col"
             >
               <img
@@ -106,7 +110,7 @@ export default function Albums() {
             </Link>
             {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
             <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
-              <CoverPlayButton id={album.id} type="album" className="pointer-events-auto" />
+              <CoverPlayButton platform={platform} id={album.id} type="album" className="pointer-events-auto" />
             </div>
           </div>
         ))}

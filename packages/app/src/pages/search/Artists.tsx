@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, type Song } from "@met/core";
+import { type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import { Pagination } from "@/components/ui/pagination";
 import { useSettingsStore } from "@/stores/settings";
@@ -9,6 +10,9 @@ import { useSettingsStore } from "@/stores/settings";
 /** 搜索结果 - 歌手(对照旧 src/views/Search/artists.vue,type=100) */
 export default function Artists() {
   const search = useSearch({ strict: false }) as { keywords?: string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const keywords = search.keywords ?? "";
   const navigate = useNavigate();
   const searchLoadSize = useSettingsStore((s) => s.searchLoadSize) || 30;
@@ -24,16 +28,17 @@ export default function Artists() {
   // 以保证浏览器回退/前进能按历史还原页码。
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["search", "artists", keywords, page, searchLoadSize],
+    queryKey: [platform, "search", "artists", keywords, page, searchLoadSize],
     queryFn: () =>
-      api.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 100),
+      musicApi.getSearchRes(keywords, searchLoadSize, (page - 1) * searchLoadSize, 100),
     enabled: !!keywords,
   });
 
-  const totalCount: number = data?.result?.artistCount ?? 0;
+  const result = data?.result;
+  const totalCount = result && "artistCount" in result ? result.artistCount : 0;
   const artists = useMemo<Song[]>(
-    () => formatData(data?.result?.artists, "artist") ?? [],
-    [data],
+    () => formatPlatformData((result && "artists" in result ? result.artists : undefined), "artist") ?? [],
+    [result],
   );
 
   if (!keywords) {
@@ -81,7 +86,7 @@ export default function Artists() {
           <button
             key={String(artist.id)}
             type="button"
-            onClick={() => navigate({ to: "/artist", search: { id: String(artist.id) } })}
+            onClick={() => navigate({ to: "/artist", search: { platform,  id: String(artist.id) } })}
             className="group flex flex-col items-center text-center"
           >
             <div className="aspect-square w-full overflow-hidden rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)]">

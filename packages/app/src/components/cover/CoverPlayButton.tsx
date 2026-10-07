@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { songIdentityKey, type Platform } from "@met/core";
+import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import { Loader2, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
@@ -9,6 +10,7 @@ import { useStatusStore } from "@/stores/status";
 
 interface CoverPlayButtonProps {
   /** 歌单 / 专辑 id */
+  platform?: Platform;
   id?: number | string;
   /** 列表类型(对照旧 CoverPlayBtn 的 type prop;此处仅移植 playlist/album) */
   type?: "playlist" | "album";
@@ -30,6 +32,7 @@ interface CoverPlayButtonProps {
  */
 export default function CoverPlayButton({
   id,
+  platform = "qq",
   type = "playlist",
   size = 44,
   className = "",
@@ -37,14 +40,16 @@ export default function CoverPlayButton({
   const [loading, setLoading] = useState(false);
   // 已拉取的歌单曲目缓存(对照旧 playListData,拉取一次后复用)
   const [listData, setListData] = useState<Song[] | null>(null);
-  const playingId = useMusicStore((s) => s.playSongData?.id);
+  const playingSong = useMusicStore((s) => s.playSongData);
+  const playingId = playingSong?.id;
+  useEffect(() => { setListData(null); }, [id, platform, type]);
   const playState = useStatusStore((s) => s.playState);
 
   // 当前播放歌曲在本歌单内的索引(对照旧 isHasSongs;未拉取过数据时恒为 -1)
   const hasIndex = useMemo<number>(() => {
     if (!listData || playingId == null) return -1;
-    return listData.findIndex((song) => song.id === playingId);
-  }, [listData, playingId]);
+    return listData.findIndex((song) => songIdentityKey(song) === songIdentityKey(playingSong));
+  }, [listData, playingId, playingSong]);
 
   const showPause = hasIndex !== -1 && playState;
 
@@ -52,7 +57,7 @@ export default function CoverPlayButton({
   const fetchSongs = async (): Promise<Song[] | null> => {
     if (id == null || id === "") return null;
     const result =
-      type === "album" ? await api.getAlbumDetail(id) : await api.getAllPlayList(id, 500, 0);
+      type === "album" ? await api.getAlbumDetail(id, platform) : await api.getAllPlayList(id, 500, 0, platform);
     return formatData(result?.songs, "song");
   };
 

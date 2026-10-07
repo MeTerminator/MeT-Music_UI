@@ -1,7 +1,8 @@
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
-import { api } from "@met/core";
 import CommentList, { type CommentItem } from "@/components/list/CommentList";
 import { PrevNextPager } from "@/components/ui/pagination";
 
@@ -10,6 +11,8 @@ const PAGE_SIZE = 25;
 /** 歌曲评论页(对照旧 views/Comments.vue:歌曲信息卡 + 游标分页评论) */
 export default function Comments() {
   const search = useSearch({ strict: false }) as { id?: number | string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
   const id = search.id;
 
   // 页面根节点(翻页回顶时向上查找可滚动祖先)
@@ -27,41 +30,39 @@ export default function Comments() {
   useEffect(() => {
     setPage(1);
     setCursorStack([""]);
-  }, [id]);
+  }, [id, platform]);
 
   // 歌曲信息(取标题/歌手/专辑与评论所需的数字 songID)
   const infoQuery = useQuery({
-    queryKey: ["song", "info", id],
-    queryFn: () => api.getMusicInfo(id as number | string),
+    queryKey: [platform, "song", "info", id],
+    queryFn: () => musicApi.getMusicInfo(id as number | string),
     enabled: id != null && id !== "",
   });
 
-  // 原始接口字段访问豁免点(响应形如 { [mid]: { track_info } })
-  const infoRaw = infoQuery.data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const infoRaw = infoQuery.data; // eslint-disable-line @typescript-eslint/no-explicit-any
   const track = infoRaw?.[String(id)]?.track_info ?? null;
-  const songId: number | undefined = track?.id;
+  const songId = track?.id ?? undefined;
   const singers: string = Array.isArray(track?.singer)
     ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      track.singer.map((s: any) => s.name || s.title).filter(Boolean).join(" / ")
+      track.singer.map((s) => s.name || s.title).filter(Boolean).join(" / ")
     : "未知歌手";
 
   // 评论列表(游标分页)
   const commentsQuery = useQuery({
-    queryKey: ["song", "comments", songId, page, cursor],
-    queryFn: () => api.getComments(songId as number, page, PAGE_SIZE, cursor || undefined),
+    queryKey: [platform, "song", "comments", songId, page, cursor],
+    queryFn: () => musicApi.getComments(songId as string | number, page, PAGE_SIZE, cursor || undefined),
     enabled: songId != null,
     placeholderData: keepPreviousData,
   });
 
-  // 原始接口字段访问豁免点
-  const commentsRaw = commentsQuery.data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  const rawComments: any[] = // eslint-disable-line @typescript-eslint/no-explicit-any
+  const commentsRaw = commentsQuery.data; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const rawComments = // eslint-disable-line @typescript-eslint/no-explicit-any
     commentsRaw?.code === 0 ? (commentsRaw.req?.data?.CommentList?.Comments ?? []) : [];
 
   const comments = useMemo<CommentItem[]>(
     () =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rawComments.map((c: any, index: number) => ({
+
+      rawComments.map((c, index: number) => ({
         id: c.SeqNo ?? index,
         avatar: c.Avatar || undefined,
         nick: c.Nick || "未知用户",
@@ -76,7 +77,7 @@ export default function Comments() {
         pic: c.Pic || undefined,
         replies: Array.isArray(c.SubComments)
           ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            c.SubComments.map((sub: any) => ({
+            c.SubComments.map((sub) => ({
               nick: sub.Nick || "未知用户",
               content: sub.Content || "",
               // 子评论赞数与作者赞标记(QQ 字段 PraiseNum / AuthorPraise)
@@ -119,7 +120,7 @@ export default function Comments() {
   const handleNextPage = (): void => {
     // 游标 = 当前页最后一条评论的 SeqNo(对照旧 Comments.vue handleNextPage)
     const last = rawComments[rawComments.length - 1];
-    const lastSeqNo = last?.SeqNo ?? last?.CommentId;
+    const lastSeqNo = last?.SeqNo;
     if (lastSeqNo == null || lastSeqNo === "") return;
     setCursorStack((stack) => {
       // 截到当前页为止再追加,保证 cursorStack[page] 就是下一页的起点
@@ -165,6 +166,7 @@ export default function Comments() {
       ref={rootRef}
       className="mx-auto flex w-full max-w-3xl flex-col px-4 py-6 min-[1200px]:max-w-6xl"
     >
+      <PlatformLabel />
       {/* 歌曲信息卡 */}
       {infoQuery.isLoading ? (
         <div className="animate-pulse rounded-xl bg-[var(--met-bg-elevated)] p-5">

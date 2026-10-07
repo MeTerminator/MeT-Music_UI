@@ -1,3 +1,4 @@
+import { songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ContextMenu as BaseContextMenu } from "@base-ui-components/react/context-menu";
@@ -72,7 +73,7 @@ const durationText = (duration: Song["duration"]): string => {
 
 /** 复制歌曲分享链接(对照旧 SongListDropdown 的「分享歌曲链接」) */
 const copySongLink = (song: Song): Promise<void> =>
-  copyText(`https://y.qq.com/n/ryqq/songDetail/${String(song.id)}`, "复制歌曲链接成功");
+  copyText(song.source === "netease" ? `https://music.163.com/#/song?id=${song.id}` : `https://y.qq.com/n/ryqq/songDetail/${String(song.id)}`, "复制歌曲链接成功");
 
 /** 歌曲 MV id(formatData 的 song.mv 字段;0 / "0" / 空值视为无 MV) */
 const getMvId = (song: Song): string | null => {
@@ -126,7 +127,7 @@ const playFromList = async (
     return;
   }
   const playingId = useMusicStore.getState().playSongData?.id;
-  if (playingId != null && playingId === song.id) {
+  if (playingId != null && songIdentityKey(useMusicStore.getState().playSongData) === songIdentityKey(song)) {
     // 与旧实现一致:双击当前播放歌曲 → 播放/暂停切换(房内同样走此分支)
     fadePlayOrPause();
     return;
@@ -172,6 +173,7 @@ export default function SongList({
   playBehavior = "replace",
 }: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
+  const playingKey = useMusicStore((s) => songIdentityKey(s.playSongData));
   const isInRoom = useStatusStore((s) => s.isInRoom);
   /** 触屏设备:没有双击与 hover,行改为单击即播、行内操作常显 */
   const isTouch = useIsTouch();
@@ -196,7 +198,7 @@ export default function SongList({
   // 「定位歌曲」浮动按钮(对照旧 scroll-to-song):
   // 列表内含当前播放曲且其行不在视口内时显示,点击滚动至该行
   const hasPlayingRow =
-    playingId != null && displaySongs.some((s) => s.id === playingId);
+    playingId != null && displaySongs.some((s) => songIdentityKey(s) === playingKey);
   const [playingRowVisible, setPlayingRowVisible] = useState(true);
 
   useEffect(() => {
@@ -241,7 +243,7 @@ export default function SongList({
         key: "next-play",
         label: "下一首播放",
         // 对照旧逻辑:当前播放歌曲不可再「下一首播放」;房内改为添加到一起听队列
-        disabled: playingId != null && playingId === song.id,
+        disabled: playingId != null && playingKey === songIdentityKey(song),
         onSelect: () => addNext(song),
       },
     ];
@@ -257,7 +259,7 @@ export default function SongList({
       items.push({
         key: "mv",
         label: "观看 MV",
-        onSelect: () => void navigate({ to: "/videos-player", search: { id: mvId } }),
+        onSelect: () => void navigate({ to: "/videos-player", search: { platform: songPlatform(song), id: mvId } }),
       });
     }
     if (!isLocalSong) {
@@ -265,12 +267,12 @@ export default function SongList({
         {
           key: "comment",
           label: "查看评论",
-          onSelect: () => void navigate({ to: "/comments", search: { id: songId } }),
+          onSelect: () => void navigate({ to: "/comments", search: { platform: songPlatform(song), id: songId } }),
         },
         {
           key: "song-detail",
           label: "查看单曲详情",
-          onSelect: () => void navigate({ to: "/song", search: { id: songId } }),
+          onSelect: () => void navigate({ to: "/song", search: { platform: songPlatform(song), id: songId } }),
         },
         {
           key: "download",
@@ -279,7 +281,7 @@ export default function SongList({
           onSelect: () =>
             void navigate({
               to: "/download",
-              search: {
+              search: { platform: songPlatform(song),
                 id: songId,
                 music_quality: useSettingsStore.getState().songLevel,
               },
@@ -302,7 +304,7 @@ export default function SongList({
       key: "search-same-name",
       label: "同名搜索",
       onSelect: () =>
-        void navigate({ to: "/search/songs", search: { keywords: song.name } }),
+        void navigate({ to: "/search/songs", search: { platform: songPlatform(song), keywords: song.name } }),
     });
     return items;
   };
@@ -405,7 +407,7 @@ export default function SongList({
 
       <ul ref={listRef} className="flex flex-col">
         {displaySongs.map((song, index) => {
-          const isPlaying = playingId != null && playingId === song.id;
+          const isPlaying = playingId != null && playingKey === songIdentityKey(song);
           const menuItems = rowMenuItems(song, index);
           const mvId = getMvId(song);
           const fee = getFee(song);
@@ -508,7 +510,7 @@ export default function SongList({
                       className="shrink-0 cursor-pointer rounded-full border border-[var(--met-primary)] px-1.5 text-[10px] leading-4 text-[var(--met-primary)] transition-colors hover:bg-[var(--met-bg-hover)]"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void navigate({ to: "/videos-player", search: { id: mvId } });
+                        void navigate({ to: "/videos-player", search: { platform: songPlatform(song), id: mvId } });
                       }}
                       onDoubleClick={(e) => e.stopPropagation()}
                     >
@@ -533,7 +535,7 @@ export default function SongList({
                               e.stopPropagation();
                               void navigate({
                                 to: "/artist",
-                                search: { id: String(ar.id) },
+                                search: { platform: songPlatform(song), id: String(ar.id) },
                               });
                             }}
                             onDoubleClick={(e) => e.stopPropagation()}
@@ -569,7 +571,7 @@ export default function SongList({
                       className="max-w-full cursor-pointer truncate text-left transition-colors hover:text-[var(--met-primary)]"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void navigate({ to: "/album", search: { id: albumId } });
+                        void navigate({ to: "/album", search: { platform: songPlatform(song), id: albumId } });
                       }}
                       onDoubleClick={(e) => e.stopPropagation()}
                     >

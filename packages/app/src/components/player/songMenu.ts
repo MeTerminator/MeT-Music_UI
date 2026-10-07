@@ -1,3 +1,4 @@
+import { songPlatform } from "@met/core";
 /**
  * 当前播放歌曲的「更多操作」菜单项(对照旧 MainControl.vue 的 songMoreOptions)。
  * 底部播放条(PlayerBar)与全屏播放器控制条(FullPlayerControls)共用同一份定义,
@@ -36,7 +37,7 @@ export const useSongMoreItems = (
 
   const go = (to: string, id: string): void => {
     beforeNavigate?.();
-    void navigate({ to, search: { id } });
+    void navigate({ to, search: { id, platform: songPlatform(song) } });
   };
 
   // 当前歌曲 MV id(formatData 的 song.mv 字段;0 / "0" / 空值视为无 MV)
@@ -58,7 +59,7 @@ export const useSongMoreItems = (
       key: "original-page",
       label: "查看原始页面",
       onSelect: () => {
-        window.open(`https://y.qq.com/n/ryqq/songDetail/${String(songId)}`);
+        window.open(song?.source === "netease" ? `https://music.163.com/#/song?id=${songId}` : `https://y.qq.com/n/ryqq/songDetail/${String(songId)}`);
       },
     },
     {
@@ -76,7 +77,7 @@ export const useSongMoreItems = (
       label: "复制歌曲链接",
       onSelect: () =>
         void copyText(
-          `https://y.qq.com/n/ryqq/songDetail/${String(songId)}`,
+          song?.source === "netease" ? `https://music.163.com/#/song?id=${songId}` : `https://y.qq.com/n/ryqq/songDetail/${String(songId)}`,
           "复制歌曲链接成功",
         ),
     },

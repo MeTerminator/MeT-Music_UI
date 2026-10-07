@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { emptyLyric, type ParsedLyric, type Song } from "@met/core";
+import { songIdentityKey, emptyLyric, type ParsedLyric, type Song } from "@met/core";
 import { legacyStorage } from "./persist";
 import { useStatusStore } from "./status";
 
@@ -51,7 +51,7 @@ export const setPlayHistory = (data: Song | null, clean = false): void => {
   }
   if (!data || Object.keys(data).length === 0) return;
   const history = useMusicStore.getState().historyPlaylist;
-  const next = history.filter((item) => item?.id !== data.id);
+  const next = history.filter((item) => songIdentityKey(item) !== songIdentityKey(data));
   next.unshift(data);
   // 限制历史记录长度为 500
   if (next.length > 500) next.pop();

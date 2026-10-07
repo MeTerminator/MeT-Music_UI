@@ -1,3 +1,4 @@
+import type { Platform } from "@met/core";
 /**
  * 代码式路由表(TanStack Router,不使用文件式路由插件)。
  *
@@ -69,20 +70,23 @@ const stringifySearch = (search: Record<string, unknown>): string => {
 };
 
 /** 宽松 search 参数:?id=(旧歌曲深链契约为 ?mid=,此处兼容映射) */
-const idSearch = (search: Record<string, unknown>): { id?: string } => ({
+const idSearch = (search: Record<string, unknown>): { id?: string; platform?: Platform } => ({
+  platform: search.platform === "netease" ? "netease" : "qq",
   id: (search.id ?? search.mid) as string | undefined,
 });
 
 /** /download 专用:在 idSearch 基础上额外透传 ?music_quality=(旧深链契约) */
 const downloadSearch = (
   search: Record<string, unknown>,
-): { id?: string; music_quality?: string } => ({
+): { id?: string; music_quality?: string; platform?: Platform } => ({
+  platform: search.platform === "netease" ? "netease" : "qq",
   id: (search.id ?? search.mid) as string | undefined,
   music_quality: search.music_quality as string | undefined,
 });
 
 /** 宽松 search 参数:?keywords=(旧 query.keywords) */
-const keywordsSearch = (search: Record<string, unknown>): { keywords?: string } => ({
+const keywordsSearch = (search: Record<string, unknown>): { keywords?: string; platform?: Platform } => ({
+  platform: search.platform === "netease" ? "netease" : "qq",
   keywords: search.keywords as string | undefined,
 });
 

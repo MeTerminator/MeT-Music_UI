@@ -1,3 +1,6 @@
+import type { LyricLine, TTMLLyric } from "@applemusic-like-lyrics/lyric";
+import type { LyricApiData, TtmlLyricData } from "../lyrics/parse";
+
 /**
  * 领域类型。字段与现有后端返回及 localStorage 持久化结构保持一致
  * (见旧 src/utils/formatData.js 与各 store),迁移期间不做字段更名。
@@ -8,19 +11,45 @@ export interface CoverSize {
   s?: string;
   m?: string;
   l?: string;
+  xl?: string;
 }
 
 /** 歌手 */
 export interface Artist {
+  mid?: string;
+  title?: string;
+  userName?: string;
   id?: number | string;
   name: string;
-  [key: string]: unknown;
 }
 
 /** 歌曲(在线或本地) */
 export interface Song {
+  mid?: string;
   id: number | string;
   name: string;
+  source?: "qqmusic" | "netease" | "local";
+  added_by?: string | null;
+  added_by_uid?: string | null;
+  mv?: number | string | null;
+  alia?: string;
+  fee?: number;
+  size?: number | { music?: number; album?: number; mv?: number; fans?: number };
+  ttml?: 0 | 1;
+  count?: number;
+  description?: string;
+  alias?: string[];
+  playCount?: number;
+  publishTime?: string | number;
+  createTime?: number;
+  updateTime?: number;
+  userId?: number | string;
+  creator?: { nickname?: string; userId?: number | string; avatarUrl?: string } | string;
+  tracks?: Song[] | null;
+  tags?: string | string[] | { id: number; name: string };
+  share?: number;
+  desc?: string;
+  rcmdText?: string;
   artists?: Artist[] | string;
   album?: { id?: number | string; name: string } | string;
   coverSize?: CoverSize;
@@ -33,7 +62,6 @@ export interface Song {
   localCover?: string;
   /** 云盘歌曲标记 */
   pc?: boolean;
-  [key: string]: unknown;
 }
 
 /** 普通(逐行)歌词行 */
@@ -100,11 +128,11 @@ export interface ParsedLyric {
   yrc: YrcLine[];
   lrcAM?: AMLine[];
   yrcAM?: AMLine[];
-  ttml?: unknown[];
-  ttmlMeta?: unknown[];
+  ttml?: LyricLine[];
+  ttmlMeta?: TTMLLyric["metadata"];
   /** 原始接口响应(调试用途,与旧实现保持一致) */
-  lyricResponse?: unknown;
-  ttmlLyricResponse?: unknown;
+  lyricResponse?: LyricApiData;
+  ttmlLyricResponse?: TtmlLyricData | null;
 }
 
 /** 空歌词(加载失败/无歌词时的缺省值) */
@@ -117,3 +145,7 @@ export const emptyLyric = (): ParsedLyric => ({
   lrc: [],
   yrc: [],
 });
+
+/** Same numeric ID on different providers is a different resource. */
+export const songIdentityKey = (song: Pick<Song, "id" | "source" | "path">): string =>
+  JSON.stringify([song.source ?? (song.path ? "local" : "qqmusic"), String(song.id)]);

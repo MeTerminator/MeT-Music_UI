@@ -1,3 +1,5 @@
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
@@ -27,11 +29,14 @@ const BIG_LIST_CHUNK = 800;
 /** 歌单详情页(id 来自 search params;/like-songs 复用本组件,无 id 时依赖登录态) */
 export default function Playlist() {
   const search = useSearch({ strict: false }) as { id?: number | string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
   const [keyword, setKeyword] = useState("");
   const isInRoom = useStatusStore((s) => s.isInRoom);
-  const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
-  const userPlaylists = useSiteDataStore((s) => s.userLikeData.playlists) as {
+  const userLoginStatus = useSiteDataStore((s) => platform === "qq" ? s.userLoginStatus : s.neteaseAccount.loggedIn);
+  const userPlaylists = useSiteDataStore((s) => platform === "qq" ? s.userLikeData.playlists : s.neteaseAccount.playlists) as {
     id?: number | string;
   }[];
 
@@ -43,8 +48,8 @@ export default function Playlist() {
 
   // 歌单详情(名称/简介/封面/歌曲数)
   const detailQuery = useQuery({
-    queryKey: ["playlist", "detail", playlistId],
-    queryFn: () => api.getPlayListDetail(playlistId as number | string),
+    queryKey: [platform, "playlist", "detail", playlistId],
+    queryFn: () => musicApi.getPlayListDetail(playlistId as number | string),
     enabled,
   });
 
@@ -59,24 +64,24 @@ export default function Playlist() {
 
   // 歌单全部歌曲:trackCount >= 800 时分片循环拉全量(对照旧 getBigPlayListData)
   const songsQuery = useQuery({
-    queryKey: ["playlist", "songs", playlistId, trackCount],
+    queryKey: [platform, "playlist", "songs", playlistId, trackCount],
     enabled: enabled && detailQuery.isSuccess,
     queryFn: async () => {
       if (trackCount < BIG_LIST_THRESHOLD) {
-        return api.getAllPlayList(playlistId as number | string, trackCount || 500, 0);
+        return musicApi.getAllPlayList(playlistId as number | string, trackCount || 500, 0);
       }
       // 分片循环拉取并聚合
-      const allSongs: unknown[] = [];
+      const allSongs: api.WebSong[] = [];
       setBigListProgress({ loaded: 0, total: trackCount });
       try {
         let offset = 0;
         while (offset < trackCount) {
-          const res = await api.getAllPlayList(
+          const res = await musicApi.getAllPlayList(
             playlistId as number | string,
             BIG_LIST_CHUNK,
             offset,
           );
-          const chunk: unknown[] = Array.isArray(res?.songs) ? res.songs : [];
+          const chunk: api.WebSong[] = Array.isArray(res?.songs) ? res.songs : [];
           allSongs.push(...chunk);
           offset += BIG_LIST_CHUNK;
           setBigListProgress({
@@ -94,7 +99,7 @@ export default function Playlist() {
   });
 
   const songs = useMemo<Song[]>(
-    () => formatData(songsQuery.data?.songs, "song") ?? [],
+    () => formatPlatformData(songsQuery.data?.songs, "song") ?? [],
     [songsQuery.data],
   );
 
@@ -146,6 +151,7 @@ export default function Playlist() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6">
+      <PlatformLabel />
       {/* 头部信息 */}
       {detailQuery.isLoading || !detail ? (
         <div className="flex animate-pulse gap-5">
@@ -164,7 +170,7 @@ export default function Playlist() {
             className="h-40 w-40 shrink-0 rounded-xl bg-[var(--met-bg-elevated)] object-cover"
           />
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
-            <h1 className="truncate text-2xl font-semibold text-[var(--met-fg)]" title={detail.name}>
+            <h1 className="truncate text-2xl font-semibold text-[var(--met-fg)]" title={detail.name ?? undefined}>
               {detail.name}
             </h1>
             {/* 创建者(对照旧 .creator:头像 / 昵称 / 创建时间) */}

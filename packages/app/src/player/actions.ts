@@ -1,7 +1,7 @@
 /**
  * 页面级播放动作(SongList 之外的封面卡等入口复用)。
  */
-import { addSongToNext, fadePlayOrPause, initPlayer, type Song } from "@met/core";
+import { songIdentityKey, addSongToNext, fadePlayOrPause, initPlayer, type Song } from "@met/core";
 import { addSong as ltAddSong } from "@/stores/listenTogether";
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
@@ -15,7 +15,7 @@ import { useStatusStore } from "@/stores/status";
  */
 export const playSongNow = async (song: Song): Promise<void> => {
   const playingId = useMusicStore.getState().playSongData?.id;
-  if (playingId != null && playingId === song.id) {
+  if (playingId != null && songIdentityKey(useMusicStore.getState().playSongData) === songIdentityKey(song)) {
     fadePlayOrPause();
     return;
   }

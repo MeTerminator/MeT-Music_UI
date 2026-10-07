@@ -1,3 +1,5 @@
+import PlatformIcon from "@/components/PlatformIcon";
+import { songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useRef, useState } from "react";
 import { Music, X } from "lucide-react";
 import { toast } from "sonner";
@@ -121,7 +123,7 @@ export default function PlaylistDrawer() {
     }
     // 房内:同曲切换播放/暂停,否则请求房间跳播共享列表索引(对齐旧 isInRoom 分支)
     if (status.isInRoom) {
-      if (playSongData?.id === song?.id) {
+      if (songIdentityKey(playSongData) === songIdentityKey(song)) {
         fadePlayOrPause();
       } else {
         ltPlayIndex(index);
@@ -135,7 +137,7 @@ export default function PlaylistDrawer() {
     // 更改播放索引
     useStatusStore.setState({ playIndex: index });
     // 是否为当前播放歌曲
-    if (playSongData?.id === song?.id) {
+    if (songIdentityKey(playSongData) === songIdentityKey(song)) {
       // 继续播放 / 暂停切换
       fadePlayOrPause();
     } else {
@@ -233,6 +235,7 @@ export default function PlaylistDrawer() {
             {formatArtists(item.artists) || "未知艺术家"}
           </div>
         </div>
+        {!item.path && <PlatformIcon platform={songPlatform(item)} />}
         {/* 删除 */}
         <button
           type="button"

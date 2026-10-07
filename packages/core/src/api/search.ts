@@ -1,4 +1,6 @@
-import { request, type ApiResponse } from "./client";
+import type { Platform } from "../types/platform";
+import { request } from "./client";
+import type { ApiResponseFor } from "./contracts";
 
 /**
  * 搜索部分
@@ -7,8 +9,9 @@ import { request, type ApiResponse } from "./client";
 /**
  * 热搜列表 - 详细
  */
-export const getSearchHot = (): Promise<ApiResponse> => {
+export const getSearchHot = ( platform: Platform = "qq"): Promise<ApiResponseFor<"/search/hot/detail">> => {
   return request("GET", "/search/hot/detail", {
+    platform,
     timestamp: new Date().getTime(),
   });
 };
@@ -20,9 +23,9 @@ export const getSearchHot = (): Promise<ApiResponse> => {
  */
 export const getSearchSuggest = (
   keywords: string,
-  mobile: boolean = false,
-): Promise<ApiResponse> => {
+  mobile: boolean = false, platform: Platform = "qq"): Promise<ApiResponseFor<"/search/suggest">> => {
   return request("GET", "/search/suggest", {
+    platform,
     keywords,
     ...(mobile && { type: "mobile" }),
   });
@@ -39,9 +42,9 @@ export const getSearchRes = (
   keywords: string,
   limit: number = 50,
   offset: number = 0,
-  type: number = 1,
-): Promise<ApiResponse> => {
+  type: number = 1, platform: Platform = "qq"): Promise<ApiResponseFor<"/cloudsearch">> => {
   return request("GET", "/cloudsearch", {
+    platform,
     keywords,
     limit,
     offset,

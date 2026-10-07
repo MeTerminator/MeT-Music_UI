@@ -1,3 +1,4 @@
+import { setApiBaseURL } from "../src/api/client";
 /**
  * 播放引擎测试。走模拟播放(simulationPlaying)路径,不触真实音频;
  * 重点验证队列行为(changePlayIndex/addSongToNext)与状态写入,
@@ -282,5 +283,30 @@ describe("soundStop", () => {
     expect(f.status.playSeek).toBe(0);
     expect(f.status.playSeekMs).toBe(0);
     expect(f.status.songCacheProgress).toBe(-1);
+  });
+});
+
+
+describe("provider identity", () => {
+  it("does not collapse songs with equal IDs on different providers", () => {
+    const f = makeFixture();
+    f.music.playList = [song(1), song(2)];
+    f.music.playSongData = song(1);
+    f.status.playIndex = 0;
+    addSongToNext({ ...song(2), source: "netease" });
+    expect(f.music.playList).toHaveLength(3);
+    expect(f.music.playList[1].source).toBe("netease");
+  });
+  it("routes NetEase playback requests with platform=netease", async () => {
+    const f = makeFixture({ settings: { simulationPlaying: false } });
+    f.music.playSongData = { ...song(1), source: "netease" };
+    f.music.playList = [f.music.playSongData];
+    setApiBaseURL("http://localhost/api/web");
+    const fetchSpy = vi.fn(async (_input: Request) => new Response(JSON.stringify({ code: 200, data: [{ id: 1, url: null, size: 0, track_info: { id: 1, mid: "1", source: "netease" }, time: 0, level: "standard", code: 200 }] }), { headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchSpy);
+    await initPlayer(true);
+    expect(fetchSpy).toHaveBeenCalled();
+    const request = fetchSpy.mock.calls[0]?.[0] as unknown as Request;
+    expect(new URL(request.url).searchParams.get("platform")).toBe("netease");
   });
 });

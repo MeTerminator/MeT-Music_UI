@@ -1,3 +1,4 @@
+import { songPlatform } from "../types/platform";
 /**
  * 播放引擎。自旧 src/utils/Player.js(1391 行)逐函数移植,逻辑照抄;
  * 全部隐式依赖(Pinia / $message / mediaSession / DOM)改经 PlayerDeps 注入,
@@ -21,7 +22,7 @@
  */
 import { Howl, Howler } from "howler";
 import type { CoverSize, Song } from "../types/song";
-import { emptyLyric } from "../types/song";
+import { emptyLyric, songIdentityKey } from "../types/song";
 import { getSongUrl, getSongLyric, getAMttmlLyric } from "../api/song";
 import { parseLyric } from "../lyrics/parse";
 import { getSongPlayTime } from "../lib/time";
@@ -105,6 +106,7 @@ const reportPlaybackStatus = (eventType: string): void => {
   try {
     const music = deps.music();
     const song = music.getPlaySongData;
+    if (song.source === "netease" || song.path) return;
     const site = deps.site();
     const statusStore = deps.status();
 
@@ -116,7 +118,8 @@ const reportPlaybackStatus = (eventType: string): void => {
       event: eventType,
       sessionId: deps.env.sessionId(),
       userId: site.userData.userId,
-      songMid: song.id || null,
+      songMid: String(song.id),
+      songSource: "qqmusic",
       status: isPlaying,
       currentTime: currentSeek,
       systemTime: Date.now(),
@@ -327,7 +330,7 @@ const getNormalSongUrl = async (
 ): Promise<string | null> => {
   try {
     const settings = deps.settings();
-    const res = await getSongUrl(id, settings.songLevel);
+    const res = await getSongUrl(id, settings.songLevel, songPlatform(deps.music().getPlaySongData));
     // 检查是否有有效的响应数据
     if (!res.data?.[0] || !res.data?.[0]?.url) return null;
     // 返回歌曲地址，将 http 转换为 https
@@ -658,7 +661,7 @@ export const addSongToNext = (data: Song, play = false): void => {
     // 更改播放模式
     status.hasNextSong = true;
     // 查找是否存在于播放列表
-    const index = music.playList.findIndex((v) => v.id === data.id);
+    const index = music.playList.findIndex((v) => songIdentityKey(v) === songIdentityKey(data));
     // 若存在
     if (index !== -1) {
       console.log("已存在", index);
@@ -1075,12 +1078,12 @@ const getSongLyricData = async (islocal: boolean, data: Song): Promise<boolean |
     const setDefaults = () => {
       music.playSongLyric = emptyLyric();
     };
-    const lyricResponse = await getSongLyric(data?.id);
+    const lyricResponse = await getSongLyric(data?.id, songPlatform(data));
     const lyricData = lyricResponse?.lrc;
     if (lyricData) {
       let ttmlLyricResponse = null;
       if (settings.useAMttmlDB) {
-        ttmlLyricResponse = await getAMttmlLyric(data?.id);
+        ttmlLyricResponse = await getAMttmlLyric(data?.id, songPlatform(data));
       }
       const result = await parseLyric(lyricResponse, ttmlLyricResponse, {
         removeInfo: settings.removeInfo,
@@ -1258,7 +1261,7 @@ export const playAllSongs = async (playlist: Song[], mode: "normal" | "fm" | "dj
     music.playList = playlist.slice();
     // 是否处于歌单内
     const songId = music.getPlaySongData?.id;
-    const existingIndex = playlist.findIndex((song) => song.id === songId);
+    const existingIndex = playlist.findIndex((song) => songIdentityKey(song) === songIdentityKey(music.getPlaySongData));
     // 若不处于
     if (existingIndex === -1 || !songId) {
       console.log("不在歌单内");

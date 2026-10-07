@@ -1,7 +1,9 @@
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, useSearch } from "@tanstack/react-router";
-import { api, formatNumber } from "@met/core";
+import { formatNumber } from "@met/core";
 import formatData from "@/lib/formatData";
 
 const TABS = [
@@ -26,11 +28,14 @@ interface ArtistDetail {
 /** 歌手页布局:头部详情 + tab 导航 + 子路由出口(对照旧 views/Artist/index.vue) */
 export default function ArtistLayout() {
   const search = useSearch({ strict: false }) as { id?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
 
   const detailQuery = useQuery({
-    queryKey: ["artist", "detail", id],
-    queryFn: () => api.getArtistDetail(id as number | string),
+    queryKey: [platform, "artist", "detail", id],
+    queryFn: () => musicApi.getArtistDetail(id as number | string),
     enabled: id != null && id !== "",
   });
 
@@ -38,7 +43,7 @@ export default function ArtistLayout() {
     // 原始接口字段访问豁免点(响应无稳定 schema)
     const raw = (detailQuery.data as any)?.data; // eslint-disable-line @typescript-eslint/no-explicit-any
     if (!raw?.artist) return null;
-    const formatted = (formatData(raw.artist, "artist")?.[0] ?? null) as ArtistDetail | null;
+    const formatted = (formatPlatformData(raw.artist, "artist")?.[0] ?? null) as ArtistDetail | null;
     if (formatted) formatted.identify = raw.identify?.imageDesc;
     return formatted;
   }, [detailQuery.data]);
@@ -60,6 +65,7 @@ export default function ArtistLayout() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-6">
+      <PlatformLabel />
       {/* 头部详情 */}
       {detailQuery.isLoading || (!artist && !detailQuery.isError) ? (
         <div className="flex animate-pulse gap-5">
@@ -99,17 +105,17 @@ export default function ArtistLayout() {
             {/* 数据统计 */}
             <div className="flex flex-wrap gap-4 text-xs text-[var(--met-fg-dim)]">
               {artist.size?.music ? (
-                <Link to="/artist/songs" search={{ id }} className="transition-colors hover:text-[var(--met-primary)]">
+                <Link to="/artist/songs" search={{ platform,  id }} className="transition-colors hover:text-[var(--met-primary)]">
                   单曲 {formatNumber(artist.size.music)}
                 </Link>
               ) : null}
               {artist.size?.album ? (
-                <Link to="/artist/albums" search={{ id }} className="transition-colors hover:text-[var(--met-primary)]">
+                <Link to="/artist/albums" search={{ platform,  id }} className="transition-colors hover:text-[var(--met-primary)]">
                   专辑 {formatNumber(artist.size.album)}
                 </Link>
               ) : null}
               {artist.size?.mv ? (
-                <Link to="/artist/videos" search={{ id }} className="transition-colors hover:text-[var(--met-primary)]">
+                <Link to="/artist/videos" search={{ platform,  id }} className="transition-colors hover:text-[var(--met-primary)]">
                   视频 {formatNumber(artist.size.mv)}
                 </Link>
               ) : null}
@@ -133,7 +139,7 @@ export default function ArtistLayout() {
           <Link
             key={tab.to}
             to={tab.to}
-            search={{ id }}
+            search={{ platform,  id }}
             className="rounded-t-md px-4 py-2 text-sm text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-fg)]"
             activeProps={{
               className:

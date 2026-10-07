@@ -1,34 +1,6 @@
-import { z } from "zod";
-import { request, warnValidate, type ApiResponse } from "./client";
-
-/**
- * 歌曲部分
- */
-
-/** getSongUrl 响应的宽松存在性校验(防后端结构漂移静默炸播放链路) */
-const songUrlSchema = z
-  .object({
-    data: z
-      .array(z.object({ url: z.string().nullable().optional() }).loose())
-      .optional(),
-  })
-  .loose();
-
-/** 歌词响应的宽松存在性校验(lrc 等字段为字符串,见 lyrics/parse.ts LyricApiData) */
-const songLyricSchema = z
-  .object({
-    lrc: z.string().nullable().optional(),
-    lrctrans: z.string().nullable().optional(),
-    qrc: z.string().nullable().optional(),
-  })
-  .loose();
-
-/** TTML 歌词响应的宽松存在性校验(见 lyrics/parse.ts TtmlLyricData) */
-const ttmlLyricSchema = z
-  .object({
-    content: z.string().nullable().optional(),
-  })
-  .loose();
+import type { Platform } from "../types/platform";
+import { request } from "./client";
+import type { ApiResponseFor } from "./contracts";
 
 /**
  * 获取音乐 URL
@@ -37,14 +9,13 @@ const ttmlLyricSchema = z
  */
 export const getSongUrl = async (
   id: number | string,
-  level: string = "standard",
-): Promise<ApiResponse> => {
+  level: string = "standard", platform: Platform = "qq"): Promise<ApiResponseFor<"/song/url/v1">> => {
   const res = await request("GET", "/song/url/v1", {
+    platform,
     id,
     level,
     timestamp: new Date().getTime(),
   });
-  warnValidate(songUrlSchema, res, "getSongUrl");
   return res;
 };
 
@@ -53,21 +24,19 @@ export const getSongUrl = async (
  * @param id - 要获取歌词的音乐ID
  */
 export const getSongLyric = async (
-  id: number | string,
-): Promise<ApiResponse> => {
+  id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/lyric/new">> => {
   const res = await request("GET", "/lyric/new", {
+    platform,
     id,
   });
-  warnValidate(songLyricSchema, res, "getSongLyric");
   return res;
 };
 
 export const getAMttmlLyric = async (
-  mid: number | string,
-): Promise<ApiResponse> => {
+  mid: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/lyric/ttml">> => {
   const res = await request("GET", "/lyric/ttml", {
+    platform,
     mid,
   });
-  warnValidate(ttmlLyricSchema, res, "getAMttmlLyric");
   return res;
 };

@@ -5,7 +5,7 @@
  */
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Play } from "lucide-react";
-import { getGreetings, type Song } from "@met/core";
+import { getGreetings, type Song, type Platform, platformName } from "@met/core";
 import { useMusicStore } from "@/stores/music";
 import { useSiteDataStore } from "@/stores/siteData";
 import { playSongNow } from "@/player/actions";
@@ -16,6 +16,7 @@ import ScrollRow from "@/components/ui/scroll-row";
 
 /** 侧栏同源的用户歌单原始字段 */
 interface RawUserPlaylist {
+  platform: Platform;
   id: number | string;
   name: string;
   coverImgUrl?: string;
@@ -49,11 +50,13 @@ const rowCls =
 const Home = () => {
   const navigate = useNavigate();
   const historyPlaylist = useMusicStore((s) => s.historyPlaylist);
-  const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus);
-  const playlists = useSiteDataStore(
+  const userLoginStatus = useSiteDataStore((s) => s.userLoginStatus || s.neteaseAccount.loggedIn);
+  const qqPlaylists = useSiteDataStore(
     (s) => s.userLikeData.playlists,
   ) as RawUserPlaylist[];
 
+  const neteasePlaylists = useSiteDataStore(s => s.neteaseAccount.playlists) as RawUserPlaylist[];
+  const playlists = [...qqPlaylists.map(pl => ({ ...pl, platform: "qq" as const })), ...neteasePlaylists.map(pl => ({ ...pl, platform: "netease" as const }))];
   const recentSongs = historyPlaylist.slice(0, 12);
 
   // 歌曲卡点击即播(插播语义;房内投共享队列,当前曲则切播放/暂停)
@@ -122,7 +125,7 @@ const Home = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    navigate({ to: "/playlist", search: { id: String(pl.id) } })
+                    navigate({ to: "/playlist", search: { id: String(pl.id), platform: pl.platform } })
                   }
                   className="flex w-full cursor-pointer flex-col text-left"
                 >
@@ -138,14 +141,14 @@ const Home = () => {
                   </span>
                   <span
                     className="mt-2 truncate text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
-                    title={pl.name}
+                    title={`${platformName(pl.platform)} · ${pl.name}`}
                   >
                     {pl.name}
                   </span>
                 </button>
                 {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
                 <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
-                  <CoverPlayButton id={pl.id} type="playlist" className="pointer-events-auto" />
+                  <CoverPlayButton platform={pl.platform} id={pl.id} type="playlist" className="pointer-events-auto" />
                 </div>
               </div>
             ))}

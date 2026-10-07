@@ -1,3 +1,5 @@
+import PlatformLabel from "@/components/PlatformLabel";
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
@@ -7,7 +9,7 @@ import { Music } from "lucide-react";
 // @ts-expect-error -- plyr d.ts 在 bundler 解析下无 default 导出
 import PlyrDefault from "plyr";
 import "plyr/dist/plyr.css";
-import { api, fadePlayOrPause, formatNumber } from "@met/core";
+import { fadePlayOrPause, formatNumber } from "@met/core";
 import { useStatusStore } from "@/stores/status";
 
 /** plyr 构造器(运行时 default 导出即类本体) */
@@ -81,6 +83,8 @@ const DetailSkeleton = () => (
 /** 视频播放页(对照旧 src/views/Player.vue;plyr 播放器) */
 export default function VideosPlayer() {
   const search = useSearch({ strict: false }) as { id?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
   const id = search.id;
 
   const [descExpanded, setDescExpanded] = useState(false);
@@ -88,8 +92,8 @@ export default function VideosPlayer() {
 
   // MV 详情
   const detailQuery = useQuery({
-    queryKey: ["video", "detail", id],
-    queryFn: () => api.getVideoDetail(id as string),
+    queryKey: [platform, "video", "detail", id],
+    queryFn: () => musicApi.getVideoDetail(id as string),
     enabled: id != null && id !== "",
   });
 
@@ -101,10 +105,10 @@ export default function VideosPlayer() {
   // 各分辨率播放地址(对照旧页:按 brs 枚举逐个请求 mv/url)
   // queryKey 带上 brs 集合,详情返回的分辨率列表变化时重新拉取
   const urlsQuery = useQuery({
-    queryKey: ["video", "urls", id, (brs ?? []).map((v) => v.br).join(",")],
+    queryKey: [platform, "video", "urls", id, (brs ?? []).map((v) => v.br).join(",")],
     queryFn: async (): Promise<Plyr.Source[]> => {
       const results = await Promise.all(
-        (brs ?? []).map((v) => api.getVideoUrl(id as string, v.br)),
+        (brs ?? []).map((v) => musicApi.getVideoUrl(id as string, v.br)),
       );
       return results
         // 原始接口字段访问豁免点
@@ -179,6 +183,7 @@ export default function VideosPlayer() {
   if (id == null || id === "") {
     return (
       <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2">
+      <PlatformLabel />
         <p className="text-2xl font-semibold text-[var(--met-fg)]">参数不完整</p>
         <button
           type="button"
@@ -364,7 +369,7 @@ export default function VideosPlayer() {
                 </span>
                 <Link
                   to="/artist"
-                  search={{ id: item.id != null ? String(item.id) : undefined }}
+                  search={{ platform,  id: item.id != null ? String(item.id) : undefined }}
                   className="w-fit rounded-full border border-[var(--met-border)] px-3 py-1 text-xs text-[var(--met-fg)] transition-colors hover:bg-[var(--met-bg-hover)]"
                 >
                   歌手详情

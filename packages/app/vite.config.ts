@@ -65,7 +65,7 @@ export default defineConfig({
     host: true,
     proxy: {
       "/api": {
-        target: "https://music.met6.top:444/api",
+        target: process.env.VITE_API_PROXY_TARGET || "https://music.met6.top:444/api",
         changeOrigin: true,
         ws: true,
         rewrite: (path) => path.replace(/^\/api/, ""),

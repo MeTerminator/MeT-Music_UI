@@ -1,7 +1,8 @@
+import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { api, playAllSongs, type Song } from "@met/core";
+import { playAllSongs, type Song } from "@met/core";
 import formatData from "@/lib/formatData";
 import SongList from "@/components/list/SongList";
 import { PrevNextPager } from "@/components/ui/pagination";
@@ -10,6 +11,9 @@ import { useSettingsStore } from "@/stores/settings";
 /** 歌手 - 全部单曲(分页,对照旧 views/Artist/songs.vue) */
 export default function Songs() {
   const search = useSearch({ strict: false }) as { id?: number | string; page?: string };
+  const platform = useMusicPlatform();
+  const musicApi = platformApi(platform);
+  const formatPlatformData: typeof formatData = (data, type, noTracks) => formatData(data, type, noTracks)?.map(item => ({ ...item, source: platform === "netease" ? "netease" : item.source ?? "qqmusic" })) ?? null;
   const id = search.id;
   const navigate = useNavigate();
   const loadSize = useSettingsStore((s) => s.loadSize);
@@ -25,8 +29,8 @@ export default function Songs() {
   // 以保证浏览器回退/前进能按历史还原页码(对照旧 songs.vue 亦无重置逻辑)。
 
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ["artist", "songs", id, page, pageSize],
-    queryFn: () => api.getArtistAllSongs(id as number | string, pageSize, (page - 1) * pageSize),
+    queryKey: [platform, "artist", "songs", id, page, pageSize],
+    queryFn: () => musicApi.getArtistAllSongs(id as number | string, pageSize, (page - 1) * pageSize),
     enabled: id != null && id !== "",
     placeholderData: keepPreviousData,
   });
@@ -34,7 +38,7 @@ export default function Songs() {
   // 原始接口字段访问豁免点
   const raw = data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const total: number = raw?.total ?? 0;
-  const songs = useMemo<Song[]>(() => formatData(raw?.songs, "song") ?? [], [raw]);
+  const songs = useMemo<Song[]>(() => formatPlatformData(raw?.songs, "song") ?? [], [raw]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   if (isError) {
