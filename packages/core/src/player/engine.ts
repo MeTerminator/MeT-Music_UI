@@ -106,7 +106,7 @@ const reportPlaybackStatus = (eventType: string): void => {
   try {
     const music = deps.music();
     const song = music.getPlaySongData;
-    if (song.source === "netease" || song.path) return;
+    if (song.source === "local" || song.path) return;
     const site = deps.site();
     const statusStore = deps.status();
 
@@ -119,7 +119,7 @@ const reportPlaybackStatus = (eventType: string): void => {
       sessionId: deps.env.sessionId(),
       userId: site.userData.userId,
       songMid: String(song.id),
-      songSource: "qqmusic",
+      songSource: song.source ?? "qqmusic",
       status: isPlaying,
       currentTime: currentSeek,
       systemTime: Date.now(),

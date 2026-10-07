@@ -9,6 +9,7 @@ import {
   addSongToNext,
   changePlayIndex,
   configurePlayer,
+  fadePlayOrPause,
   getSeek,
   initPlayer,
   playAllSongs,
@@ -309,5 +310,56 @@ describe("provider identity", () => {
     const request = fetchSpy.mock.calls[0]?.[0] as unknown as Request;
     expect(new URL(request.url).searchParams.get("platform")).toBe(platform);
     expect(new URL(request.url).searchParams.get("level")).toBe(platform === "netease" ? "jymaster" : "sq");
+  });
+});
+
+
+describe("playback feedback", () => {
+  const mockResponse = async (input: string | Request) => new Response(JSON.stringify(
+    input instanceof Request
+      ? { code: 200, source: "network", lrc: "", lrctrans: "", qrc: "", qrctrans: "", qrcroma: "" }
+      : { status: "ok" },
+  ));
+  it.each(["netease", "qqmusic", undefined] as const)("reports play, progress and pause for source %s", async (source) => {
+    vi.useFakeTimers();
+    const f = makeFixture();
+    const sessionId = "12345678-1234-1234-1234-123456789012";
+    f.deps.env.sessionId = () => sessionId;
+    f.music.playSongData = { ...song(123), source };
+    const fetchSpy = vi.fn(mockResponse);
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await initPlayer(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    fadePlayOrPause("pause");
+    await Promise.resolve();
+
+    const calls = vi.mocked(fetch).mock.calls.filter(([url]) => typeof url === "string");
+    const reports = calls.map(([url, init]) => {
+      expect(url).toBe("/api/web/collect/feedback/webplayer");
+      expect(init?.method).toBe("POST");
+      return JSON.parse(String(init?.body)).data;
+    });
+    expect(reports.map(data => data.event)).toEqual(["play", "progress", "pause"]);
+    expect(reports.map(data => data.status)).toEqual([true, true, false]);
+    for (const data of reports) {
+      expect(data.songSource).toBe(source ?? "qqmusic");
+      expect(data.songMid).toBe("123");
+      expect(data.sessionId).toBe(sessionId);
+      expect(Number.isFinite(data.currentTime)).toBe(true);
+      expect(Number.isFinite(data.systemTime)).toBe(true);
+    }
+  });
+
+  it.each([{ source: "local" as const }, { path: "/music/local.mp3" }])("skips local songs %j", async (identity) => {
+    const f = makeFixture();
+    f.deps.env.sessionId = () => "12345678-1234-1234-1234-123456789012";
+    f.music.playSongData = { ...song(123), ...identity };
+    const fetchSpy = vi.fn(mockResponse);
+    vi.stubGlobal("fetch", fetchSpy);
+    await initPlayer(true);
+    fadePlayOrPause("pause");
+    await Promise.resolve();
+    expect(fetchSpy.mock.calls.filter(([url]) => typeof url === "string")).toHaveLength(0);
   });
 });
