@@ -25,13 +25,14 @@ import { deleteFile, listFileKeys } from "@/lib/filesDB";
 import { useMusicStore } from "@/stores/music";
 import { useSettingsStore } from "@/stores/settings";
 import { neteaseSongLevelData, neteaseSongLevelOptions } from "@/pages/setting/options";
+import { toCoverProxyUrl } from "@/platform/cover-url";
 
 /** 歌词 tab 项(对照旧 Download.vue fetchLyrics 的 lyrics 数组) */
 interface LyricItem {
   label: string;
   content: string;
   type: string;
-  ext: "qrc" | "lrc" | "ttml";
+  ext: "qrc" | "yrc" | "lrc" | "ttml";
 }
 
 /** 音质枚举(与旧 Download.vue SONG_LEVEL_DATA 一致) */
@@ -137,7 +138,9 @@ const Download = () => {
   )
     ? track.singer
     : [];
-  const cover = platform === "netease" && track?.album?.mid ? `/api/web/album/cover/highpic?platform=netease&pic=${encodeURIComponent(track.album.mid)}` : coverFromPmid(track?.album?.pmid);
+  const cover = platform === "netease"
+    ? (track?.album?.picUrl ? toCoverProxyUrl(track.album.picUrl, true) : undefined)
+    : coverFromPmid(track?.album?.pmid);
 
   // 歌词数据(对照旧 fetchLyrics:两接口并行,单侧失败不拖垮另一侧)
   const lyricQuery = useQuery({
@@ -162,18 +165,27 @@ const Download = () => {
 
     const ttml = lyricQuery.data?.ttml;
     const lyrics: LyricItem[] = [];
-    if (res?.qrc) lyrics.push({ label: "QRC 歌词", content: res.qrc, type: "qrc", ext: "qrc" });
-    if (res?.qrctrans)
-      lyrics.push({ label: "QRC 翻译", content: res.qrctrans, type: "qrctrans", ext: "lrc" });
-    if (res?.qrcroma)
-      lyrics.push({ label: "QRC 音译", content: res.qrcroma, type: "roma", ext: "qrc" });
+    if (platform === "netease") {
+      if (res?.yrc) lyrics.push({ label: "YRC 歌词", content: res.yrc, type: "yrc", ext: "yrc" });
+      if (res?.ytlrc) lyrics.push({ label: "YRC 翻译", content: res.ytlrc, type: "ytlrc", ext: "lrc" });
+      const romaji = res?.yromalrc || res?.romalrc;
+      if (romaji) lyrics.push({
+        label: "罗马音歌词", content: romaji, type: "roma", ext: "lrc",
+      });
+    } else {
+      if (res?.qrc) lyrics.push({ label: "QRC 歌词", content: res.qrc, type: "qrc", ext: "qrc" });
+      if (res?.qrctrans)
+        lyrics.push({ label: "QRC 翻译", content: res.qrctrans, type: "qrctrans", ext: "lrc" });
+      if (res?.qrcroma)
+        lyrics.push({ label: "QRC 音译", content: res.qrcroma, type: "roma", ext: "qrc" });
+    }
     if (res?.lrc) lyrics.push({ label: "LRC 歌词", content: res.lrc, type: "lrc", ext: "lrc" });
     if (res?.lrctrans)
       lyrics.push({ label: "LRC 翻译", content: res.lrctrans, type: "lrctrans", ext: "lrc" });
     if (ttml?.status === "success" && ttml.content)
       lyrics.push({ label: "TTML 歌词", content: ttml.content, type: "ttml", ext: "ttml" });
     return lyrics;
-  }, [lyricQuery.data]);
+  }, [lyricQuery.data, platform]);
 
   // 当前歌词 tab(默认第一个;列表变化后自动回退到第一个)
   const [lyricTab, setLyricTab] = useState<string | null>(null);

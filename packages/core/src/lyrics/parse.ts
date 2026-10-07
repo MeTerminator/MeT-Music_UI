@@ -3,7 +3,7 @@
  * - siteSettings() 的 removeInfo / removeAMInfo 改为显式 options 参数;
  * - $message.info 改为可选注入的 notify?.info;
  * - 解析失败由返回 false 改为返回 null。
- * 其余算法、正则、怪癖行为(见各处注释)与源码保持一致。
+ * QQ 路径保持旧算法；网易云由独立的原生 YRC 解析器处理。
  */
 import {
   parseLrc,
@@ -13,10 +13,15 @@ import {
 } from "@applemusic-like-lyrics/lyric";
 import type { AMLine, LrcLine, ParsedLyric, YrcLine, YrcWord } from "../types/song";
 import type { Notifier } from "../types/notify";
+import type { Platform } from "../types/platform";
+import { parseNeteaseLyric } from "./netease";
 
 /** 解析行为开关(对应旧 siteSettings 中的同名设置项) */
 export interface ParseLyricOptions {
-  /** 逐字歌词中移除歌曲信息行("所有字持续时间相等"启发式) */
+  platform?: Platform;
+  title?: string;
+  artists?: string[];
+  /** 移除歌曲信息行：QQ 使用旧启发式，网易云使用元数据规则 */
   removeInfo: boolean;
   /** AM 歌词中移除歌曲信息行 */
   removeAMInfo: boolean;
@@ -29,6 +34,10 @@ export interface LyricApiData {
   qrc?: string | null;
   qrctrans?: string | null;
   qrcroma?: string | null;
+  yrc?: string | null;
+  ytlrc?: string | null;
+  yromalrc?: string | null;
+  romalrc?: string | null;
 }
 
 /** TTML 歌词接口原始返回 */
@@ -74,6 +83,9 @@ export const parseLyric = async (
   notify?: Notifier,
 ): Promise<ParsedLyric | null> => {
   try {
+    if (options.platform === "netease") {
+      return parseNeteaseLyric(data, ttmlLyric, options, notify);
+    }
     // 以下逻辑保持不变
 
     // 判断是否具有内容

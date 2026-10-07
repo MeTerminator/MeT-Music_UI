@@ -14,6 +14,7 @@ import { useStatusStore, type LyricViewMode } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
 import type { OnCoverColors } from "@/platform/cover-color";
+import { toCoverProxyUrl } from "@/platform/cover-url";
 import { useIsMobile, useIsTouch } from "@/platform/use-media-query";
 import { DropdownMenu } from "@/components/ui/menu";
 import { formatArtists } from "./format";
@@ -104,13 +105,7 @@ function LyricViewIcon({ mode }: { mode: LyricViewMode }) {
  */
 const toAmllAlbumUrl = (src: string | undefined): string | undefined => {
   if (!src) return undefined;
-  if (src.startsWith("https://y.qq.com/music/photo_new/")) {
-    const cleaned = src
-      .replace("https://y.qq.com/music/photo_new/", "")
-      .replace("?param=100y100", "");
-    return `/api/web/album/cover/pic?pic=${cleaned}`;
-  }
-  return src;
+  return toCoverProxyUrl(src);
 };
 
 /**

@@ -1083,13 +1083,18 @@ const getSongLyricData = async (islocal: boolean, data: Song): Promise<boolean |
       music.playSongLyric = emptyLyric();
     };
     const lyricResponse = await getSongLyric(data?.id, songPlatform(data));
-    const lyricData = lyricResponse?.lrc;
+    const lyricData = lyricResponse?.lrc || lyricResponse?.yrc || lyricResponse?.qrc;
     if (lyricData) {
       let ttmlLyricResponse = null;
       if (settings.useAMttmlDB) {
         ttmlLyricResponse = await getAMttmlLyric(data?.id, songPlatform(data));
       }
       const result = await parseLyric(lyricResponse, ttmlLyricResponse, {
+        platform: songPlatform(data),
+        title: data.name,
+        artists: Array.isArray(data.artists)
+          ? data.artists.map((artist) => artist.name)
+          : data.artists ? [data.artists] : [],
         removeInfo: settings.removeInfo,
         removeAMInfo: settings.removeAMInfo,
       }, deps.notify);

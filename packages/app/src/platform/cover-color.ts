@@ -17,6 +17,7 @@ import { chunk } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { argb2Rgb, getGradientFromPalette, rgb2Argb } from "@/platform/color-utils";
+import { toCoverProxyUrl } from "@/platform/cover-url";
 
 const DEFAULT_GRADIENT = "linear-gradient(-45deg, #666, #fff)";
 
@@ -53,12 +54,7 @@ export interface OnCoverColors {
 export const getCoverGradient = (coverSrc: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     try {
-      let newCoverSrc: string;
-      if (coverSrc.startsWith("/api/web/local/music/file/")) {
-        newCoverSrc = coverSrc;
-      } else {
-        newCoverSrc = `/api/web/album/cover/pic?pic=${coverSrc.replace("https://y.qq.com/music/photo_new/", "").replace("?param=100y100", "")}`;
-      }
+      const newCoverSrc = toCoverProxyUrl(coverSrc);
 
       const image = new Image();
       image.crossOrigin = "Anonymous";
