@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
  * 桌面宿主(Electron)窗口控制与拖拽区。
  *
  * 主窗是 frame: false 的无边框窗口,窗口按钮与拖拽区都得由远端 UI 提供。
- * 这里按 MeT-Music_App 的 did-finish-load 注入脚本原样模拟宿主注册,
+ * 这里按 MeT-Music_Desktop 的 did-finish-load 注入脚本原样模拟宿主注册,
  * 验证 UI 侧的契约实现;宿主侧代码由该仓自己的 typecheck/build 覆盖。
  *
  * 降级是重点:UI 从远端加载,会先于用户安装的 App 更新,所以装着旧版桌面端的
