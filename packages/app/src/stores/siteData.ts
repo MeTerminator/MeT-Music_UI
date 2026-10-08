@@ -13,7 +13,14 @@ export interface PlatformAccount {
   detail: Record<string, unknown>;
   playlists: unknown[];
 }
+export interface AddedPlaylist {
+  id: string;
+  name: string;
+  coverImgUrl?: string;
+}
+
 export interface SiteDataState {
+  addedPlaylists: Record<Platform, AddedPlaylist[]>;
   neteaseAccount: PlatformAccount;
   searchHistory: string[];
   userLoginStatus: boolean;
@@ -38,6 +45,7 @@ export interface SiteDataState {
 export const useSiteDataStore = create<SiteDataState>()(
   persist(
     (): SiteDataState => ({
+      addedPlaylists: { qq: [], netease: [] },
       neteaseAccount: { userId: null, loggedIn: false, detail: {}, playlists: [] },
       searchHistory: [] as string[],
       userLoginStatus: false,
@@ -79,51 +87,33 @@ export const setUserId = (userId: number | string, platform: Platform = "qq"): v
   useSiteDataStore.setState((s) => ({ userData: { ...s.userData, userId } }));
 };
 
-/** 获取用户喜欢歌单(旧 siteData.setUserLikePlaylists) */
-export const setUserLikePlaylists = async (): Promise<void> => {
-  try {
-    const { userId } = useSiteDataStore.getState().userData;
-    if (userId == null) return;
-    const res = await api.getUserPlaylist(userId, 0);
-    useSiteDataStore.setState((s) => ({
-      userLikeData: { ...s.userLikeData, playlists: res.playlist },
-      userData: {
-        ...s.userData,
-        detail: {
-          profile: {
-            nickname: res.username,
-            avatarUrl: res.avatarUrl,
-          },
-        },
-      },
-      userLoginStatus: true,
-    }));
-  } catch (error) {
-    console.error("用户喜欢歌单加载失败", error);
-    toast.error("用户喜欢歌单加载失败");
+/** 登录前验证公开资料;空歌单合法,缺少用户昵称则不能确认账号存在。 */
+const fetchPublicAccount = async (userId: number | string, platform: Platform) => {
+  const res = await api.getUserPlaylist(userId, 1000, 0, platform);
+  if (res.code !== 200 || !res.username?.trim()) {
+    throw new Error("用户不存在或用户资料无效");
   }
+  return res;
 };
 
-/** 获取用户信息(旧 siteData.setUserProfile) */
+/** 获取用户喜欢歌单,与启动时账号检查共用验证流程。 */
+export const setUserLikePlaylists = async (): Promise<void> => setUserProfile("qq");
+
+/** 启动时重新验证已保存账号;失败时撤销该平台的登录状态。 */
 export const setUserProfile = async (platform: Platform = "qq"): Promise<void> => {
-  if (platform === "netease") {
-    const uid = useSiteDataStore.getState().neteaseAccount.userId;
-    if (uid == null) return;
-    try {
-      const res = await api.getUserPlaylist(uid, 1000, 0, "netease");
-      if (useSiteDataStore.getState().neteaseAccount.userId !== uid) return;
-      useSiteDataStore.setState({ neteaseAccount: { userId: uid, loggedIn: true, detail: { profile: { nickname: res.username, avatarUrl: res.avatarUrl } }, playlists: res.playlist } });
-    } catch {
-      toast.error("网易云用户信息加载失败");
-    }
-    return;
-  }
+  const getCurrentId = () => platform === "qq"
+    ? useSiteDataStore.getState().userData.userId
+    : useSiteDataStore.getState().neteaseAccount.userId;
+  const uid = getCurrentId();
+  if (uid == null) return;
   try {
-    if (useSiteDataStore.getState().userData.userId == null) return;
-    await Promise.all([setUserLikePlaylists()]);
-  } catch (error) {
-    console.error("用户信息加载失败", error);
-    toast.error("用户信息加载失败");
+    const res = await fetchPublicAccount(uid, platform);
+    if (getCurrentId() !== uid) return;
+    commitPublicAccount(uid, platform, res);
+  } catch {
+    if (getCurrentId() !== uid) return;
+    logout(false, platform);
+    toast.error("登录失效：用户不存在或用户信息请求失败，请重新登录");
   }
 };
 
@@ -146,13 +136,17 @@ export const logout = (show = true, platform: Platform = "qq"): void => {
   if (show) toast.success("成功退出登录");
 };
 
-/** Public account lookup commits only after success, preserving the other platform. */
-export const loginPublicAccount = async (userId: string, platform: Platform): Promise<void> => {
-  const res = await api.getUserPlaylist(userId, 1000, 0, platform);
+/** 仅在请求及用户资料验证成功后提交登录状态。 */
+const commitPublicAccount = (userId: number | string, platform: Platform, res: Awaited<ReturnType<typeof fetchPublicAccount>>): void => {
   const detail = { profile: { nickname: res.username, avatarUrl: res.avatarUrl } };
   if (platform === "netease") {
     useSiteDataStore.setState({ neteaseAccount: { userId, loggedIn: true, detail, playlists: res.playlist } });
   } else {
     useSiteDataStore.setState({ userData: { userId, detail }, userLoginStatus: true, userLikeData: { playlists: res.playlist } });
   }
+};
+
+export const loginPublicAccount = async (userId: string, platform: Platform): Promise<void> => {
+  const res = await fetchPublicAccount(userId, platform);
+  commitPublicAccount(userId, platform, res);
 };

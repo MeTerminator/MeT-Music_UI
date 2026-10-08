@@ -2,8 +2,8 @@
  * 根布局(路由 __root):左侧窄侧边栏 + 顶栏 + 主内容区 + 播放条。
  *
  * 宿主按钮区是契约 v2 对旧 .main-nav DOM 注入的替代:
- * useHostStore().isHosted 为 true 时渲染「设置」「隐藏」按钮,
- * 分别调用宿主注册的 onOpenSettings / onHideWindow 回调(仍走宿主回调,与应用内设置悬浮层无关)。
+ * UI 设置齿轮常驻顶栏;宿主注册后在右侧额外渲染客户端设置与窗口控制。
+ * 客户端设置调用 onOpenSettings,UI 设置打开应用内 SettingsOverlay。
  *
  * 侧栏「设置」项不再 navigate 到 /setting,改为打开 SettingsOverlay 悬浮层
  * (useStatusStore.showSettingsPanel);/setting 路由页保留用于深链兼容。
@@ -39,6 +39,7 @@ import {
   Home,
   Menu,
   Minus,
+  MonitorCog,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -199,7 +200,11 @@ const SidebarContent = ({
               className={`${itemBase} ${active ? itemActive : itemIdle}`}
             >
               <Icon className="h-5 w-5" aria-hidden />
-              {label}
+              {isRail && to === "/history" ? (
+                <span className="max-w-full text-center" aria-label={label}>
+                  <span className="inline-block whitespace-nowrap">最近</span><wbr /><span className="inline-block whitespace-nowrap">播放</span>
+                </span>
+              ) : label}
             </Link>
           );
         })}
@@ -357,18 +362,31 @@ const RootLayout = () => {
           >
             <Airplay className="h-5 w-5" aria-hidden />
           </button>
+          {/* UI 设置入口常驻顶栏,不依赖桌面宿主。 */}
+          <button
+            type="button"
+            title="设置"
+            aria-label="设置"
+            aria-haspopup="dialog"
+            onClick={() => useStatusStore.setState({ showSettingsPanel: true })}
+            className={iconBtnCls}
+          >
+            <Settings className="h-5 w-5" aria-hidden />
+          </button>
           {/* 宿主按钮区(契约 v2:替代旧 .main-nav DOM 注入) */}
           {isHosted ? (
             <>
-              <button
-                type="button"
-                title="设置"
-                aria-label="设置"
-                onClick={() => callbacks?.onOpenSettings?.()}
-                className={iconBtnCls}
-              >
-                <Settings className="h-5 w-5" aria-hidden />
-              </button>
+              {callbacks?.onOpenSettings ? (
+                <button
+                  type="button"
+                  title="客户端设置"
+                  aria-label="客户端设置"
+                  onClick={() => callbacks.onOpenSettings?.()}
+                  className={iconBtnCls}
+                >
+                  <MonitorCog className="h-5 w-5" aria-hidden />
+                </button>
+              ) : null}
               {/* 窗口控制。逐个按回调是否存在渲染:装着旧版桌面端的用户
                   拿到的是同一份远端 UI,回调缺席时这里自动退回原来的「隐藏」按钮,
                   表现与改动前一致(见 contract.ts 里为何不升版本号的说明)。 */}

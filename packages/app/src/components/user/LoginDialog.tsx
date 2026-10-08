@@ -1,10 +1,10 @@
 import { platformName, type Platform } from "@met/core";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { User } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { loginPublicAccount, useSiteDataStore } from "@/stores/siteData";
+import { loginPublicAccount } from "@/stores/siteData";
 
 export interface LoginDialogProps {
   initialPlatform?: Platform;
@@ -20,14 +20,16 @@ const inputCls =
 /**
  * QQ 号登录弹窗(旧 Modal/Login.vue + Modal/LoginQQ.vue)。
  * 受控组件:open / onOpenChange 由挂载方(UserPanel)管理。
- * 流程与旧版一致:setUserId(qq) → await setUserProfile() → 成功「登录成功」并关闭。
+ * 请求并验证用户资料后才提交登录状态;失败时保留弹窗和输入。
  */
 export default function LoginDialog({ open, onOpenChange, initialPlatform = "qq" }: LoginDialogProps) {
   const [platform, setPlatform] = useState<Platform>(initialPlatform);
   const [qq, setQq] = useState("");
   const [loading, setLoading] = useState(false);
+  const loginPending = useRef(false);
 
   const handleLogin = async (): Promise<void> => {
+    if (loginPending.current) return;
     const value = qq.trim();
     // 数字校验(旧 formRules.numberRule + LoginQQ.vue 的 parseInt 校验)
     if (value === "") {
@@ -38,23 +40,17 @@ export default function LoginDialog({ open, onOpenChange, initialPlatform = "qq"
       toast.error("请检查你的输入");
       return;
     }
+    loginPending.current = true;
     setLoading(true);
     try {
-      // 设置用户 QQ 号
-
-      // 获取用户信息(成功时由 store 置 userLoginStatus = true)
       await loginPublicAccount(value, platform);
-      if (platform === "netease" ? useSiteDataStore.getState().neteaseAccount.loggedIn : useSiteDataStore.getState().userLoginStatus) {
-        toast.success("登录成功");
-        setQq("");
-        onOpenChange(false);
-      } else {
-        // 失败提示(具体错误已由 store 内部 toast)
-        toast.error(`登录失败，请检查${platform === "qq" ? "QQ 号" : "网易云用户 ID"}后重试`);
-      }
+      toast.success("登录成功");
+      setQq("");
+      onOpenChange(false);
     } catch {
       toast.error(`登录失败，请检查${platform === "qq" ? "QQ 号" : "网易云用户 ID"}后重试`);
     } finally {
+      loginPending.current = false;
       setLoading(false);
     }
   };
@@ -62,7 +58,7 @@ export default function LoginDialog({ open, onOpenChange, initialPlatform = "qq"
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={value => { if (!loading) onOpenChange(value); }}
       title={`${platformName(platform)}账号登录`}
       footer={
         <>

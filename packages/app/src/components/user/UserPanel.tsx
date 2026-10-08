@@ -1,7 +1,7 @@
-import { platformName, type Platform } from "@met/core";
+import { api, platformName, type Platform } from "@met/core";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { ChevronDown, Heart, ListMusic, LogIn, LogOut } from "lucide-react";
+import { ChevronDown, Heart, ListMusic, LogIn, LogOut, Plus } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@/components/ui/menu";
@@ -10,6 +10,8 @@ import { logout, setUserProfile, useSiteDataStore } from "@/stores/siteData";
 import { useMusicStore } from "@/stores/music";
 import { useSettingsStore } from "@/stores/settings";
 import LoginDialog from "./LoginDialog";
+import { toast } from "sonner";
+import PlatformIcon from "@/components/PlatformIcon";
 
 /** 用户歌单原始字段(对照旧 Menu.vue 的消费:id / name / coverImgUrl) */
 interface RawUserPlaylist {
@@ -72,6 +74,7 @@ function AccountPanel({ compact = false, platform }: { compact?: boolean; platfo
   const playlists = useSiteDataStore(
     (s) => platform === "qq" ? s.userLikeData.playlists : s.neteaseAccount.playlists,
   ) as RawUserPlaylist[];
+  const addedPlaylists = useSiteDataStore((s) => s.addedPlaylists[platform]);
   // 统计:最近播放数(对照旧 Nav/UserData.vue 统计区的 historyPlaylist)
   const historyCount = useMusicStore((s) => s.historyPlaylist.length);
   // 歌单行封面/图标双模式(对照旧 Menu.vue 消费 siderShowCover)
@@ -86,6 +89,54 @@ function AccountPanel({ compact = false, platform }: { compact?: boolean; platfo
   const [loginOpen, setLoginOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [listOpen, setListOpen] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [playlistId, setPlaylistId] = useState("");
+  const [adding, setAdding] = useState(false);
+  const addingRef = useRef(false);
+
+  const addPlaylist = async () => {
+    if (addingRef.current) return;
+    const id = playlistId.trim();
+    if (!/^\d+$/.test(id)) {
+      toast.error("请输入有效的数字歌单 ID");
+      return;
+    }
+    const exists = (value: string) => {
+      const state = useSiteDataStore.getState();
+      const owned = platform === "qq" ? state.userLikeData.playlists : state.neteaseAccount.playlists;
+      return [...owned as RawUserPlaylist[], ...state.addedPlaylists[platform]].some(pl => String(pl.id) === value);
+    };
+    if (exists(id)) {
+      toast.info("该歌单已在列表中");
+      return;
+    }
+    addingRef.current = true;
+    setAdding(true);
+    try {
+      const { playlist } = await api.getPlayListDetail(id, platform);
+      if (playlist.id == null || !playlist.name) throw new Error("歌单不存在或无法访问");
+      const resolvedId = String(playlist.id);
+      if (exists(resolvedId)) {
+        toast.info("该歌单已在列表中");
+        return;
+      }
+      useSiteDataStore.setState(state => ({ addedPlaylists: {
+        ...state.addedPlaylists,
+        [platform]: [...state.addedPlaylists[platform], {
+          id: resolvedId, name: playlist.name!, coverImgUrl: playlist.coverImgUrl ?? undefined,
+        }],
+      } }));
+      setListOpen(true);
+      setAddOpen(false);
+      setPlaylistId("");
+      toast.success("歌单已添加");
+    } catch {
+      toast.error("添加失败，请检查歌单 ID 和访问权限后重试");
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
+    }
+  };
 
   // 启动时检查登录状态(旧 Login.vue onBeforeMount 的 checkLoginStatus):
   // userId 非空则自动拉取用户信息
@@ -109,12 +160,12 @@ function AccountPanel({ compact = false, platform }: { compact?: boolean; platfo
         {compact ? (
           <button
             type="button"
-            title="登录"
-            aria-label="登录"
+            title={`登录${platformName(platform)}`}
+            aria-label={`登录${platformName(platform)}`}
             onClick={() => setLoginOpen(true)}
             className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] text-[var(--met-fg-dim)] transition-colors hover:border-[var(--met-primary)] hover:text-[var(--met-primary)]"
           >
-            <LogIn className="h-4 w-4" aria-hidden />
+            <PlatformIcon platform={platform} />
           </button>
         ) : (
           <Button
@@ -138,7 +189,21 @@ function AccountPanel({ compact = false, platform }: { compact?: boolean; platfo
   // 「我喜欢」歌单(对照旧 playlist.vue:playlists[0] 即喜欢的音乐)
   const likePlaylist = playlists[0];
   // 创建的歌单(对照旧 Menu.vue:slice(1))
-  const userPlaylists = playlists.slice(1);
+  const userPlaylists = [...playlists.slice(1), ...addedPlaylists.filter(pl => !playlists.some(owned => String(owned.id) === pl.id))];
+  const addDialog = (
+    <Dialog open={addOpen} onOpenChange={open => { if (!adding) setAddOpen(open); }} title={`添加${platformName(platform)}歌单`}
+      footer={<>
+        <Button variant="outline" size="sm" disabled={adding} onClick={() => setAddOpen(false)}>取消</Button>
+        <Button size="sm" type="submit" form={`add-playlist-${platform}`} disabled={adding || !playlistId.trim()}>{adding ? "添加中…" : "添加"}</Button>
+      </>}
+    >
+      <form id={`add-playlist-${platform}`} onSubmit={event => { event.preventDefault(); void addPlaylist(); }}>
+        <label htmlFor={`playlist-id-${platform}`} className="mb-2 block">歌单 ID</label>
+        <input id={`playlist-id-${platform}`} value={playlistId} onChange={event => setPlaylistId(event.target.value)} inputMode="numeric" autoFocus disabled={adding}
+          placeholder="请输入歌单 ID" className="w-full rounded-lg border border-[var(--met-border)] bg-[var(--met-bg)] px-3 py-2 outline-none focus:border-[var(--met-primary)]" />
+      </form>
+    </Dialog>
+  );
 
   // 退出登录二次确认(旧 Login.vue 的 $dialog.warning;compact/完整两形态共用)
   const logoutDialog = (
@@ -267,7 +332,7 @@ function AccountPanel({ compact = false, platform }: { compact?: boolean; platfo
       {/* 数量统计(对照旧 Nav/UserData.vue 统计区:歌单 / 播放) */}
       <div className="mb-1 flex items-center gap-5 px-2 py-1">
         <div className="flex flex-col">
-          <AnimatedNumber value={playlists.length} />
+          <AnimatedNumber value={playlists.length + userPlaylists.length - playlists.slice(1).length} />
           <span className="text-xs text-[var(--met-fg-dim)]">歌单</span>
         </div>
         <div className="flex flex-col">
@@ -288,18 +353,19 @@ function AccountPanel({ compact = false, platform }: { compact?: boolean; platfo
         </button>
       ) : null}
 
-      {/* 我的歌单(可折叠) */}
-      <button
-        type="button"
-        className="mt-1 flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs text-[var(--met-fg-dim)] transition-colors hover:bg-[var(--met-bg-hover)]"
-        onClick={() => setListOpen((v) => !v)}
-      >
-        <span>我的歌单</span>
-        <ChevronDown
-          size={14}
-          className={`transition-transform ${listOpen ? "" : "-rotate-90"}`}
-        />
-      </button>
+      {/* 我的歌单:添加入口与折叠按钮分别操作。 */}
+      <div className="mt-1 flex items-center gap-1 px-2 py-1.5 text-xs text-[var(--met-fg-dim)]">
+        <button type="button" className="flex min-w-0 flex-1 cursor-pointer items-center justify-between" aria-expanded={listOpen} onClick={() => setListOpen(value => !value)}>
+          <span>我的歌单</span>
+        </button>
+        <button type="button" title="添加歌单" aria-label={`添加${platformName(platform)}歌单`} onClick={() => setAddOpen(true)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-primary)]">
+          <Plus size={16} aria-hidden />
+        </button>
+        <button type="button" aria-label={`${listOpen ? "收起" : "展开"}${platformName(platform)}歌单`} aria-expanded={listOpen} onClick={() => setListOpen(value => !value)} className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md hover:bg-[var(--met-bg-hover)]">
+          <ChevronDown size={14} className={`transition-transform ${listOpen ? "" : "-rotate-90"}`} aria-hidden />
+        </button>
+      </div>
+      {addDialog}
       {listOpen ? (
         <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
           {userPlaylists.length ? (
