@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { playbackLevel, songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
@@ -177,6 +178,11 @@ export default function SongList({
   const isInRoom = useStatusStore((s) => s.isInRoom);
   /** 触屏设备:没有双击与 hover,行改为单击即播、行内操作常显 */
   const isTouch = useIsTouch();
+  const [floatingActions, setFloatingActions] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setFloatingActions(document.getElementById("floating-actions"));
+  }, []);
+
   // 用户 VIP 类型(对照旧 userData.detail?.profile?.vipType;11 为黑胶 VIP,不再显示 VIP 徽标)
   const vipType = useSiteDataStore((s) => {
     const profile = (s.userData.detail as { profile?: { vipType?: unknown } }).profile;
@@ -661,16 +667,17 @@ export default function SongList({
       </ul>
 
       {/* 「定位歌曲」浮动按钮(对照旧 scroll-to-song:当前播放行不在视口时显示) */}
-      {hasPlayingRow && !playingRowVisible ? (
+      {hasPlayingRow && !playingRowVisible && floatingActions ? createPortal(
         <button
           type="button"
           aria-label="定位歌曲"
           title="定位歌曲"
           onClick={scrollToPlaying}
-          className="fixed right-6 bottom-[144px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-colors hover:text-[var(--met-primary)] active:scale-95"
+          className="order-1 pointer-events-auto flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-colors hover:text-[var(--met-primary)] active:scale-95"
         >
           <Locate size={20} aria-hidden="true" />
-        </button>
+        </button>,
+        floatingActions,
       ) : null}
 
       {/* 触底哨兵 */}

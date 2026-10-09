@@ -505,19 +505,21 @@ const RootLayout = () => {
         </main>
       </div>
 
-      {/* 回顶按钮(滚动超 400px 浮现;bottom 避让播放条:桌面 90px / 窄屏 114px) */}
-      <button
-        type="button"
-        title="回到顶部"
-        aria-label="回到顶部"
-        tabIndex={showBackTop ? 0 : -1}
-        onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-        className={`fixed right-6 bottom-[90px] max-md:right-4 max-md:bottom-[114px] z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
-          showBackTop ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0"
-        }`}
-      >
-        <ChevronUp className="h-6 w-6" aria-hidden />
-      </button>
+      {/* 共用悬浮操作容器:定位在上、回顶在下,统一间距与安全区。 */}
+      <div id="floating-actions" className="pointer-events-none fixed right-6 bottom-[90px] max-md:right-4 max-md:bottom-[calc(114px+env(safe-area-inset-bottom))] z-30 flex flex-col items-center gap-3">
+        <button
+          type="button"
+          title="回到顶部"
+          aria-label="回到顶部"
+          tabIndex={showBackTop ? 0 : -1}
+          onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          className={`order-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] text-[var(--met-fg)] shadow-lg transition-all duration-300 hover:text-[var(--met-primary)] ${
+            showBackTop ? "pointer-events-auto opacity-100" : "pointer-events-none translate-y-2 opacity-0"
+          }`}
+        >
+          <ChevronUp className="h-6 w-6" aria-hidden />
+        </button>
+      </div>
 
       {/* 顶部路由加载进度条 */}
       <RouteProgress />

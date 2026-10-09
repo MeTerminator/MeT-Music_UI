@@ -4,6 +4,7 @@ import { useMusicStore } from "../../stores/music";
 import { useStatusStore } from "../../stores/status";
 import { useSettingsStore } from "../../stores/settings";
 import KtvLine from "./KtvLine";
+import { useIsTouch } from "@/platform/use-media-query";
 
 /** 统一后的展示行(lrc 直接映射;yrc 附带原始逐字行供 KTV 染色) */
 interface DisplayLine {
@@ -98,12 +99,24 @@ export default function LyricScroll() {
   const lrcMousePause = useSettingsStore((s) => s.lrcMousePause);
   const countDownShow = useSettingsStore((s) => s.countDownShow);
 
+  const isTouch = useIsTouch();
   const containerRef = useRef<HTMLDivElement>(null);
   /** 鼠标悬停时暂停自动滚动(lrcMousePause) */
   const hoverPausedRef = useRef(false);
   /** 手动滚动(滚轮/触摸)后的保持期:自动滚动让位,静置 3s 后恢复 */
   const manualHoldRef = useRef(false);
+  const touchingRef = useRef(false);
   const manualTimerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(manualTimerRef.current), []);
+
+  const resumeAfterIdle = () => {
+    window.clearTimeout(manualTimerRef.current);
+    manualTimerRef.current = window.setTimeout(() => {
+      manualHoldRef.current = false;
+      scrollToLine(useStatusStore.getState().playSongLyricIndex);
+    }, 3000);
+  };
 
   // 视口宽度(移动端响应式字号用,对照旧 Lyric.vue 700px 断点的 vw 字号)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
@@ -192,14 +205,14 @@ export default function LyricScroll() {
   return (
     <div
       ref={containerRef}
-      className="lyric-font h-full w-full overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="lyric-font h-full w-full overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{
         maskImage: LYRIC_MASK,
         WebkitMaskImage: LYRIC_MASK,
         filter: "drop-shadow(0px 4px 6px rgba(0, 0, 0, 0.2))",
       }}
       onMouseEnter={() => {
-        if (lrcMousePause) hoverPausedRef.current = true;
+        if (lrcMousePause && !isTouch) hoverPausedRef.current = true;
       }}
       onMouseLeave={() => {
         hoverPausedRef.current = false;
@@ -209,19 +222,25 @@ export default function LyricScroll() {
       // 静置后回到当前行(点击行跳转会立即清除保持并强制定位)
       onWheel={() => {
         manualHoldRef.current = true;
-        window.clearTimeout(manualTimerRef.current);
-        manualTimerRef.current = window.setTimeout(() => {
-          manualHoldRef.current = false;
-          scrollToLine(useStatusStore.getState().playSongLyricIndex);
-        }, 3000);
+        resumeAfterIdle();
       }}
-      onTouchMove={() => {
+      onTouchStart={() => {
+        hoverPausedRef.current = false;
+        touchingRef.current = true;
         manualHoldRef.current = true;
         window.clearTimeout(manualTimerRef.current);
-        manualTimerRef.current = window.setTimeout(() => {
-          manualHoldRef.current = false;
-          scrollToLine(useStatusStore.getState().playSongLyricIndex);
-        }, 3000);
+      }}
+      onTouchEnd={() => {
+        touchingRef.current = false;
+        resumeAfterIdle();
+      }}
+      onTouchCancel={() => {
+        touchingRef.current = false;
+        resumeAfterIdle();
+      }}
+      onScroll={() => {
+        // 包括触摸结束后的惯性滚动,静置满 3 秒再恢复跟随。
+        if (manualHoldRef.current && !touchingRef.current) resumeAfterIdle();
       }}
     >
       {/* 顶部占位 + 倒计时(前奏等待) */}
@@ -235,7 +254,7 @@ export default function LyricScroll() {
           <div
             key={`${index}-${line.time}`}
             data-lrc-index={index}
-            className={`my-1 flex cursor-pointer flex-col rounded-lg px-4 py-2.5 transition-all duration-300 hover:bg-[rgba(var(--fp-main-rgb,255,255,255),0.08)] hover:opacity-100 hover:![filter:blur(0)] ${alignCls}`}
+            className={`my-1 flex min-h-11 cursor-pointer flex-col rounded-lg px-4 py-2.5 transition-all duration-300 hover:bg-[rgba(var(--fp-main-rgb,255,255,255),0.08)] hover:opacity-100 hover:![filter:blur(0)] ${alignCls}`}
             style={{
               opacity: active ? 1 : 0.32,
               transform: active ? "scale(1)" : "scale(0.86)",

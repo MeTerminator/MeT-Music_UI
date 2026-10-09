@@ -36,21 +36,21 @@ export interface SettingItemProps {
 export const SettingItem = ({ name, tip, dev, column, dimmed, children }: SettingItemProps) => (
   <div
     className={`rounded-lg border border-[var(--met-border)] bg-[var(--met-bg-elevated)] px-5 py-4 ${
-      column ? "flex flex-col gap-3" : "flex flex-row items-center justify-between gap-5"
+      column ? "flex flex-col gap-3" : "flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between md:gap-5"
     } ${dimmed ? "opacity-50" : ""}`}
   >
     <div className="flex min-w-0 flex-col text-[var(--met-fg)]">
-      <div className="flex flex-row items-center gap-1.5 text-base">
-        {name}
+      <div className="flex flex-row flex-wrap items-center gap-1.5 text-base">
+        <span className="min-w-0 break-words">{name}</span>
         {dev && (
           <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--met-bg-hover)] px-2 py-0.5 text-xs text-[var(--met-fg-dim)]">
             开发中
           </span>
         )}
       </div>
-      {tip && <div className="mt-0.5 text-xs leading-5 text-[var(--met-fg-dim)]">{tip}</div>}
+      {tip && <div className="mt-0.5 break-words text-xs leading-5 text-[var(--met-fg-dim)]">{tip}</div>}
     </div>
-    <div className={column ? "w-full" : "shrink-0"}>{children}</div>
+    <div className={column ? "w-full" : "min-w-0 max-md:w-full max-md:[&>button]:min-h-11 max-md:[&>button]:max-w-full max-md:[&>button[role=combobox]]:w-full md:shrink-0"}>{children}</div>
   </div>
 );
 

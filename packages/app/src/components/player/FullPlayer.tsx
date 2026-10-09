@@ -20,6 +20,7 @@ import { DropdownMenu } from "@/components/ui/menu";
 import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
 import LyricScroll from "./LyricScroll";
+import { useLyricTouchGuard } from "./useLyricTouchGuard";
 import PlayerCover from "./PlayerCover";
 import { useSongMoreItems } from "./songMenu";
 
@@ -73,7 +74,7 @@ const LYRIC_VIEW_META: Record<
 
 /** 窄屏顶部条图标按钮(封面主题色前景 + 轻触反馈) */
 const mobileIconBtnCls =
-  "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-[rgba(var(--fp-main-rgb),0.75)] transition-colors active:bg-[rgba(var(--fp-main-rgb),0.14)]";
+  "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-[rgba(var(--fp-main-rgb),0.75)] transition-colors active:bg-[rgba(var(--fp-main-rgb),0.14)]";
 
 /** 歌词视图三态切换的宽度过渡时长与缓动(两栏共用,保证同步) */
 const VIEW_TRANSITION_MS = 520;
@@ -227,6 +228,7 @@ function FullPlayerInner() {
    * 一旦淡出就再也回不来,故这类设备一律不做「静止 2 秒自动隐藏」。
    */
   const isTouch = useIsTouch();
+  const lyricTouchGuard = useLyricTouchGuard();
 
   // ===== 窄屏两页分页(横向 scroll-snap;0=封面页,1=歌词页) =====
   const pagerRef = useRef<HTMLDivElement>(null);
@@ -567,7 +569,7 @@ function FullPlayerInner() {
    * 歌词本体(桌面/窄屏共用):自身撑满,高度由外层容器决定。
    * AM 歌词字号在窄屏收窄(设置项默认 46px 是给桌面大屏的,手机上会溢出)。
    */
-  const lyricNode = !hasLyric ? null : useAM ? (
+  const lyricContent = !hasLyric ? null : useAM ? (
     <div
       className="relative h-full w-full overflow-hidden"
       style={{
@@ -606,6 +608,10 @@ function FullPlayerInner() {
   ) : (
     <LyricScroll />
   );
+
+  const lyricNode = hasLyric ? (
+    <div className="h-full w-full" {...lyricTouchGuard}>{lyricContent}</div>
+  ) : null;
 
   /**
    * 歌曲信息块(标题 / 别名 / 歌手 / 专辑)。
@@ -804,20 +810,18 @@ function FullPlayerInner() {
 
         {/* 页码圆点(点按跳页) */}
         {hasLyric && (
-          <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 py-2">
+          <div className="relative z-20 flex shrink-0 items-center justify-center gap-0">
             {[0, 1].map((i) => (
               <button
                 key={i}
                 type="button"
-                className={`h-1.5 cursor-pointer rounded-full p-0 transition-all ${
-                  page === i
-                    ? "w-5 bg-[rgba(var(--fp-main-rgb),0.9)]"
-                    : "w-1.5 bg-[rgba(var(--fp-main-rgb),0.35)]"
-                }`}
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full"
                 aria-label={i === 0 ? "封面页" : "歌词页"}
                 aria-current={page === i}
                 onClick={() => goPage(i)}
-              />
+              >
+                <span aria-hidden className={`h-1.5 rounded-full transition-all ${page === i ? "w-5 bg-[rgba(var(--fp-main-rgb),0.9)]" : "w-1.5 bg-[rgba(var(--fp-main-rgb),0.35)]"}`} />
+              </button>
             ))}
           </div>
         )}
