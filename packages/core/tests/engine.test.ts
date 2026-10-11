@@ -178,6 +178,25 @@ describe("模拟播放", () => {
     expect(Math.abs(getSeek() - 30)).toBeLessThan(0.5);
     expect(f.status.playSeek).toBeGreaterThanOrEqual(30);
   });
+
+  it("暂停态无歌词区间和重复跳转在状态更新后均通知 UI", async () => {
+    const f = makeFixture();
+    f.music.playSongData = song(1);
+    await initPlayer(false);
+    f.music.playSongLyric = {
+      ...emptyLyric(),
+      lrc: [{ time: 20, content: "首句" }, { time: 100, content: "末句" }],
+    };
+    const positions: Array<[number, number]> = [];
+    f.deps.env.onSeek = () => {
+      positions.push([f.status.playSeekMs, f.status.playSongLyricIndex]);
+    };
+    for (const time of [5, 60, 70, 150, 5, 5]) setSeek(time, true);
+    expect(positions).toEqual([
+      [5000, -1], [60000, 0], [70000, 0], [150000, 1], [5000, -1], [5000, -1],
+    ]);
+    expect(f.status.playState).toBe(false);
+  });
 });
 
 describe("changePlayIndex 队列行为", () => {

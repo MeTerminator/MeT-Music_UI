@@ -53,7 +53,7 @@ $(".music-list").on("click",".icon-play,.icon-download,.icon-share", function() 
         case "download":    // 下载
         	var url = $(this).parents(".list-item").data("url");
         	var title = $(this).parents(".list-item").find(".music-name-cult").text();
-            thisDownload(url,title);
+            thisDownload(url,title,$(this).parents(".list-item"));
         	break;
     }
     return true;
@@ -124,11 +124,18 @@ $(".btn-download").click(function(){
 	var obj = $("#main-list .list-item").eq(krAudio.Currentplay-1); //当前播放对象
 	var url = obj.data("url");
 	var title = obj.find(".music-name-cult").text();
-    thisDownload(url,title);
+    thisDownload(url,title,obj);
 });
 
 // 下载正在播放的这首歌
-function thisDownload(url,title) {
+function thisDownload(url,title,item) {
+	if (!url && item && item.data("platform") === "netease") {
+		resolveClassicSongUrl(item).done(function(resolvedUrl) {
+			thisDownload(resolvedUrl, title);
+		}).fail(function() { loading("获取下载链接失败，请稍后重试。", 5); });
+		return;
+	}
+	if (!url) { loading("该歌曲暂无可用下载链接。", 5); return; }
 	//下载
 	var eledow = dom("downabo");
 	eledow.setAttribute("href",url);
@@ -249,10 +256,65 @@ function isEmpty(val) {
 }
 
 /* 处理返回的json数据用了一点es6的语法 */
+function classicWebRequest(path, params) {
+    return $.ajax({ url: '/api/web' + path, data: params, dataType: 'json', timeout: 15000 }).then(function(data) {
+        if (!data || data.code !== 200) return $.Deferred().reject().promise();
+        return data;
+    });
+}
+
+// QQ 旧接口直接返回播放地址;网易云在选择歌曲时按需解析,避免整张歌单逐首请求。
+function resolveClassicSongUrl(item) {
+    if (item.data('url')) return $.Deferred().resolve(item.data('url')).promise();
+    return classicWebRequest('/song/url/v1', {
+        platform: 'netease', id: item.attr('data-mid'), level: 'standard',
+    }).then(function(data) {
+        var url = data.data && data.data[0] && data.data[0].url;
+        if (!url) return $.Deferred().reject().promise();
+        return url;
+    });
+}
+
+function loadNeteasePlaylist(tid) {
+    var params = { platform: 'netease', id: tid };
+    return classicWebRequest('/playlist/detail', params).then(function(detail) {
+        var total = Number(detail.playlist && detail.playlist.trackCount) || 0;
+        var songs = [];
+        function loadPage(offset) {
+            return classicWebRequest('/playlist/track/all', {
+                platform: 'netease', id: tid, limit: 800, offset: offset,
+            }).then(function(data) {
+                if (!Array.isArray(data.songs)) return $.Deferred().reject().promise();
+                songs = songs.concat(data.songs);
+                if (data.songs.length && offset + 800 < total) return loadPage(offset + 800);
+                return songs.map(function(song) {
+                    return {
+                        title: song.name || '未知歌曲',
+                        author: (song.ar || []).map(function(artist) { return artist.name; }).join(' / '),
+                        album: song.al && song.al.name || '未知专辑',
+                        songid: song.id, songmid: song.id,
+                        pic: song.al && song.al.picUrl || 'images/player_cover.png',
+                        url: '', platform: 'netease',
+                        lrc: '/api/web/lyric/new?' + $.param({ platform: 'netease', id: song.id }),
+                    };
+                });
+            });
+        }
+        return loadPage(0);
+    });
+}
+
+function classicEscape(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function(char) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+    });
+}
+
 function indexSong() {
     // 1. 获取当前页面 URL 中的 tid 参数
     const urlParams = new URLSearchParams(window.location.search);
     const tid = urlParams.get('tid');
+    const platform = urlParams.get('platform') === 'netease' ? 'netease' : 'qq';
 
     // 2. 如果不存在 tid，则返回空（或者进行提示）
     if (!tid) {
@@ -263,14 +325,13 @@ function indexSong() {
     var count = 1;
     loading("加载中...", 500);
 
-    $.ajax({
-        // 3. 动态拼接 tid
-        url: `/api/v1/songlist/url?tid=${tid}`,
-        type: 'GET',
-        dataType: 'json',
-        success: function(data) {
+    const request = platform === 'netease' ? loadNeteasePlaylist(tid) : $.ajax({
+        url: '/api/v1/songlist/url', data: { tid: tid }, dataType: 'json',
+    });
+    request.done(function(data) {
             // 如果后端返回数据为空或不是数组，防御性处理
-            if (!data || !Array.isArray(data)) {
+            if (!Array.isArray(data) || data.length === 0) {
+                krAudio.allItem = 0;
                 mainList.html('<div class="list-item text-center">暂无歌曲数据</div>');
                 tzUtil.animates($("#tzloading"), "slideUp");
                 return;
@@ -284,13 +345,14 @@ function indexSong() {
             
             data.forEach(function(item) {
                 // 使用模板字符串优化拼接
-                item.lrc = `/api/v1/lrc?mid=${item.songmid}`;
-                html += `<div class="list-item" data-url="${item.url}" data-pic="${item.pic}" data-mid="${item.mid}" data-lrc="${item.lrc}">
+                var mid = item.songmid || item.songid;
+                var lrc = item.lrc || '/api/v1/lrc?' + $.param({ mid: mid });
+                html += `<div class="list-item" data-platform="${platform}" data-url="${classicEscape(item.url)}" data-pic="${classicEscape(item.pic)}" data-mid="${classicEscape(mid)}" data-lrc="${classicEscape(lrc)}">
                             <span class="list-num">${count}</span>
                             <span class="list-mobile-menu"></span>
-                            <span class="music-album">${item.album}</span>
-                            <span class="auth-name">${item.author}</span>
-                            <span class="music-name">${item.title}</span>
+                            <span class="music-album">${classicEscape(item.album)}</span>
+                            <span class="auth-name">${classicEscape(item.author)}</span>
+                            <span class="music-name">${classicEscape(item.title)}</span>
                         </div>`;
                 count++;
             });
@@ -305,12 +367,10 @@ function indexSong() {
             appendlistMenu();
             mainList.find(".list-item").click(mobileClickPlay);
             $(".list-mobile-menu").click(mobileListMenu);
-        },
-        error: function() {
+        }).fail(function() {
             loading("加载失败，请稍后重试。", 5);
             tzUtil.animates($("#tzloading"), "slideUp");
-        }
-    });
+        });
 }
 
 

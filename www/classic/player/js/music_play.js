@@ -51,6 +51,7 @@ var krAudio = {
 	Currentplay: 0, //当前播放的序号
 	allItem: 0,  //当前播放列表的总数
 	orderModes: 1, //播放模式，1为列表循环
+	urlRequestId: 0, // 防止异步解析的旧歌曲覆盖新选择或暂停状态
 	changeURL: true, //播放地址改变的标志（意思就是并非当前歌曲暂停后点击播放的标志，就是换了一首歌的意思）
 
 	init: function () {//播放器初始化
@@ -67,11 +68,34 @@ var krAudio = {
 		if (this.Currentplay < 1) this.Currentplay = 1;
 		var currentObject = $("#main-list .list-item").eq(this.Currentplay - 1); //获取当前播放对象
 		var url = currentObject.data("url");
-		this.audioDom.src = url;
+		this.urlRequestId++;
+		this.audioDom.pause();
+		if (url) this.audioDom.src = url;
+		else this.audioDom.removeAttribute("src");
 	},
 
 	//播放
 	play: function () {
+		if (!this.allItem) return;
+		var item = $("#main-list .list-item").eq(this.Currentplay - 1);
+		if (item.data("platform") === "netease" && !item.data("url")) {
+			var self = this;
+			var requestId = ++this.urlRequestId;
+			loading("获取播放链接...", 500);
+			resolveClassicSongUrl(item).done(function(url) {
+				if (requestId !== self.urlRequestId) return;
+				item.data("url", url).attr("data-url", url);
+				self.audioDom.src = url;
+				tzUtil.animates($("#tzloading"), "slideUp");
+				self.play();
+			}).fail(function() {
+				if (requestId !== self.urlRequestId) return;
+				self.stop();
+				item.find(".icon-play").replaceWith(playTag);
+				loading("该歌曲暂无可用播放链接，请选择其他歌曲。", 5);
+			});
+			return;
+		}
 		$(".btn-play").attr("title", "暂停");
 		$(".btn-play").addClass("btn-state-paused");   //恢复暂停按钮样式
 		$("#music-progress .mkpgb-dot").addClass("dot-move");   //增加小点闪烁效果
@@ -101,6 +125,8 @@ var krAudio = {
 
 	//暂停
 	stop: function () {
+		this.urlRequestId++;
+		tzUtil.animates($("#tzloading"), "slideUp");
 		this.audioDom.pause();
 		$(".btn-play").attr("title", "播放");
 		$(".btn-play").removeClass("btn-state-paused");  //取消暂停按钮样式

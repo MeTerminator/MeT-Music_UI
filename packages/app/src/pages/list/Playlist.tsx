@@ -109,14 +109,19 @@ export default function Playlist() {
       key: "open-source",
       label: "打开源页面链接",
       onSelect: () => {
-        if (playlistId != null) window.open(`https://y.qq.com/n/ryqq/playlist/${playlistId}`);
+        if (playlistId != null) window.open(platform === "netease"
+          ? `https://music.163.com/#/playlist?id=${encodeURIComponent(playlistId)}`
+          : `https://y.qq.com/n/ryqq/playlist/${encodeURIComponent(playlistId)}`);
       },
     },
     {
       key: "open-classic",
       label: "打开经典播放器",
       onSelect: () => {
-        if (playlistId != null) window.open(`/classic/player/?tid=${playlistId}`);
+        if (playlistId != null) {
+          const params = new URLSearchParams({ tid: String(playlistId), platform });
+          window.open(`/classic/player/?${params}`);
+        }
       },
     },
   ];

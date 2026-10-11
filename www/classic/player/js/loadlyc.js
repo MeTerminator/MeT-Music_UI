@@ -3,6 +3,7 @@
 var lyricArea = $("#lyric"); // 歌词显示
 var lyricText;
 var lastLyric;
+var lyricRequestId = 0;
 
 // 在歌词区显示提示语
 function lyricTip(str) {
@@ -11,10 +12,18 @@ function lyricTip(str) {
 
 // 歌曲加载完后的回调函数
 function lyricCallback(url) {
+    var requestId = ++lyricRequestId;
+    lyricText = "";
+    lastLyric = -1;
+    lyricTip("歌词加载中...");
     
     $.ajax({  //异步请求获取歌词
         url:url,
         success:function(data){
+            if (requestId !== lyricRequestId) return;
+            // 网易云统一接口返回 JSON,QQ 旧接口返回纯文本。
+            if (data && typeof data === "object") data = data.code === 200 ? data.lrc : "";
+            if (typeof data !== "string") data = "";
 
             if(data == '暂无歌词') {
                 lyricTip('让生活充满音乐');
@@ -41,11 +50,14 @@ function lyricCallback(url) {
                     lyricTip('让生活充满音乐');
                     return false;
                 }
-                if(!txt) txt = "&nbsp;";
-                var li = $("<li data-no='"+i+"' class='lrc-item'>"+txt+"</li>");
+                if(!txt) txt = "\u00a0";
+                var li = $("<li data-no='"+i+"' class='lrc-item'></li>").text(txt);
                 lyricArea.append(li);
                 i++;
             }
+        },
+        error:function(){
+            if (requestId === lyricRequestId) lyricTip('让生活充满音乐');
         }
     });
 }
@@ -94,7 +106,8 @@ function parseLyric(lrc) {
     var lyrics = lrc.split("\n");
     var lrcText = {};
     for(var i=0;i<lyrics.length;i++){
-        var lyric = decodeURIComponent(lyrics[i]);
+        var lyric = lyrics[i];
+        try { lyric = decodeURIComponent(lyric); } catch (_) { /* 原始歌词可包含 % */ }
         var timeReg = /\[\d*:\d*((\.|\:)\d*)*\]/g;
         var timeRegExpArr = lyric.match(timeReg);
         if(!timeRegExpArr)continue;

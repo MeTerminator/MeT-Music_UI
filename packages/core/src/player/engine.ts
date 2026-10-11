@@ -891,6 +891,7 @@ export const setSeek = (seek = 0, isInternal = false): void => {
     // 立即更新时间显示
     setAudioTime();
     justSetSeek();
+    deps.env.onSeek?.();
     syncMediaSessionPosition(true);
     reportPlaybackStatus("play");
     return;
@@ -899,6 +900,7 @@ export const setSeek = (seek = 0, isInternal = false): void => {
   player?.seek(seek);
   setAudioTime(true);
   justSetSeek(true);
+  deps.env.onSeek?.();
   syncMediaSessionPosition(true);
   reportPlaybackStatus("play");
 };

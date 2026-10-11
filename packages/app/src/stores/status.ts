@@ -33,6 +33,8 @@ export interface StatusStoreState {
   playerControlShow: boolean;
   playSeek: number;
   playSeekMs: number;
+  /** 显式跳转序号:同一歌词区间内重复跳转也要重新定位,不持久化。 */
+  playSeekRevision: number;
   /** 音乐资源自动缓存的下载进度(0-100);-1 表示当前没有在下载 */
   songCacheProgress: number;
   hasNextSong: boolean;
@@ -87,6 +89,7 @@ export const useStatusStore = create<StatusStoreState>()(
       playerControlShow: true,
       playSeek: 0,
       playSeekMs: 0,
+      playSeekRevision: 0,
       songCacheProgress: -1,
       hasNextSong: false,
       coverTheme: {},

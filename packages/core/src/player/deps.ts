@@ -135,6 +135,8 @@ export interface PlayerEnv {
    * 应用层在此组装宿主契约 v2 的 HookPayload 并广播,core 不感知契约。
    */
   onTick?(): void;
+  /** 显式跳转完成、进度状态已更新后通知 UI,区别于自然播放 tick。 */
+  onSeek?(): void;
 }
 
 /** 引擎依赖总集 */

@@ -86,6 +86,7 @@ function CountDownDots({ firstTime }: { firstTime: number }) {
 export default function LyricScroll() {
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
   const playSongLyricIndex = useStatusStore((s) => s.playSongLyricIndex);
+  const playSeekRevision = useStatusStore((s) => s.playSeekRevision);
   /** 仅歌词模式:歌词占满全屏,强制居中对齐 */
   const lyricOnly = useStatusStore((s) => s.lyricViewMode === "only");
   const showYrc = useSettingsStore((s) => s.showYrc);
@@ -158,7 +159,9 @@ export default function LyricScroll() {
     // force:用户点击行跳转等明确意图,绕过 hover/手动滚动保持
     if (!force && (hoverPausedRef.current || manualHoldRef.current)) return;
     const container = containerRef.current;
-    const el = container?.querySelector<HTMLElement>(`[data-lrc-index="${index}"]`);
+    // 前奏索引为 -1(不高亮),视口仍须回到首句;尾奏落到最后一句。
+    const targetIndex = Math.max(0, Math.min(index, lines.length - 1));
+    const el = container?.querySelector<HTMLElement>(`[data-lrc-index="${targetIndex}"]`);
     if (!container || !el) return;
     if (lyricsBlock === "center") {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -176,6 +179,13 @@ export default function LyricScroll() {
   useEffect(() => {
     scrollToLine(playSongLyricIndex);
   }, [playSongLyricIndex, lines, lyricOnly, lyricsBlock]);
+
+  // 明确跳转应立即恢复跟随,即使索引没有变化或还在前奏区间。
+  useEffect(() => {
+    manualHoldRef.current = false;
+    window.clearTimeout(manualTimerRef.current);
+    scrollToLine(useStatusStore.getState().playSongLyricIndex, true);
+  }, [playSeekRevision]);
 
   // 翻译/音译对应旧规则:hasLrcTran / hasLrcRoma(yrc 与 lrc 共用该标记)
   const showTranLine = showTransl && playSongLyric.hasLrcTran;

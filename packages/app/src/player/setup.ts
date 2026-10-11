@@ -76,6 +76,9 @@ export const setupPlayer = (): void => {
       // 封面取色:写入 coverBackground(引擎)与 coverTheme(取色实现内部 setState)
       coverGradient: getCoverGradient,
       onTick: broadcastHook,
+      onSeek: () => useStatusStore.setState((state) => ({
+        playSeekRevision: state.playSeekRevision + 1,
+      })),
     },
   });
 

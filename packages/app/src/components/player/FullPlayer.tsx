@@ -410,11 +410,24 @@ function FullPlayerInner() {
   // currentTime 偏移修正(对齐旧 AMLyric.vue 三元):仅 TTML 歌词且开启
   // lyricsAMttmlUseOffset 时叠加 lyricsAMOffset,其余路径用原始 playSeekMs
   const applyAMOffset = useTtml && lyricsAMttmlUseOffset;
+  const playSeekRevision = useStatusStore((s) => s.playSeekRevision);
   // 歌词时间平移(控制条上的 -10ms / +10ms):正值让歌词整体延后,故扣减当前时间
   const amCurrentTime = Math.max(
     0,
     Math.round((applyAMOffset ? playSeekMs + lyricsAMOffset : playSeekMs) - lyricsShiftMs),
   );
+
+  // 进度条/媒体快捷键/一起听跳转都走显式 seek 通路。普通时间更新在
+  // 前奏、间奏或尾奏没有活跃行时不会重新选滚动目标,可能留在旧位置。
+  // 只监听跳转序号,避免自然播放的每一帧都重置用户手动滚动。
+  useEffect(() => {
+    const seekMs = useStatusStore.getState().playSeekMs;
+    const time = Math.max(
+      0,
+      Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
+    );
+    lyricPlayerRef.current?.lyricPlayer?.setCurrentTime(time, true);
+  }, [playSeekRevision, lyricReady, useAM, applyAMOffset, lyricsAMOffset, lyricsShiftMs]);
 
   // 歌词时间平移变更后立即对位:AMLL 暂停时不自行推进时间轴,
   // 不显式 setCurrentTime 就要等下一次播放才看得出平移效果。

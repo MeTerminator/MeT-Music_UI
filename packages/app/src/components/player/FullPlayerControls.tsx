@@ -293,6 +293,7 @@ export default function FullPlayerControls({
                 min={0}
                 max={100}
                 step={0.1}
+                ariaLabel="播放进度"
                 onValueChange={(v) => setDragBar(v)}
                 onValueCommitted={commitSeek}
               />
