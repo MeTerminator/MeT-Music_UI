@@ -19,6 +19,8 @@ export default function SearchLayout() {
   const pathname = useRouterState({ select: s => s.location.pathname });
   const keywords = search.keywords ?? "";
 
+  if (pathname === "/search" || pathname === "/search/") return <Outlet />;
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-8 py-8 max-md:px-4">
       <div className="flex flex-wrap items-center justify-between gap-4">

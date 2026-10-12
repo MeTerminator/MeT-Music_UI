@@ -88,7 +88,7 @@ export const defaultSettings: SettingsState = {
   countDownShow: true,
   bottomLyricShow: true,
   playerBackgroundType: "amllAnimation",
-  amllPlayerBackgroundFlowSpeed: 2,
+  amllPlayerBackgroundFlowSpeed: 1,
   memorySeek: true,
   playSearch: false,
   showPlaylistCount: true,

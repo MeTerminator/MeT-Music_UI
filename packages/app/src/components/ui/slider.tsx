@@ -42,7 +42,7 @@ export const Slider = ({
     <BaseSlider.Control className="flex h-4 w-full cursor-pointer items-center px-[7px] py-1">
       <BaseSlider.Track className="relative h-1 w-full rounded-full bg-[var(--met-border)]">
         <BaseSlider.Indicator className="absolute h-full rounded-full bg-[var(--met-primary)]" />
-        <BaseSlider.Thumb className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-white shadow ring-1 ring-black/15 transition-shadow outline-none data-[dragging]:ring-2 data-[dragging]:ring-[var(--met-primary)] focus-visible:ring-2 focus-visible:ring-[var(--met-primary)]" />
+        <BaseSlider.Thumb aria-label={ariaLabel} className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-white shadow ring-1 ring-black/15 transition-shadow outline-none data-[dragging]:ring-2 data-[dragging]:ring-[var(--met-primary)] focus-visible:ring-2 focus-visible:ring-[var(--met-primary)]" />
       </BaseSlider.Track>
     </BaseSlider.Control>
   </BaseSlider.Root>

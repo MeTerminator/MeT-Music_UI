@@ -242,6 +242,37 @@ const RootLayout = () => {
   const asideMenuExpanded = useStatusStore((s) => s.asideMenuExpanded);
   const isInRoom = useStatusStore((s) => s.isInRoom);
 
+  const headerRef = useRef<HTMLElement | null>(null);
+  const brandRef = useRef<HTMLAnchorElement | null>(null);
+  const brandTitleRef = useRef<HTMLSpanElement | null>(null);
+  const headerSearchRef = useRef<HTMLDivElement | null>(null);
+  const [hideBrandTitle, setHideBrandTitle] = useState(false);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    const brand = brandRef.current;
+    const title = brandTitleRef.current;
+    if (!header || !brand || !title) return;
+    const measure = () => {
+      const style = getComputedStyle(header);
+      const available = header.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const fixed = Array.from(header.children).filter((child) =>
+        child !== brand && child !== headerSearchRef.current &&
+        child.getAttribute("aria-hidden") !== "true" && getComputedStyle(child).display !== "none",
+      );
+      const fixedWidth = fixed.reduce((total, child) => total + child.getBoundingClientRect().width, 0);
+      // 按完整标题计算需求，避免隐藏后又立即恢复导致来回闪动。
+      const brandWidth = 24 + 8 + title.scrollWidth;
+      const gaps = (fixed.length + 1) * parseFloat(style.columnGap);
+      setHideBrandTitle(fixedWidth + brandWidth + 36 + gaps > available);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    for (const child of header.children) observer.observe(child);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+
   // 窄屏抽屉
   const [drawerOpen, setDrawerOpen] = useState(false);
   /**
@@ -288,7 +319,7 @@ const RootLayout = () => {
       {/* 顶栏。桌面宿主的主窗是 frame: false,窗口全靠这里拖动,
           故整条标为 met-drag;内部每个可点元素都要单独 met-no-drag,
           否则会变成「只能拖不能点」(浏览器里这两个类无任何效果)。 */}
-      <header className="met-drag relative flex h-14 shrink-0 items-center gap-2 border-b border-[var(--met-border)] px-4">
+      <header ref={headerRef} className="met-drag relative flex h-14 shrink-0 items-center gap-2 border-b border-[var(--met-border)] px-4">
         {/* 窄屏:汉堡开抽屉 */}
         <button
           type="button"
@@ -300,11 +331,14 @@ const RootLayout = () => {
           <Menu className="h-5 w-5" aria-hidden />
         </button>
         <Link
+          ref={brandRef}
           to="/"
-          className="met-no-drag flex shrink-0 items-center gap-2 text-sm font-bold tracking-wide"
+          aria-label="MeT Music 首页"
+          title="MeT Music"
+          className={`met-no-drag flex shrink-0 items-center text-sm font-bold tracking-wide ${hideBrandTitle ? "" : "gap-2"}`}
         >
           <Logo size={24} />
-          MeT Music
+          <span ref={brandTitleRef} className={`whitespace-nowrap ${hideBrandTitle ? "w-0 overflow-hidden" : ""}`} aria-hidden={hideBrandTitle}>MeT Music</span>
         </Link>
         {/* 前进/后退(旧 MainNav router.go(±1);窄屏下让位给搜索框) */}
         <div className="met-no-drag hidden shrink-0 items-center gap-1 md:flex">
@@ -333,7 +367,7 @@ const RootLayout = () => {
             流内居中会随剩余空间偏移);窄屏保持流内布局 */}
         {/* md:z-40:transform 让本容器成为独立 stacking context,z 必须显式高于
             body 下 z-30 的聚焦遮罩,否则输入框与面板会被全屏模糊盖住 */}
-        <div className="met-no-drag flex min-w-0 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:z-40 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
+        <div ref={headerSearchRef} className="met-no-drag flex min-w-9 flex-1 justify-center md:absolute md:top-1/2 md:left-1/2 md:z-40 md:w-[360px] md:max-w-[calc(100vw-500px)] md:flex-none md:-translate-x-1/2 md:-translate-y-1/2">
           <SearchSuggest />
         </div>
         <div className="met-no-drag flex shrink-0 items-center gap-1">

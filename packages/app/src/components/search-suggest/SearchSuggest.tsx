@@ -19,10 +19,10 @@
  *   <640px 遮罩透明无模糊,对齐旧 <512px 媒体查询意图);
  * - 提交词为 114514 时跳转 /test 彩蛋(旧 toSearch 110 行)。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { api, platformName, type Platform } from "@met/core";
 import {
   Disc,
@@ -93,20 +93,36 @@ const setSearchHistory = (name: string): void => {
   });
 };
 
-const SearchSuggest = () => {
+function SearchPanel({ inline, children }: { inline: boolean; children: ReactNode }) {
+  return inline ? children : createPortal(children, document.body);
+}
+
+const SearchSuggest = ({ page = false }: { page?: boolean }) => {
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [keywords, setKeywords] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(page);
   const [debounced, setDebounced] = useState("");
   const [highlight, setHighlight] = useState(0);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   const searchHistory = useSiteDataStore((s) => s.searchHistory);
   const showSearchHistory = useSettingsStore((s) => s.showSearchHistory);
+
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    if (page || !rootRef.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const collapsed = entry.contentRect.width < 200;
+      setCompact(collapsed);
+      if (collapsed) setOpen(false);
+    });
+    observer.observe(rootRef.current);
+    return () => observer.disconnect();
+  }, [page]);
 
   const kw = keywords.trim();
 
@@ -195,7 +211,7 @@ const SearchSuggest = () => {
 
   // 点击外部关闭(清空历史确认框展示期间豁免:Dialog 为 Portal,位于 rootRef 之外)
   useEffect(() => {
-    if (!open || clearDialogOpen) return;
+    if (page || !open || clearDialogOpen) return;
     const onPointerDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node) && !panelRef.current?.contains(e.target as Node)) {
         setOpen(false);
@@ -203,7 +219,7 @@ const SearchSuggest = () => {
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [open, clearDialogOpen]);
+  }, [page, open, clearDialogOpen]);
 
   const close = () => {
     setOpen(false);
@@ -259,12 +275,12 @@ const SearchSuggest = () => {
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      const entry = open ? flat[highlight] : undefined;
+      const entry = (page || open) ? flat[highlight] : undefined;
       if (entry) selectEntry(entry);
       else goDirectSearch(kw);
       return;
     }
-    if (!open || flat.length === 0) return;
+    if ((!page && !open) || flat.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlight((i) => (i + 1) % flat.length);
@@ -274,27 +290,27 @@ const SearchSuggest = () => {
     }
   };
 
-  const showPanel = open && kw.length >= 1;
+  const showPanel = (page || open) && kw.length >= 1;
   const loading = (isFetching || neteaseQuery.isFetching) && sections.length === 0;
   const empty = !isFetching && !neteaseQuery.isFetching && result !== undefined && sections.length === 0;
 
   // 关键词为空时展示历史和两平台热搜。
   const historyVisible = showSearchHistory && searchHistory.length > 0;
   const showFocusPanel =
-    open && kw.length === 0;
+    (page || open) && kw.length === 0;
 
   return (
     <div
       ref={rootRef}
-      className={`relative w-full transition-[max-width] duration-300 ${
-        open ? "max-w-[360px]" : "max-w-[260px]"
+      className={`relative w-full ${page ? "" : "transition-[max-width] duration-300"} ${
+        page ? "" : open ? "max-w-[360px]" : "max-w-[260px]"
       }`}
     >
       {/* 聚焦遮罩(旧 .search-mask:全屏半透明 + 模糊,点击收起;
           z 低于输入框与下拉面板;<640px 透明无模糊)。
           Portal 到 body:根容器带 transform(顶栏几何居中),fixed 会以其为
           包含块,遮罩会坍缩成搜索框大小的矩形黑块 */}
-      {open &&
+      {!page && !compact && open &&
         createPortal(
           <div
             aria-hidden
@@ -304,14 +320,19 @@ const SearchSuggest = () => {
           document.body,
         )}
       {/* 搜索输入框(z 高于遮罩) */}
-      <div className="relative z-40">
+      {compact && !page ? (
+        <Link to="/search" aria-label="打开搜索页" title="搜索" className="ml-auto flex h-9 w-9 items-center justify-center rounded-full hover:bg-[var(--met-bg-hover)]">
+          <Search className="h-5 w-5" aria-hidden />
+        </Link>
+      ) : <div className="relative z-40">
         <Search
           className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[var(--met-fg-dim)]"
           aria-hidden
         />
         <input
           ref={inputRef}
-          type="text"
+          autoFocus={page}
+          type="search"
           value={keywords}
           role="combobox"
           aria-expanded={showPanel || showFocusPanel}
@@ -325,13 +346,13 @@ const SearchSuggest = () => {
           placeholder="搜索音乐 / 歌手 / 专辑"
           className="h-9 w-full rounded-full border border-[var(--met-border)] bg-[var(--met-bg-elevated)] pr-4 pl-9 text-sm text-[var(--met-fg)] outline-none transition-colors placeholder:text-[var(--met-fg-dim)] focus:border-[var(--met-primary)]"
         />
-      </div>
+      </div>}
 
       {/* 建议下拉面板 */}
-      {showPanel && createPortal(
+      {showPanel && <SearchPanel inline={page}>
         <div ref={panelRef}
           role="listbox"
-          className="met-pop-in fixed top-14 left-1/2 z-40 max-h-[min(60vh,480px)] w-[min(680px,94vw)] -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"
+          className={page ? "mt-4 rounded-xl bg-[var(--met-bg-elevated)] p-2" : "met-pop-in fixed top-14 left-1/2 z-40 max-h-[min(60vh,480px)] w-[min(680px,94vw)] -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-2 shadow-2xl"}
         >
           {/* 直接搜索(固定首行,对齐旧组件 .direct) */}
           <button
@@ -362,7 +383,7 @@ const SearchSuggest = () => {
           )}
 
           {/* 分组建议(按 result.order 渲染) */}
-          <div className="grid grid-cols-2 divide-x divide-[var(--met-border)]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:divide-x divide-[var(--met-border)]">
           {(["qq", "netease"] as const).map(platform => <div key={platform} className="min-w-0 px-1">
             <div className="px-3 py-2 text-sm font-semibold">{platformName(platform)}</div>
             {((platform === "qq" && isFetching) || (platform === "netease" && neteaseQuery.isFetching)) && <p className="px-3 text-xs text-[var(--met-fg-dim)]">加载中…</p>}
@@ -406,12 +427,12 @@ const SearchSuggest = () => {
           })}
           </div>)}
           </div>
-        </div>, document.body
-      )}
+        </div>
+      </SearchPanel>}
 
       {/* 聚焦面板:搜索历史 + 热搜榜(旧 SearchHot.vue,聚焦且关键词为空时) */}
       {showFocusPanel && (
-        <div className="met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-[min(720px,calc(100vw-32px))] -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl">
+        <div className={page ? "mt-4 rounded-xl bg-[var(--met-bg-elevated)] p-3" : "met-pop-in absolute top-11 left-1/2 z-40 max-h-[min(60vh,480px)] w-[min(720px,calc(100vw-32px))] -translate-x-1/2 overflow-y-auto rounded-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-3 shadow-2xl"}>
           {/* 搜索历史 */}
           {historyVisible && (
             <div className="mb-4">
@@ -444,7 +465,7 @@ const SearchSuggest = () => {
           )}
 
           {/* 热搜榜 */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {([{ platform: "qq", items: hotItems }, { platform: "netease", items: neteaseHotItems }] as const).map(({ platform, items }) => (
             <section key={platform} aria-label={`${platformName(platform)}热搜榜`} className="min-w-0">
               <div className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-[var(--met-primary)]">

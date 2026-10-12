@@ -553,7 +553,7 @@ function FullPlayerInner() {
               style={{
                 ...q.pos,
                 filter: "blur(80px) contrast(1.75)",
-                animation: `met-fp-cover-rotate ${q.duration}s linear infinite${
+                animation: `met-fp-cover-rotate ${q.duration * 2 / Math.max(1, amllPlayerBackgroundFlowSpeed)}s linear infinite${
                   q.reverse ? " reverse" : ""
                 }`,
                 // 暂停冻结

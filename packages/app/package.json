@@ -1,6 +1,6 @@
 {
   "name": "@met/app",
-  "version": "7.0.2",
+  "version": "7.0.3",
   "private": true,
   "description": "MeT-Music React SPA(web 版与 Electron renderer 共用)",
   "type": "module",

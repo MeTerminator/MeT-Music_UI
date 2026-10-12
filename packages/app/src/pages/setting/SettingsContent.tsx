@@ -439,6 +439,26 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               className="w-52"
             />
           </SettingItem>
+          <SettingItem
+            name="全屏播放器背景流动速度"
+            column
+            tip={
+              <>
+                <span className="block">调整 AMLL 与流体背景的运动速度，静态背景不受影响</span>
+                <span className="block">{settings.amllPlayerBackgroundFlowSpeed}</span>
+              </>
+            }
+          >
+            <Slider
+              ariaLabel="全屏播放器背景流动速度"
+              value={settings.amllPlayerBackgroundFlowSpeed}
+              min={1}
+              max={10}
+              step={1}
+              onValueChange={(v) => set({ amllPlayerBackgroundFlowSpeed: v })}
+            />
+            <SliderMarks marks={["最小 / 默认 1", "最大 10"]} />
+          </SettingItem>
           <SettingItem name="显示前奏倒计时" tip="部分歌曲前奏可能存在显示错误">
             <Switch
               checked={settings.countDownShow}
@@ -699,25 +719,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
             />
             <SliderMarks marks={["无", "默认 250", "最大"]} />
           </SettingItem>
-          <SettingItem
-            name="Apple Music-like Lyrics 背景流动速度"
-            column
-            tip={
-              <>
-                <span className="block">可以设置 AMLL 歌词背景流动速度</span>
-                <span className="block">{settings.amllPlayerBackgroundFlowSpeed}</span>
-              </>
-            }
-          >
-            <Slider
-              value={settings.amllPlayerBackgroundFlowSpeed}
-              min={1}
-              max={10}
-              step={1}
-              onValueChange={(v) => set({ amllPlayerBackgroundFlowSpeed: v })}
-            />
-            <SliderMarks marks={["最小", "默认 2", "最大"]} />
-          </SettingItem>
+
         </SettingSection>
       </div>
 

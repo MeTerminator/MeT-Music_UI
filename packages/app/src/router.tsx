@@ -37,6 +37,7 @@ import NotFound from "@/pages/state/NotFound";
 import Forbidden from "@/pages/state/Forbidden";
 import ServerError from "@/pages/state/ServerError";
 // —— 以下页面由并行任务实现;文件尚未落地时的 TS2307 属预期 ——
+import SearchStart from "@/pages/search/SearchStart";
 import SearchLayout from "@/pages/search/SearchLayout";
 import SearchSongs from "@/pages/search/Songs";
 import SearchArtists from "@/pages/search/Artists";
@@ -107,7 +108,7 @@ const indexRoute = createRoute({
   component: Home,
 });
 
-// 搜索 /search(重定向 /search/songs,子路由 songs/artists/albums/videos/playlists)
+// 搜索 /search 为搜索入口页，子路由展示分类搜索结果
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/search",
@@ -117,9 +118,7 @@ const searchRoute = createRoute({
 const searchIndexRoute = createRoute({
   getParentRoute: () => searchRoute,
   path: "/",
-  beforeLoad: ({ search }) => {
-    throw redirect({ to: "/search/songs", search });
-  },
+  component: SearchStart,
 });
 const searchSongsRoute = createRoute({
   getParentRoute: () => searchRoute,
