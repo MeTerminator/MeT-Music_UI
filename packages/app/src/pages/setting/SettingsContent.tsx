@@ -637,6 +637,15 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
             />
           </SettingItem>
           <SettingItem
+            name="Apple Music-like Lyrics 模糊未播放行"
+            tip="模糊非当前播放行的歌词，默认关闭"
+          >
+            <Switch
+              checked={settings.useAMBlur}
+              onCheckedChange={(v) => set({ useAMBlur: v })}
+            />
+          </SettingItem>
+          <SettingItem
             name="Apple Music-like Lyrics 歌词弹簧效果"
             tip="是否使用物理弹簧算法实现歌词动画效果，需要高性能设备"
           >

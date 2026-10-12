@@ -51,6 +51,7 @@ export interface SettingsState {
   useAMLyrics: boolean;
   useAMSpring: boolean;
   useAMScale: boolean;
+  useAMBlur: boolean;
   useAMttmlDB: boolean;
   removeInfo: boolean;
   removeAMInfo: boolean;
@@ -106,6 +107,7 @@ export const defaultSettings: SettingsState = {
   useAMLyrics: true,
   useAMSpring: true,
   useAMScale: true,
+  useAMBlur: false,
   useAMttmlDB: true,
   removeInfo: false,
   removeAMInfo: true,

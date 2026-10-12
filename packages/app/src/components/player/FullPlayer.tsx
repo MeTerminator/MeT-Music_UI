@@ -218,7 +218,7 @@ function FullPlayerInner() {
   const useAMSpring = useSettingsStore((s) => s.useAMSpring);
   const useAMScale = useSettingsStore((s) => s.useAMScale);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
-  const lyricsBlur = useSettingsStore((s) => s.lyricsBlur);
+  const useAMBlur = useSettingsStore((s) => s.useAMBlur);
   const lyricsBlock = useSettingsStore((s) => s.lyricsBlock);
 
   /** 窄屏(<768px)走两页式手机布局,与桌面左右分栏 DOM 结构不同,故用 JS 断点分支 */
@@ -612,7 +612,7 @@ function FullPlayerInner() {
           playing={playState}
           enableSpring={useAMSpring}
           enableScale={useAMScale}
-          enableBlur={lyricsBlur}
+          enableBlur={useAMBlur}
           alignPosition={lyricsBlock === "center" ? 0.5 : 0.25}
           onLyricLineClick={onLyricLineClick}
         />
