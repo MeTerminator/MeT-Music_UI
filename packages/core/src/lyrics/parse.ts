@@ -16,6 +16,15 @@ import type { Notifier } from "../types/notify";
 import type { Platform } from "../types/platform";
 import { parseNeteaseLyric } from "./netease";
 
+/**
+ * 创作者信息头:行首为「角色 + 冒号」的信息行,如「词:」「曲:」「编曲:」「制作人:」。
+ * 冒号是强制的,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。
+ */
+const CREDIT_HEADER_RE =
+  /^(作词|作曲|原唱|词|曲|编曲|制作人|音乐制作|出品人|监制|音乐总监|混音|母带|和声|和音|配唱|录音|声乐指导|填词|改编词|原|OP|SP|企划|统筹|发行|商务|营销|宣传|吉他|贝斯|鼓|键盘|弦乐|管乐|打击乐|制作)\s*[:：]/;
+const isCreditHeader = (text: string): boolean =>
+  CREDIT_HEADER_RE.test(text.trim());
+
 /** 解析行为开关(对应旧 siteSettings 中的同名设置项) */
 export interface ParseLyricOptions {
   platform?: Platform;
@@ -476,17 +485,22 @@ export const parseYrcData = (
           })
           .filter((c): c is YrcWord => c !== null);
         if (removeInfo && contentArray.length > 2) {
-          // 创作者信息行没有任何时间信息:行时间戳为 [0,0] 且逐字时长全为 0。
-          // 仅凭「逐字时长全相等」会误杀 AI 生成的机械匀速卡拉 OK 行
-          // (如正文第一句全行每字 198ms)，故必须同时要求无时间信息。
+          // 创作者信息行判定(同时满足才丢,缺一不可):
+          // ① 整行没有任何时间信息(行起止为 0 且逐字时长全 0),必为纯元数据行;
+          // ② 逐字时长完全匀速 且 行首是创作者信息头(词:/曲:/编曲: 等)。
+          // 单独「匀速」会误杀 AI 生成的机械匀速卡拉 OK 正文行,故必须叠加信息头。
           const restDurations = contentArray.slice(1).map((item) => item.duration);
           const hasNoTiming =
             Number(startTime) === 0 &&
             Number(endTime) === 0 &&
             restDurations.every((duration) => duration === 0);
+          const lineContent = contentArray.map((item) => item.content).join("");
+          const uniform =
+            restDurations.length > 0 &&
+            restDurations.every((duration) => duration === restDurations[0]);
 
-          // 如果该行确实没有任何时间信息,则跳过当前元素
-          if (hasNoTiming) {
+          // 如果该行确实是创作者信息行,则跳过当前元素
+          if (hasNoTiming || (uniform && isCreditHeader(lineContent))) {
             return null; // 返回 null 表示跳过当前元素
           }
         }
@@ -530,14 +544,27 @@ export const parseAMData = (
   const lineText = (line?: LyricLine): string =>
     (line?.words ?? []).map((w) => w.word).join("");
 
-  // 信息行判定:整行没有任何时间信息(行起止为 0 且逐字时长全 0)。
-  // 旧判据「逐字时长全相等」会误杀 AI 生成的机械匀速卡拉 OK 行
-  // (如正文第一句全行每字 198ms),故加「无时间信息」限定。
+  // 信息行判定(同时满足才丢,缺一不可):
+  // ① 整行没有任何时间信息(行起止为 0 且逐字时长全 0),必为纯元数据行;
+  // ② 逐字时长完全匀速 且 行首是创作者信息头(词:/曲:/编曲:/制作人: 等)。
+  // 单独「匀速」会误杀 AI 生成的机械匀速卡拉 OK 正文行(如正文第一句全行每字 198ms),
+  // 故必须叠加信息头。
   const isInfoLine = (line: LyricLine): boolean => {
     const words = line.words ?? [];
     if (words.length <= 2) return false;
-    if (line.startTime !== 0 || line.endTime !== 0) return false;
-    return words.slice(1).every((word) => word.endTime - word.startTime === 0);
+    const durations = words.slice(1).map((word) => word.endTime - word.startTime);
+    if (
+      line.startTime === 0 &&
+      line.endTime === 0 &&
+      durations.every((d) => d === 0)
+    ) {
+      return true;
+    }
+    return (
+      durations.length > 0 &&
+      durations.every((d) => d === durations[0]) &&
+      isCreditHeader(lineText(line))
+    );
   };
 
   // 可丢弃的主行:空行,或 removeAMInfo 开启时的信息行
