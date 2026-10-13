@@ -18,10 +18,14 @@ import { parseNeteaseLyric } from "./netease";
 
 /**
  * 创作者信息头:行首为「角色 + 冒号」的信息行,如「词:」「曲:」「编曲:」「制作人:」。
- * 冒号是强制的,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。
+ * 冒号是强制的,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中);
+ * 角色支持「A/B:」复合形式(如「混音/母带:」)。
  */
-const CREDIT_HEADER_RE =
-  /^(作词|作曲|原唱|词|曲|编曲|制作人|音乐制作|出品人|监制|音乐总监|混音|母带|和声|和音|配唱|录音|声乐指导|填词|改编词|原|OP|SP|企划|统筹|发行|商务|营销|宣传|吉他|贝斯|鼓|键盘|弦乐|管乐|打击乐|制作)\s*[:：]/;
+const CREDIT_ROLE =
+  "作词|作曲|原唱|中文填词|说唱填词|填词|改编词|词|曲|编曲|制作人|音乐制作|出品人|监制|音乐总监|项目总监|营销推广|混音|母带|和声|和音|配唱|人声|录音室|录音助理|录音勤务|录音统筹|录音|声乐指导|原|OP|SP|出品|特别鸣谢|歌曲营销|发行统筹|商务统筹|项目企划|企划|统筹|发行|商务|营销|宣传|吉他|贝斯|鼓|键盘|弦乐|管乐|打击乐|制作";
+const CREDIT_HEADER_RE = new RegExp(
+  `^(?:${CREDIT_ROLE})(?:\\s*/\\s*(?:${CREDIT_ROLE}))?\\s*[:：]`,
+);
 const isCreditHeader = (text: string): boolean =>
   CREDIT_HEADER_RE.test(text.trim());
 
@@ -485,22 +489,22 @@ export const parseYrcData = (
           })
           .filter((c): c is YrcWord => c !== null);
         if (removeInfo && contentArray.length > 2) {
-          // 创作者信息行判定(同时满足才丢,缺一不可):
-          // ① 整行没有任何时间信息(行起止为 0 且逐字时长全 0),必为纯元数据行;
-          // ② 逐字时长完全匀速 且 行首是创作者信息头(词:/曲:/编曲: 等)。
-          // 单独「匀速」会误杀 AI 生成的机械匀速卡拉 OK 正文行,故必须叠加信息头。
+          // 创作者信息行判定,满足任一即丢:
+          // ① 行首是创作者信息头(词:/曲:/编曲:/制作人: 等)——正文不可能写成这种格式,
+          //    冒号强制,故无需再要求匀速;
+          // ② 整行没有任何时间信息(行起止为 0 且逐字时长全 0),必为纯元数据行。
+          const lineContent = contentArray.map((item) => item.content).join("");
+          if (isCreditHeader(lineContent)) {
+            return null; // 返回 null 表示跳过当前元素
+          }
           const restDurations = contentArray.slice(1).map((item) => item.duration);
           const hasNoTiming =
             Number(startTime) === 0 &&
             Number(endTime) === 0 &&
             restDurations.every((duration) => duration === 0);
-          const lineContent = contentArray.map((item) => item.content).join("");
-          const uniform =
-            restDurations.length > 0 &&
-            restDurations.every((duration) => duration === restDurations[0]);
 
-          // 如果该行确实是创作者信息行,则跳过当前元素
-          if (hasNoTiming || (uniform && isCreditHeader(lineContent))) {
+          // 如果该行确实没有任何时间信息,则跳过当前元素
+          if (hasNoTiming) {
             return null; // 返回 null 表示跳过当前元素
           }
         }
@@ -523,16 +527,15 @@ export const parseYrcData = (
  * 处理 AM 歌词并适配 LyricLine 和 LyricWord 接口
  * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示
  *
- * 翻译对齐规则(对应 QQ 接口的数据结构):
- * - 翻译数组头部的 "//" 占位与空行只去掉「主数组头部同样会被丢弃」的部分
- *   (取两者较小值):创作者信息行被丢弃时,其 "//" 占位是 junk;信息行被保留
- *   (lrcAM 单字行,或 removeAMInfo=false)时,"//" 是有效的位置占位,必须保留;
- * - 主数组头部的标题行/空行/信息行在逐行处理时按内容丢弃
- *   (不再按固定 slice(1),旧写法在两边 junk 行数不对称时会让所有翻译
- *   系统性错位一行);丢弃的行不消费翻译;
+ * 翻译对齐规则(对应 QQ 接口的数据结构),分两步:
+ * - ① 头部连续丢弃块:翻译侧的 "//" 占位与空行只去掉「主数组头部同样会被丢弃」
+ *   的部分(取两者较小值);② 块外中途被丢弃的信息行逐行同步跳过其翻译占位
+ *   (仍是占位才跳,占位缺失的不对称数据不会吃掉有效翻译)。空行丢弃不同步跳过。
+ *   (不再按固定 slice(1) 去头,旧写法在两边 junk 行数不对称时会让所有翻译
+ *   系统性错位一行)
  * - 之后翻译条目按顺序分配:BG 行(一般是译文本身或和声)不消费翻译,
- *   translatedLyric 置空;其余存活行(含被保留的信息行)各消费一条,
- *   正文区的 "//" 映射为空串。
+ *   translatedLyric 置空;其余存活行各消费一条,正文区的 "//" 映射为空串。
+ *   removeAMInfo=false 时被保留的信息行按位置消费一条翻译(一般为 "//" 占位)。
  * roma 对齐保持原数组下标(roma 与主歌词同构),不受翻译消费顺序影响。
  */
 export const parseAMData = (
@@ -544,26 +547,21 @@ export const parseAMData = (
   const lineText = (line?: LyricLine): string =>
     (line?.words ?? []).map((w) => w.word).join("");
 
-  // 信息行判定(同时满足才丢,缺一不可):
-  // ① 整行没有任何时间信息(行起止为 0 且逐字时长全 0),必为纯元数据行;
-  // ② 逐字时长完全匀速 且 行首是创作者信息头(词:/曲:/编曲:/制作人: 等)。
-  // 单独「匀速」会误杀 AI 生成的机械匀速卡拉 OK 正文行(如正文第一句全行每字 198ms),
-  // 故必须叠加信息头。
+  // 信息行判定,满足任一即丢:
+  // ① 行首是创作者信息头(词:/曲:/编曲:/制作人: 等)——正文不可能写成「角色+冒号」格式,
+  //    冒号强制,故无需再要求匀速;
+  // ② 整行没有任何时间信息(行起止为 0 且逐字时长全 0),必为纯元数据行。
+  // 注意:不能只看「逐字时长匀速」,那会误杀 AI 生成的机械匀速卡拉 OK 正文行
+  // (如正文第一句全行每字 198ms)。
   const isInfoLine = (line: LyricLine): boolean => {
     const words = line.words ?? [];
     if (words.length <= 2) return false;
+    if (isCreditHeader(lineText(line))) return true;
     const durations = words.slice(1).map((word) => word.endTime - word.startTime);
-    if (
+    return (
       line.startTime === 0 &&
       line.endTime === 0 &&
       durations.every((d) => d === 0)
-    ) {
-      return true;
-    }
-    return (
-      durations.length > 0 &&
-      durations.every((d) => d === durations[0]) &&
-      isCreditHeader(lineText(line))
     );
   };
 
@@ -571,8 +569,12 @@ export const parseAMData = (
   const isDroppableMain = (line: LyricLine): boolean =>
     lineText(line).trim() === "" || (removeAMInfo && isInfoLine(line));
 
-  // 翻译数组头部去 junk:创作者信息行对应的 "//" 占位与空行,但不超过
-  // 主数组头部实际会被丢弃的行数(信息行被保留时,"//" 是有效位置占位)
+  // 翻译对齐分两步,对应 QQ 接口的数据结构:
+  // ① 头部连续丢弃块:翻译侧的 "//" 占位与空行只去掉「主数组头部同样会被丢弃」
+  //    的部分(取两者较小值,占位缺失的不对称数据不会吃掉有效翻译);
+  // ② 块外中途被丢弃的信息行:逐行同步跳过其翻译占位(仍是占位才跳)。
+  // 空行丢弃不同步跳过:翻译文件未必为空行留占位,保持透明以避免反向错位。
+  // (曾用固定 slice(1) 去头,两边 junk 行数不对称时会让所有翻译系统性错位一行)
   let maxStrip = 0;
   while (maxStrip < lrcData.length && isDroppableMain(lrcData[maxStrip])) maxStrip++;
   let tranCursor = 0;
@@ -584,6 +586,11 @@ export const parseAMData = (
   ) {
     tranCursor++;
   }
+  const skipTranPlaceholder = (): void => {
+    if (tranCursor >= tranData.length) return;
+    const t = lineText(tranData[tranCursor]).trim();
+    if (t === "" || t === "//") tranCursor++;
+  };
 
   // 顺序消费一条翻译;"//" 表示本行无翻译,条目缺失时兜底空串
   const takeTranslation = (): string => {
@@ -599,8 +606,14 @@ export const parseAMData = (
     const currentRomaWords = romaData?.[index]?.words || [];
     const info = isInfoLine(line);
 
-    // 1. 过滤冗余的 AM 信息行 / 空行:丢弃,不消费翻译
-    if ((info && removeAMInfo) || lineText(line).trim() === "") return null;
+    // 1. 过滤冗余的 AM 信息行 / 空行:丢弃
+    //    头部连续丢弃块的翻译占位已由 maxStrip 预处理(index < maxStrip 的行不再
+    //    同步跳过,避免重复);块外被丢弃的信息行同步跳过其翻译占位(仍是占位才跳),
+    //    空行丢弃不同步跳过(保持透明)。
+    if ((info && removeAMInfo) || lineText(line).trim() === "") {
+      if (info && removeAMInfo && index >= maxStrip) skipTranPlaceholder();
+      return null;
+    }
 
     // 2. 映射 LyricWord 数组
     const words = currentWords.map((wordObj, wordIndex) => {
