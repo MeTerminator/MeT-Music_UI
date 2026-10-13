@@ -199,12 +199,9 @@ export const parseLyric = async (
     result.lrcAM = lrcAM;
 
     if (options.removeAMInfo) {
-      result.yrcAM = parseAMData(
-        qrcParseData.slice(1),
-        ytlrcParseData.slice(1),
-        yromalrcParseData.slice(1),
-        true,
-      );
+      // 头部 junk 行(标题/空行/创作者信息行)由 parseAMData 按内容判定跳过,
+      // 不再按固定 slice(1):两边 junk 行数不对称时 slice 会让翻译系统性错位
+      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, true);
     } else {
       result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false);
     }
@@ -479,12 +476,17 @@ export const parseYrcData = (
           })
           .filter((c): c is YrcWord => c !== null);
         if (removeInfo && contentArray.length > 2) {
-          const allDurationsEqual = contentArray
-            .slice(1)
-            .every((item) => item.duration === contentArray[1].duration);
+          // 创作者信息行没有任何时间信息:行时间戳为 [0,0] 且逐字时长全为 0。
+          // 仅凭「逐字时长全相等」会误杀 AI 生成的机械匀速卡拉 OK 行
+          // (如正文第一句全行每字 198ms)，故必须同时要求无时间信息。
+          const restDurations = contentArray.slice(1).map((item) => item.duration);
+          const hasNoTiming =
+            Number(startTime) === 0 &&
+            Number(endTime) === 0 &&
+            restDurations.every((duration) => duration === 0);
 
-          // 如果所有持续时间相等,则跳过当前元素
-          if (allDurationsEqual) {
+          // 如果该行确实没有任何时间信息,则跳过当前元素
+          if (hasNoTiming) {
             return null; // 返回 null 表示跳过当前元素
           }
         }
@@ -506,6 +508,18 @@ export const parseYrcData = (
 /**
  * 处理 AM 歌词并适配 LyricLine 和 LyricWord 接口
  * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示
+ *
+ * 翻译对齐规则(对应 QQ 接口的数据结构):
+ * - 翻译数组头部的 "//" 占位与空行只去掉「主数组头部同样会被丢弃」的部分
+ *   (取两者较小值):创作者信息行被丢弃时,其 "//" 占位是 junk;信息行被保留
+ *   (lrcAM 单字行,或 removeAMInfo=false)时,"//" 是有效的位置占位,必须保留;
+ * - 主数组头部的标题行/空行/信息行在逐行处理时按内容丢弃
+ *   (不再按固定 slice(1),旧写法在两边 junk 行数不对称时会让所有翻译
+ *   系统性错位一行);丢弃的行不消费翻译;
+ * - 之后翻译条目按顺序分配:BG 行(一般是译文本身或和声)不消费翻译,
+ *   translatedLyric 置空;其余存活行(含被保留的信息行)各消费一条,
+ *   正文区的 "//" 映射为空串。
+ * roma 对齐保持原数组下标(roma 与主歌词同构),不受翻译消费顺序影响。
  */
 export const parseAMData = (
   lrcData: LyricLine[],
@@ -513,28 +527,53 @@ export const parseAMData = (
   romaData: LyricLine[],
   removeAMInfo = true,
 ): AMLine[] => {
-  // 过滤翻译数据中无效的空行
-  const filteredTranData = tranData.filter(
-    (item) => !(item?.words?.length === 1 && item.words[0]?.word === ""),
-  );
+  const lineText = (line?: LyricLine): string =>
+    (line?.words ?? []).map((w) => w.word).join("");
 
-  // 获取整行翻译文本
-  const getTranslationString = (index: number): string => {
-    const lyric = filteredTranData?.[index]?.words?.map((w) => w.word).join("") ?? "";
-    return lyric === "//" ? "" : lyric;
+  // 信息行判定:整行没有任何时间信息(行起止为 0 且逐字时长全 0)。
+  // 旧判据「逐字时长全相等」会误杀 AI 生成的机械匀速卡拉 OK 行
+  // (如正文第一句全行每字 198ms),故加「无时间信息」限定。
+  const isInfoLine = (line: LyricLine): boolean => {
+    const words = line.words ?? [];
+    if (words.length <= 2) return false;
+    if (line.startTime !== 0 || line.endTime !== 0) return false;
+    return words.slice(1).every((word) => word.endTime - word.startTime === 0);
+  };
+
+  // 可丢弃的主行:空行,或 removeAMInfo 开启时的信息行
+  const isDroppableMain = (line: LyricLine): boolean =>
+    lineText(line).trim() === "" || (removeAMInfo && isInfoLine(line));
+
+  // 翻译数组头部去 junk:创作者信息行对应的 "//" 占位与空行,但不超过
+  // 主数组头部实际会被丢弃的行数(信息行被保留时,"//" 是有效位置占位)
+  let maxStrip = 0;
+  while (maxStrip < lrcData.length && isDroppableMain(lrcData[maxStrip])) maxStrip++;
+  let tranCursor = 0;
+  while (
+    tranCursor < maxStrip &&
+    tranCursor < tranData.length &&
+    (lineText(tranData[tranCursor]).trim() === "" ||
+      lineText(tranData[tranCursor]).trim() === "//")
+  ) {
+    tranCursor++;
+  }
+
+  // 顺序消费一条翻译;"//" 表示本行无翻译,条目缺失时兜底空串
+  const takeTranslation = (): string => {
+    const text = lineText(tranData[tranCursor]);
+    tranCursor++;
+    return text.trim() === "//" ? "" : text;
   };
 
   // 处理每一行
   const processLine = (line: LyricLine, index: number, lines: LyricLine[]): AMLine | null => {
     const currentWords = line.words || [];
+    // roma 对齐用原数组下标 index(roma 与主歌词同构),不受翻译消费顺序影响
     const currentRomaWords = romaData?.[index]?.words || [];
+    const info = isInfoLine(line);
 
-    // 1. 过滤冗余的 AM 信息行
-    if (removeAMInfo && currentWords.length > 2) {
-      const timeDifferences = currentWords.slice(1).map((word) => word.endTime - word.startTime);
-      const allDifferencesEqual = timeDifferences.every((diff) => diff === timeDifferences[0]);
-      if (allDifferencesEqual) return null;
-    }
+    // 1. 过滤冗余的 AM 信息行 / 空行:丢弃,不消费翻译
+    if ((info && removeAMInfo) || lineText(line).trim() === "") return null;
 
     // 2. 映射 LyricWord 数组
     const words = currentWords.map((wordObj, wordIndex) => {
@@ -560,9 +599,11 @@ export const parseAMData = (
       lines[index + 1]?.words?.[0]?.startTime ?? words[words.length - 1]?.endTime ?? Infinity;
 
     // 4. 构建符合 LyricLine 接口的对象
+    // BG 行(一般是译文本身或和声)不配翻译,置空;其余行按顺序消费翻译条目
+    // (被保留的信息行也消费一条,与其 "//" 占位位置对应)
     return {
       words: words,
-      translatedLyric: getTranslationString(index),
+      translatedLyric: line.isBG === true ? "" : takeTranslation(),
       romanLyric: "", // 已在 LyricWord 级别处理,整行字符串置空
       startTime: startTime,
       endTime: endTime,

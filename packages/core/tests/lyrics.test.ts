@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { parseLrc, parseQrc } from "@applemusic-like-lyrics/lyric";
 import {
+  parseAMData,
   parseLyric,
   parseLocalLrc,
   parseLrcData,
@@ -8,7 +10,7 @@ import {
   type ParseLyricOptions,
 } from "../src/lyrics/parse";
 import { computeWordProgress } from "../src/lyrics/word-progress";
-import type { YrcLine } from "../src/types/song";
+import type { AMLine, YrcLine } from "../src/types/song";
 
 const defaultOptions: ParseLyricOptions = { removeInfo: false, removeAMInfo: false };
 
@@ -53,6 +55,54 @@ describe("翻译对齐 (parseLyric lrc + tlyric)", () => {
   });
 });
 
+describe("parseAMData 信息行过滤与翻译对齐", () => {
+  // 贴近真实 QQ QRC 的结构:标题行/空行/创作者信息行(均为零时长) +
+  // 正文第一句(匀速卡拉 OK,逐字时长全相等) + 交错的 BG 翻译行;
+  // 翻译文件头部是创作者行对应的 "//" 占位
+  const QRC_AM = [
+    "[0,0]歌(0,0)名(0,0)-(0,0)手(0,0)",
+    "[0,0](0,0)",
+    "[0,0]作(0,0)词(0,0):(0,0)某(0,0)某(0,0)",
+    "[0,2178]This (0,198)is (198,198)a (396,198)test (594,198)",
+    "[2385,2160](你(2385,216)是(2601,216)测(2817,216)试(3033,216))(3249,216)",
+    "[4770,2000]What (4770,330)is (5100,150)this (5250,450)",
+  ].join("\n");
+  const TRAN_AM = ["[00:00.00]//", "[00:00.16]//", "[00:00.97]你是一个测试", "[00:05.05]这是什么"].join(
+    "\n",
+  );
+  const amText = (l: AMLine) => l.words.map((w) => w.word).join("");
+
+  it("匀速正文行保留、创作者行丢弃、翻译按行对齐", () => {
+    const lines = parseAMData(parseQrc(QRC_AM), parseLrc(TRAN_AM), [], true);
+    expect(lines).toHaveLength(3);
+    // 正文第一句(全行 198ms 匀速)必须保留,不再被误判为信息行
+    expect(amText(lines[0])).toBe("This is a test ");
+    // 翻译与主行按顺序一一对应,不再整体错位一行
+    expect(lines[0].translatedLyric).toBe("你是一个测试");
+    // BG 翻译行本身即译文,不再配翻译(也不挤占翻译位置)
+    expect(amText(lines[1])).toBe("你是测试");
+    expect(lines[1].translatedLyric).toBe("");
+    expect(amText(lines[2])).toBe("What is this ");
+    expect(lines[2].translatedLyric).toBe("这是什么");
+  });
+
+  it("removeAMInfo=false 时信息行保留但不挤占翻译位置", () => {
+    const lines = parseAMData(parseQrc(QRC_AM), parseLrc(TRAN_AM), [], false);
+    const texts = lines.map(amText);
+    // 标题行与创作者行保留(旧 false 分支本就不 slice),翻译置空且不挤占位置
+    expect(texts[0]).toBe("歌名-手");
+    expect(lines[0].translatedLyric).toBe("");
+    expect(texts[1]).toContain("作词");
+    expect(lines[1].translatedLyric).toBe("");
+    expect(texts[2]).toBe("This is a test ");
+    expect(lines[2].translatedLyric).toBe("你是一个测试");
+    expect(texts[3]).toBe("你是测试");
+    expect(lines[3].translatedLyric).toBe("");
+    expect(texts[4]).toBe("What is this ");
+    expect(lines[4].translatedLyric).toBe("这是什么");
+  });
+});
+
 describe("parseYrcData", () => {
   it("解析 QRC 行头与逐字时间戳(圆括号先替换为花括号)", () => {
     const result = parseYrcData(QRC, false);
@@ -69,11 +119,14 @@ describe("parseYrcData", () => {
     expect(result[1].content.map((w) => w.content).join("")).toBe("信息行");
   });
 
-  it("removeInfo=true 时,字数 >2 且第 2 字起持续时间全等的行被丢弃", () => {
+  it("removeInfo=true 时,有真实时间轴的匀速行不再被误判为信息行", () => {
     const result = parseYrcData(QRC, true);
-    // 第二行 3 个字持续时间均为 400ms,被判定为信息行丢弃;第一行仅 2 字,保留
-    expect(result).toHaveLength(1);
+    // 第二行 3 个字持续时间均为 400ms,但行时间戳 [3000,2000] 有真实时间轴:
+    // 旧启发式「逐字时长全相等即信息行」会把它误杀,正文第一句就是这么丢的。
+    // 修正后只有「整行没有任何时间信息」的行才会被丢弃;第一行仅 2 字,保留
+    expect(result).toHaveLength(2);
     expect(result[0].time).toBe(0.6);
+    expect(result[1].time).toBe(3);
   });
 
   it("缺少 [offset:0] 前缀时安全返回空数组", () => {
