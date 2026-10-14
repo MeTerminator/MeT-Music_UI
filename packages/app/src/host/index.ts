@@ -15,6 +15,7 @@ import {
   changePlayIndex,
   computeWordProgress,
   getSeek,
+  getTtmlCurrentLyric,
   playOrPause,
   refreshPlayProgress,
   setSeek,
@@ -49,6 +50,18 @@ export const useHostStore = create<HostState>()(() => ({
   windowMaximized: false,
 }));
 
+/** TTML 的行选择与逐字进度共用全屏播放器的时间平移语义。 */
+const getHostTtmlLyric = (currentTime: number) => {
+  const lyric = useMusicStore.getState().playSongLyric;
+  if (!lyric.hasTtml || !lyric.ttml?.length) return null;
+  const settings = useSettingsStore.getState();
+  const timeMs = Math.max(0, Math.round(
+    currentTime * 1000 + (settings.lyricsAMttmlUseOffset ? settings.lyricsAMOffset : 0)
+    - settings.lyricsShiftMs,
+  ));
+  return getTtmlCurrentLyric(lyric.ttml, timeMs);
+};
+
 /** 组装 HookPayload(旧 updateHookData 逻辑 + contractVersion 字段) */
 export const buildHookPayload = (): HookPayload | null => {
   const status = useStatusStore.getState();
@@ -77,12 +90,15 @@ export const buildHookPayload = (): HookPayload | null => {
   });
 
   try {
-    // 与引擎同款 lrcType 分支:有逐字歌词且开启逐字显示时用 yrc,否则回退 lrc
-    const useYrc = settings.showYrc && music.playSongLyric.hasYrc;
+    // 已加载 TTML 时优先发主唱/对唱；否则逐字开启时用 yrc，再回退 lrc。
+    const ttml = getHostTtmlLyric(currentTime);
+    const useYrc = settings.showYrc && music.playSongLyric.hasYrc && music.playSongLyric.yrc.length > 0;
     let lyricText = "";
     let lyricTrans = "";
     let lyricData: ReturnType<typeof computeWordProgress> = [];
-    if (useYrc) {
+    if (ttml) {
+      ({ lyricText, lyricTrans, lyricData } = ttml);
+    } else if (useYrc) {
       const lrcData = music.playSongLyric.yrc[status.playSongLyricIndex];
       lyricText = lrcData ? lrcData.content.map((i) => i.content).join("") : "";
       lyricTrans = lrcData ? lrcData.tran ?? "" : "";
@@ -164,6 +180,7 @@ export const buildNowPlaying = (): NowPlaying => {
   const useYrc = settings.showYrc && lyric.hasYrc && lyric.yrc.length > 0;
   const lines: Array<{ content: unknown; tran?: string }> = useYrc ? lyric.yrc : lyric.lrc;
   const line = lines[status.playSongLyricIndex];
+  const ttml = getHostTtmlLyric(getSeek());
   const lyricText = !line
     ? ""
     : Array.isArray(line.content)
@@ -182,10 +199,10 @@ export const buildNowPlaying = (): NowPlaying => {
       : (artists as string) || "未知歌手",
     album: typeof album === "string" ? album : album?.name,
     cover: song?.coverSize?.l ?? song?.cover,
-    lyricAvailable: lines.length > 0,
-    lyricLineCount: lines.length,
-    lyricText,
-    lyricTrans: line?.tran ?? "",
+    lyricAvailable: ttml ? lyric.ttml!.some((line) => !line.isBG && line.words.length > 0) : lines.length > 0,
+    lyricLineCount: ttml ? lyric.ttml!.filter((line) => !line.isBG && line.words.length > 0).length : lines.length,
+    lyricText: ttml?.lyricText ?? lyricText,
+    lyricTrans: ttml?.lyricTrans ?? line?.tran ?? "",
   };
 };
 

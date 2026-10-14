@@ -11,6 +11,7 @@ export * from "./lib/format";
 export * from "./lyrics/parse";
 export * from "./lyrics/amll-timestamps";
 export * from "./lyrics/word-progress";
+export * from "./lyrics/ttml-current-line";
 
 export * as api from "./api/index";
 
