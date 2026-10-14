@@ -71,6 +71,12 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     "\n",
   );
   const amText = (l: AMLine) => l.words.map((w) => w.word).join("");
+  const timedQrcLine = (text: string, start: number, wordDuration = 200): string => {
+    const characters = Array.from(text);
+    return `[${start},${characters.length * wordDuration}]${characters
+      .map((character, index) => `${character}(${start + index * wordDuration},${wordDuration})`)
+      .join("")}`;
+  };
 
   it("匀速正文行保留、创作者行丢弃、翻译按行对齐", () => {
     const lines = parseAMData(parseQrc(QRC_AM), parseLrc(TRAN_AM), [], true);
@@ -101,6 +107,61 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     expect(texts[4]).toBe("What is this ");
     expect(lines[4].translatedLyric).toBe("这是什么");
   });
+
+  it.each(["词曲:张三", "Producer:X", "作詞:山田", "編曲／混音:李四", "mixed by: Y"])(
+    "移除有真实时间轴的创作者信息行并保持翻译对齐: %s",
+    (credit) => {
+      const source = [timedQrcLine(credit, 1000), timedQrcLine("真实歌词", 5000)].join("\n");
+      const translation = parseLrc("[00:01.00]//\n[00:05.00]正确翻译");
+      const lines = parseAMData(parseQrc(source), translation, [], true);
+
+      expect(lines).toHaveLength(1);
+      expect(amText(lines[0])).toBe("真实歌词");
+      expect(lines[0].translatedLyric).toBe("正确翻译");
+    },
+  );
+
+  it("不带冒号的正文不会因角色前缀被误删", () => {
+    const source = [
+      timedQrcLine("词穷了", 1000),
+      timedQrcLine("Producer of dreams", 3000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["词穷了", "Producer of dreams"]);
+  });
+
+  it("移除开头的 1–2 字零时长标题行", () => {
+    const source = ["[0,0]晴(0,0)天(0,0)", timedQrcLine("第一句", 1000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(amText(lines[0])).toBe("第一句");
+  });
+
+  const midBlockQrc = [
+    "[0,0]晴(0,0)天(0,0)",
+    timedQrcLine("第一句", 1000),
+    "[3000,1000]制(3000,200)作(3200,200)人(3400,200):(3600,200)某(3800,200)",
+    timedQrcLine("第二句", 5000),
+  ].join("\n");
+
+  it("中段信息行有占位时跳过占位并保持翻译对齐", () => {
+    const translation = parseLrc(
+      "[00:00.00]//\n[00:01.00]翻译一\n[00:03.00]//\n[00:05.00]翻译二",
+    );
+    const lines = parseAMData(parseQrc(midBlockQrc), translation, [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句", "第二句"]);
+    expect(lines.map((line) => line.translatedLyric)).toEqual(["翻译一", "翻译二"]);
+  });
+
+  it("中段信息行没有占位时不跳过后续有效翻译", () => {
+    const translation = parseLrc("[00:00.00]//\n[00:01.00]翻译一\n[00:05.00]翻译二");
+    const lines = parseAMData(parseQrc(midBlockQrc), translation, [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句", "第二句"]);
+    expect(lines.map((line) => line.translatedLyric)).toEqual(["翻译一", "翻译二"]);
+  });
 });
 
 describe("parseYrcData", () => {
@@ -127,6 +188,15 @@ describe("parseYrcData", () => {
     expect(result).toHaveLength(2);
     expect(result[0].time).toBe(0.6);
     expect(result[1].time).toBe(3);
+  });
+
+  it("removeInfo=true 时移除只有两个字词的信息行", () => {
+    const result = parseYrcData(
+      "[offset:0]\n[5000,600]词:(5000,300)甲(5300,300)\n",
+      true,
+    );
+
+    expect(result).toEqual([]);
   });
 
   it("缺少 [offset:0] 前缀时安全返回空数组", () => {
