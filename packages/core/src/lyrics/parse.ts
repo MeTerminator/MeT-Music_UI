@@ -16,11 +16,7 @@ import type { Notifier } from "../types/notify";
 import type { Platform } from "../types/platform";
 import { parseNeteaseLyric } from "./netease";
 
-/**
- * 创作者信息头:行首为「角色 + 冒号」的信息行,如「词:」「曲:」「编曲:」「制作人:」。
- * 冒号是强制的,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中);
- * 角色支持「A/B:」复合形式及空格连接的中英双语形式(如「词 Lyricist:」),分隔符可为 /、／、& 或空格。
- */
+/** 角色后必须有冒号,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。 */
 const CREDIT_ROLES: string[] = [
   // 词曲作者
   "作词",
@@ -67,9 +63,11 @@ const CREDIT_ROLES: string[] = [
   "声乐指导",
   "配乐",
   "音频编辑",
+  "剪辑",
   "音乐编辑",
   "母帶",
   "錄音",
+  "剪輯",
   "和聲",
   // 演奏
   "乐队",
@@ -156,6 +154,8 @@ const CREDIT_ROLES: string[] = [
   "Coordinator",
 ];
 const CREDIT_ROLE_PREFIXES = [
+  "音频",
+  "音頻",
   "总",
   "總",
   "大",
@@ -189,6 +189,7 @@ const CREDIT_ROLE_SUFFIXES = [
   "師",
   "工程师",
   "工程師",
+  "管理",
   "后期",
   "後期",
   "室",
@@ -219,16 +220,44 @@ const CREDIT_ROLE_SUFFIXES = [
   "人",
   "方",
 ];
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const alt = (values: string[]): string =>
-  [...new Set(values)].sort((a, b) => b.length - a.length).map(escapeRegExp).join("|");
-const ROLE_PART =
-  `(?:${alt(CREDIT_ROLE_PREFIXES)})?(?:${alt(CREDIT_ROLES)})(?:${alt(CREDIT_ROLE_SUFFIXES)})*`;
+const lowerSet = (values: string[]): string[] => [...new Set(values.map((v) => v.toLowerCase()))];
+const PREFIX_TOKENS = lowerSet(CREDIT_ROLE_PREFIXES);
+const ROLE_TOKENS = lowerSet(CREDIT_ROLES);
+const SUFFIX_TOKENS = lowerSet(CREDIT_ROLE_SUFFIXES);
 const COPYRIGHT_NOTICE_RE = /未[经經].*[许許]可.*(?:不得|禁止)/;
-const CREDIT_HEADER_RE = new RegExp(
-  `^(?:${ROLE_PART})(?:(?:\\s*[/／&]\\s*|\\s+)(?:${ROLE_PART}))*\\s*[:：]`,
-  "i",
-);
+/**
+ * 冒号前的部分能否完整切分为「[前缀]角色[后缀…]」单元序列;单元之间可用 /、／、&、空格分隔或直接连写。
+ * 按位置推进状态集合匹配,避免正则在连写角色上回溯爆炸。
+ */
+const isCreditHeader = (text: string): boolean => {
+  const match = /^([^:：]+)[:：]/.exec(text);
+  if (!match) return false;
+  const head = match[1].trimEnd().toLowerCase();
+  const n = head.length;
+  const unitStart = new Set<number>([0]);
+  const afterPrefix = new Set<number>();
+  const afterRole = new Set<number>();
+  const advance = (from: number, tokens: string[], into: Set<number>): void => {
+    for (const token of tokens) if (head.startsWith(token, from)) into.add(from + token.length);
+  };
+  for (let i = 0; i <= n; i++) {
+    if (afterRole.has(i)) {
+      if (i === n) return true;
+      advance(i, SUFFIX_TOKENS, afterRole);
+      let j = i;
+      while (j < n && /\s/.test(head[j])) j++;
+      if (j < n && "/／&".includes(head[j])) {
+        j++;
+        while (j < n && /\s/.test(head[j])) j++;
+      }
+      unitStart.add(i);
+      unitStart.add(j);
+    }
+    if (unitStart.has(i)) advance(i, PREFIX_TOKENS, afterPrefix);
+    if (unitStart.has(i) || afterPrefix.has(i)) advance(i, ROLE_TOKENS, afterRole);
+  }
+  return false;
+};
 interface InfoLineInput {
   text: string;
   isFirstContent: boolean;
@@ -246,7 +275,7 @@ const isInfoLine = ({
 }: InfoLineInput): boolean => {
   const trimmed = text.trim();
   return (
-    CREDIT_HEADER_RE.test(trimmed) ||
+    isCreditHeader(trimmed) ||
     COPYRIGHT_NOTICE_RE.test(trimmed) ||
     (isFirstContent && startTime === 0 && /\s-\s/.test(text)) ||
     (startTime === 0 && endTime === 0 && restDurations.every((d) => d === 0))

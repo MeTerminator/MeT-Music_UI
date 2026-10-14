@@ -126,6 +126,9 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     "母带处理工程师：赵靖",
     "总策划/监制：李静楠",
     "混音室：@SBMS",
+    "配唱制作人：吴青峰/陈君豪",
+    "音频剪辑：叶育轩/陈君豪",
+    "词曲版权管理：索尼音乐版权代理（北京）有限公司",
   ])(
     "移除有真实时间轴的创作者信息行并保持翻译对齐: %s",
     (credit) => {
@@ -242,6 +245,15 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     const lines = parseAMData(parseQrc(source), [], [], true);
 
     expect(lines.map(amText)).toEqual(["第一句", "A - B"]);
+  });
+
+  it("超长连写角色串不会卡住解析", () => {
+    const first = "词曲".repeat(500);
+    const second = `${first}x：y`;
+    const source = [timedQrcLine(first, 1000), timedQrcLine(second, 3000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual([first, second]);
   });
 });
 
