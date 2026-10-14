@@ -42,8 +42,6 @@ const CREDIT_ROLES: string[] = [
   // 制作
   "总制作人",
   "联合制作人",
-  "制作助理",
-  "制作人",
   "音乐制作",
   "监制",
   "音乐总监",
@@ -54,33 +52,24 @@ const CREDIT_ROLES: string[] = [
   "制作",
   "總製作人",
   "聯合製作人",
-  "製作人",
   "製作",
   "音樂製作",
   "監製",
   // 录混
-  "混音师",
   "混音",
-  "母带工程师",
   "母带",
   "和声",
   "和音",
   "配唱",
   "人声",
-  "录音室",
-  "录音助理",
   "录音勤务",
-  "录音统筹",
-  "录音师",
   "录音",
   "声乐指导",
   "配乐",
   "音频编辑",
   "音乐编辑",
-  "混音師",
   "母帶",
   "錄音",
-  "錄音師",
   "和聲",
   // 演奏
   "乐队",
@@ -97,7 +86,6 @@ const CREDIT_ROLES: string[] = [
   "鍵盤",
   "弦樂",
   // 发行宣传
-  "出品人",
   "出品",
   "特别鸣谢",
   "歌曲营销",
@@ -107,8 +95,6 @@ const CREDIT_ROLES: string[] = [
   "運營",
   "推广",
   "推廣",
-  "发行统筹",
-  "商务统筹",
   "项目企划",
   "企划",
   "统筹",
@@ -151,7 +137,6 @@ const CREDIT_ROLES: string[] = [
   "Recording",
   "Recorded by",
   "Recording Engineer",
-  "Vocal Producer",
   "Vocal Director",
   "Backing Vocals",
   "Vocal",
@@ -244,8 +229,29 @@ const CREDIT_HEADER_RE = new RegExp(
   `^(?:${ROLE_PART})(?:(?:\\s*[/／&]\\s*|\\s+)(?:${ROLE_PART}))*\\s*[:：]`,
   "i",
 );
-const isCreditHeader = (text: string): boolean =>
-  CREDIT_HEADER_RE.test(text.trim());
+interface InfoLineInput {
+  text: string;
+  isFirstContent: boolean;
+  startTime: number;
+  endTime: number;
+  restDurations: number[];
+}
+/** 信息行:角色头 / 版权声明 / 首行「 - 」标题 / 整行无时间。不看匀速,见 parseAMData 注释。 */
+const isInfoLine = ({
+  text,
+  isFirstContent,
+  startTime,
+  endTime,
+  restDurations,
+}: InfoLineInput): boolean => {
+  const trimmed = text.trim();
+  return (
+    CREDIT_HEADER_RE.test(trimmed) ||
+    COPYRIGHT_NOTICE_RE.test(trimmed) ||
+    (isFirstContent && startTime === 0 && /\s-\s/.test(text)) ||
+    (startTime === 0 && endTime === 0 && restDurations.every((d) => d === 0))
+  );
+};
 
 /** 解析行为开关(对应旧 siteSettings 中的同名设置项) */
 export interface ParseLyricOptions {
@@ -711,28 +717,16 @@ export const parseYrcData = (
           const lineContent = contentArray.map((item) => item.content).join("");
           const isFirstContentLine = !seenContent;
           seenContent = true;
-          if (isCreditHeader(lineContent)) {
-            return null; // 返回 null 表示跳过当前元素
-          }
-          if (COPYRIGHT_NOTICE_RE.test(lineContent.trim())) {
-            return null;
-          }
           if (
-            isFirstContentLine &&
-            Number(startTime) === 0 &&
-            /\s-\s/.test(lineContent)
+            isInfoLine({
+              text: lineContent,
+              isFirstContent: isFirstContentLine,
+              startTime: Number(startTime),
+              endTime: Number(endTime),
+              restDurations: contentArray.slice(1).map((item) => item.duration),
+            })
           ) {
             return null;
-          }
-          const restDurations = contentArray.slice(1).map((item) => item.duration);
-          const hasNoTiming =
-            Number(startTime) === 0 &&
-            Number(endTime) === 0 &&
-            restDurations.every((duration) => duration === 0);
-
-          // 如果该行确实没有任何时间信息,则跳过当前元素
-          if (hasNoTiming) {
-            return null; // 返回 null 表示跳过当前元素
           }
         }
         // 返回当前行解析出的时间信息和歌词内容信息
@@ -752,23 +746,11 @@ export const parseYrcData = (
 
 /**
  * 处理 AM 歌词并适配 LyricLine 和 LyricWord 接口
- * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示
+ * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示。
  *
- * 信息行判定不设字数门槛:①行首为创作者信息头(角色后必须有冒号);②整行没有任何
- * 时间信息(行起止为 0 且逐字时长全 0);③未经许可的版权声明;④首个非空内容行从
- * 0ms 开始且含「 - 」的标题行。不能只看逐字时长匀速,否则会误杀 AI 生成的机械
- * 匀速卡拉 OK 正文行(如正文第一句全行每字 198ms)。
- *
- * 翻译对齐规则(对应 QQ 接口的数据结构),分两步:
- * - ① 头部连续丢弃块:翻译侧的 "//" 占位与空行只去掉「主数组头部同样会被丢弃」
- *   的部分(取两者较小值);② 块外中途被丢弃的信息行逐行同步跳过其翻译占位
- *   (仍是占位才跳,占位缺失的不对称数据不会吃掉有效翻译)。空行丢弃不同步跳过。
- *   (不再按固定 slice(1) 去头,旧写法在两边 junk 行数不对称时会让所有翻译
- *   系统性错位一行)
- * - 之后翻译条目按顺序分配:BG 行(一般是译文本身或和声)不消费翻译,
- *   translatedLyric 置空;其余存活行各消费一条,正文区的 "//" 映射为空串。
- *   removeAMInfo=false 时被保留的信息行按位置消费一条翻译(一般为 "//" 占位)。
- * roma 对齐保持原数组下标(roma 与主歌词同构),不受翻译消费顺序影响。
+ * 信息行规则见 isInfoLine:角色头、版权声明、首行「 - 」标题和整行无时间,不看匀速。
+ * 翻译对齐:头部丢弃块按 min() 剥离占位;中段信息行仅在占位时跳过;BG 不消费翻译,
+ * 「//」映射为空串,roma 按原下标对齐,removeAMInfo=false 时信息行按位置消费一条翻译。
  */
 export const parseAMData = (
   lrcData: LyricLine[],
@@ -778,44 +760,38 @@ export const parseAMData = (
 ): AMLine[] => {
   const lineText = (line?: LyricLine): string =>
     (line?.words ?? []).map((w) => w.word).join("");
+  const isTranPlaceholder = (line?: LyricLine): boolean => {
+    const t = lineText(line).trim();
+    return t === "" || t === "//";
+  };
 
   const firstContentIndex = lrcData.findIndex((line) => lineText(line).trim() !== "");
-  const isInfoLine = (line: LyricLine, index: number): boolean => {
-    const text = lineText(line);
-    const words = line.words ?? [];
-    if (isCreditHeader(text)) return true;
-    if (COPYRIGHT_NOTICE_RE.test(text.trim())) return true;
-    if (index === firstContentIndex && line.startTime === 0 && /\s-\s/.test(text)) {
-      return true;
-    }
-    const durations = words.slice(1).map((word) => word.endTime - word.startTime);
-    return (
-      line.startTime === 0 &&
-      line.endTime === 0 &&
-      durations.every((d) => d === 0)
-    );
-  };
+  const isInfo = (line: LyricLine, index: number): boolean =>
+    isInfoLine({
+      text: lineText(line),
+      isFirstContent: index === firstContentIndex,
+      startTime: line.startTime,
+      endTime: line.endTime,
+      restDurations: (line.words ?? []).slice(1).map((word) => word.endTime - word.startTime),
+    });
 
   // 可丢弃的主行:空行,或 removeAMInfo 开启时的信息行
   const isDroppableMain = (line: LyricLine, index: number): boolean =>
-    lineText(line).trim() === "" || (removeAMInfo && isInfoLine(line, index));
+    lineText(line).trim() === "" || (removeAMInfo && isInfo(line, index));
 
-  // 翻译头部占位与丢弃行同步规则见函数注释。
   let maxStrip = 0;
   while (maxStrip < lrcData.length && isDroppableMain(lrcData[maxStrip], maxStrip)) maxStrip++;
   let tranCursor = 0;
   while (
     tranCursor < maxStrip &&
     tranCursor < tranData.length &&
-    (lineText(tranData[tranCursor]).trim() === "" ||
-      lineText(tranData[tranCursor]).trim() === "//")
+    isTranPlaceholder(tranData[tranCursor])
   ) {
     tranCursor++;
   }
   const skipTranPlaceholder = (): void => {
     if (tranCursor >= tranData.length) return;
-    const t = lineText(tranData[tranCursor]).trim();
-    if (t === "" || t === "//") tranCursor++;
+    if (isTranPlaceholder(tranData[tranCursor])) tranCursor++;
   };
 
   // 顺序消费一条翻译;"//" 表示本行无翻译,条目缺失时兜底空串
@@ -830,13 +806,13 @@ export const parseAMData = (
     const currentWords = line.words || [];
     // roma 对齐用原数组下标 index(roma 与主歌词同构),不受翻译消费顺序影响
     const currentRomaWords = romaData?.[index]?.words || [];
-    const info = isInfoLine(line, index);
 
-    // 1. 过滤信息行 / 空行;头部占位已预处理,中段信息行仅同步跳过对应占位。
-    if ((info && removeAMInfo) || lineText(line).trim() === "") {
-      if (info && removeAMInfo && index >= maxStrip) skipTranPlaceholder();
+    // 1. 过滤信息行 / 空行
+    if (removeAMInfo && isInfo(line, index)) {
+      if (index >= maxStrip) skipTranPlaceholder();
       return null;
     }
+    if (lineText(line).trim() === "") return null;
 
     // 2. 映射 LyricWord 数组
     const words = currentWords.map((wordObj, wordIndex) => {
@@ -863,7 +839,6 @@ export const parseAMData = (
 
     // 4. 构建符合 LyricLine 接口的对象
     // BG 行(一般是译文本身或和声)不配翻译,置空;其余行按顺序消费翻译条目
-    // (被保留的信息行也消费一条,与其 "//" 占位位置对应)
     return {
       words: words,
       translatedLyric: line.isBG === true ? "" : takeTranslation(),
