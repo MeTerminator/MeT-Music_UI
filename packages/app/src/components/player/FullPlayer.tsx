@@ -1,4 +1,4 @@
-import { songPlatform } from "@met/core";
+import { prepareAmllLines, songPlatform } from "@met/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   BackgroundRender,
@@ -379,23 +379,19 @@ function FullPlayerInner() {
 
   // ===== 歌词数据 =====
   // TTML 特效歌词优先(对齐旧 AMLyric.vue 的 amLyricsData computed):
-  // hasTtml && useAMttmlDB 时使用 ttml 行;深拷贝隔离,因 AMLL 会原地变更行对象
+  // hasTtml && useAMttmlDB 时使用 ttml 行；校验时间并隔离原始数据
   const ttmlLines = useMemo<AMLine[]>(() => {
     const raw = playSongLyric.ttml;
     if (!raw || raw.length === 0) return [];
-    return JSON.parse(JSON.stringify(raw)) as AMLine[];
+    return prepareAmllLines(raw) as AMLine[];
   }, [playSongLyric.ttml]);
   const useTtml = useAMLyrics && Boolean(playSongLyric.hasTtml) && useAMttmlDB && ttmlLines.length > 0;
   const useYrcAM = !useTtml && useAMLyrics && playSongLyric.hasYrc && showYrc;
   // 非 TTML 的 yrcAM/lrcAM:行 endTime 减去 lyricsAMEndTimeOffset
-  // (对照旧 AMLyric.vue 127-130;TTML 路径不做此偏移,保持上方深拷贝分支不变)
+  // 短句的结束时间不能减到起始时间之前；TTML 不使用此偏移。
   const plainAMLines = useMemo<AMLine[]>(() => {
     const source = (useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? [];
-    if (!lyricsAMEndTimeOffset) return source;
-    return source.map((line) => ({
-      ...line,
-      endTime: line.endTime - lyricsAMEndTimeOffset,
-    }));
+    return prepareAmllLines(source, lyricsAMEndTimeOffset);
   }, [useYrcAM, playSongLyric.yrcAM, playSongLyric.lrcAM, lyricsAMEndTimeOffset]);
   const amLines = useTtml ? ttmlLines : plainAMLines;
   const amLyricMode = useTtml ? "ttml" : useYrcAM ? "yrc" : "lrc";
