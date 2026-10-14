@@ -888,8 +888,8 @@ export const setSeek = (seek = 0, isInternal = false): void => {
   if (isSimulating) {
     simulationPausedSeek = seek;
     simulationStartTime = performance.now(); // 重置计时起点
-    // 立即更新时间显示
-    setAudioTime();
+    // 立即更新时间显示（暂停时 seek 也要更新宿主进度）
+    setAudioTime(true);
     justSetSeek();
     deps.env.onSeek?.();
     syncMediaSessionPosition(true);
@@ -965,11 +965,20 @@ const setAudioTime = (force = false): void => {
 
     // 确保在暂停时 currentTime 不会自己增长
     if (!status.playState) {
-      // 如果暂停了，我们仍然需要保持歌词索引，但不更新时间
+      // 暂停时保留进度；显式刷新（包括 seek）仍需写回真实位置
       const currentTime = simulationPausedSeek;
+      if (force) {
+        const { duration } = status.playTimeData;
+        status.playTimeData = {
+          ...status.playTimeData,
+          currentTime,
+          bar: duration ? ((currentTime / duration) * 100).toFixed(2) : 0,
+          played: getSongPlayTime(currentTime),
+        };
+      }
       // 计算当前歌词播放索引
       status.playSongLyricIndex = computeLyricIndex(currentTime);
-      // 时间不更新，但状态要广播出去：暂停后 tick 就停了，
+      // 状态要广播出去：暂停后 tick 就停了，
       // 宿主拿到的最后一帧若停在 isPlaying: true，外部会一直以为还在播
       deps.env.onTick?.();
       return; // 暂停时退出

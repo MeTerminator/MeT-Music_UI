@@ -24,6 +24,9 @@ import {
 } from "@met/core";
 import {
   CONTRACT_VERSION,
+  PLAYBACK_SYNC_INTERVAL_MS,
+  type SongSync,
+  type PlaybackProgress,
   type HookPayload,
   type HostCallbacks,
   type LyricLine,
@@ -140,6 +143,10 @@ export const buildHookPayload = (): HookPayload | null => {
 
 /** 播放 tick 广播(经 PlayerDeps.env.onTick 挂入引擎) */
 export const broadcastHook = (): void => {
+  if (useHostStore.getState().callbacks?.onPlaybackSync) {
+    broadcastPlaybackSync();
+    return;
+  }
   if (!window.$MeTMusic_Hook) return;
   const payload = buildHookPayload();
   if (!payload) return;
@@ -148,6 +155,75 @@ export const broadcastHook = (): void => {
     window.$MeTMusic_Hook(payload);
   } catch (error) {
     console.error("$MeTMusic_Hook 调用出错：", error);
+  }
+};
+
+let syncRevision = 0;
+let syncKey: unknown[] = [];
+let lastProgress: PlaybackProgress | null = null;
+
+/** 只在元数据引用或设置变化时序列化整首歌词；播放 tick 只比较少量标量。 */
+const broadcastPlaybackSync = (force = false): void => {
+  const send = useHostStore.getState().callbacks?.onPlaybackSync;
+  if (!send) return;
+  const status = useStatusStore.getState();
+  const settings = useSettingsStore.getState();
+  const music = useMusicStore.getState();
+  const song = getPlaySongData();
+  const key = [song, music.playSongLyric, status.coverTheme, status.playTimeData.duration,
+    settings.showYrc, settings.lyricsOffset, settings.lyricsHookOffset, settings.lyricsShiftMs,
+    settings.lyricsAMttmlUseOffset, settings.lyricsAMOffset];
+  const changed = key.length !== syncKey.length || key.some((value, i) => value !== syncKey[i]);
+  const timestamp = Date.now();
+  const progress: PlaybackProgress = {
+    revision: syncRevision,
+    currentTime: Math.max(0, status.playTimeData.currentTime || 0),
+    duration: Math.max(0, status.playTimeData.duration || 0),
+    timestamp,
+    isPlaying: status.playState && !status.playLoading,
+    playbackRate: status.playRate || 1,
+  };
+  const previous = lastProgress;
+  const expected = previous ? previous.currentTime + (previous.isPlaying
+    ? (timestamp - previous.timestamp) / 1000 * previous.playbackRate : 0) : 0;
+  const due = !previous || force || changed || progress.isPlaying !== previous.isPlaying
+    || progress.playbackRate !== previous.playbackRate
+    || (!progress.isPlaying && progress.currentTime !== previous.currentTime)
+    || Math.abs(progress.currentTime - expected) > 0.25
+    || (progress.isPlaying && timestamp - previous.timestamp >= PLAYBACK_SYNC_INTERVAL_MS);
+  if (!due) return;
+  try {
+    if (changed || !previous) {
+      const payload = buildHookPayload();
+      if (!payload) return;
+      const lyric = music.playSongLyric;
+      const ttml = lyric.hasTtml && lyric.ttml?.length ? lyric.ttml : null;
+      const ttmlOffset = (settings.lyricsAMttmlUseOffset ? settings.lyricsAMOffset : 0)
+        - settings.lyricsShiftMs;
+      const data: SongSync = {
+        ...payload, ...progress, kind: "song", revision: syncRevision + 1,
+        songAlbum: typeof song.album === "string" ? song.album : song.album?.name,
+        lyrics: ttml ? ttml.filter((line) => !line.isBG && line.words.length > 0).map((line) => ({
+          time: line.startTime, endTime: line.endTime,
+          content: line.words.map((word) => word.word).join(""),
+          tran: line.translatedLyric,
+          words: line.words.map((word) => ({ content: word.word, start: word.startTime, end: word.endTime })),
+        })) : buildLyricsSnapshot().lines,
+        lineOffset: ttml ? ttmlOffset : settings.lyricsOffset * 1000 - settings.lyricsShiftMs,
+        wordOffset: ttml ? ttmlOffset : settings.lyricsHookOffset * 1000,
+        inclusive: Boolean(ttml),
+      };
+      send(data);
+      syncRevision = data.revision;
+      progress.revision = data.revision;
+      syncKey = key;
+      window.$MeTMusic_Data = payload;
+    } else {
+      send({ ...progress, kind: "progress" });
+    }
+    lastProgress = progress;
+  } catch (error) {
+    console.error("Playback sync failed:", error);
   }
 };
 
@@ -265,6 +341,15 @@ export const initHostGlobals = (): void => {
     lrcContent: "",
     lrcTrans: "",
   };
+  // 新协议不再每帧组装歌词。保留公开 Data 的现取语义，旧扩展读取时仍得到最新进度和歌词。
+  let cachedData: Window["$MeTMusic_Data"] = window.$MeTMusic_Data;
+  Object.defineProperty(window, "$MeTMusic_Data", {
+    configurable: true,
+    enumerable: true,
+    get: () => useHostStore.getState().callbacks?.onPlaybackSync
+      ? buildHookPayload() ?? cachedData : cachedData,
+    set: (data: Window["$MeTMusic_Data"]) => { cachedData = data; },
+  });
   window.$MeTMusic_Hook = null;
 
   window.$MeTMusic_playOrPause = () => {
@@ -315,12 +400,26 @@ export const initHostGlobals = (): void => {
   // v2 新增:宿主注册(UI 判定桌面宿主环境的唯一依据)
   window.$MeTMusic_registerHost = (callbacks: HostCallbacks) => {
     useHostStore.setState({ isHosted: true, callbacks });
+    syncKey = [];
+    lastProgress = null;
+    broadcastHook();
   };
 
   // 宿主回推主窗最大化状态(双击拖拽区/系统快捷键改变状态时,UI 靠它对齐图标)
   window.$MeTMusic_setWindowState = (state) => {
     useHostStore.setState({ windowMaximized: Boolean(state?.maximized) });
   };
+
+  // 暂停时没有播放 tick，仍需立即发送 seek、歌曲、歌词及设置变化。
+  useStatusStore.subscribe((state, prev) => {
+    const force = state.playSeekRevision !== prev.playSeekRevision;
+    if (force || state.playState !== prev.playState || state.playLoading !== prev.playLoading
+      || state.playMode !== prev.playMode || state.playRate !== prev.playRate
+      || state.playTimeData !== prev.playTimeData
+      || state.coverTheme !== prev.coverTheme) broadcastPlaybackSync(force);
+  });
+  useMusicStore.subscribe(() => broadcastPlaybackSync());
+  useSettingsStore.subscribe(() => broadcastPlaybackSync());
 
   // 程序重置
   (window as unknown as { $cleanAll: typeof cleanAll }).$cleanAll = cleanAll;
