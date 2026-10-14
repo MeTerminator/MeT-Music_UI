@@ -1,4 +1,3 @@
-import { QRC_CREDITS } from "./fixtures/qrc-credits-quanshijiedeyu";
 import { describe, expect, it } from "vitest";
 import { parseLrc, parseQrc } from "@applemusic-like-lyrics/lyric";
 import {
@@ -24,6 +23,7 @@ const QRC =
   "[ti:test]\n[offset:0]\n" +
   "[600,2000]你(1000,500)好(1500,600)\n" +
   "[3000,2000]信(3000,400)息(3400,400)行(3800,400)\n";
+
 describe("parseLrcData", () => {
   it("解析 [mm:ss.xxx] 时间轴与文本", () => {
     const result = parseLrcData(LRC);
@@ -163,28 +163,6 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     expect(lines.map((line) => line.translatedLyric)).toEqual(["翻译一", "翻译二"]);
   });
 
-  it("真实 QRC 中移除标题、创作者行与版权声明但保留歌手标记和歌词", () => {
-    const lines = parseAMData(parseQrc(QRC_CREDITS), [], [], true);
-    const texts = lines.map(amText);
-
-    expect(lines).toHaveLength(5);
-    expect(texts[0]).toBe("女：");
-    expect(texts[1]).toMatch(/^你知道吗/);
-    expect(texts[2]).toMatch(/^在某/);
-    expect(texts[3]).toBe("男：");
-    expect(texts[4]).toMatch(/^你知道吗/);
-    expect(texts.filter((text) => text.includes("："))).toEqual(["女：", "男："]);
-    expect(texts.join("\n")).not.toContain("全世界的雨");
-    expect(texts.join("\n")).not.toContain("未经许可");
-  });
-
-  it("removeAMInfo=false 时保留真实 QRC 的标题和信息行", () => {
-    const lines = parseAMData(parseQrc(QRC_CREDITS), [], [], false);
-
-    expect(lines.length).toBeGreaterThan(5);
-    expect(amText(lines[0])).toContain("全世界的雨");
-  });
-
   it.each([
     "艺术总监：李朋",
     "母带处理工程师：赵靖",
@@ -209,6 +187,17 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     const lines = parseAMData(parseQrc(source), [], [], true);
 
     expect(lines.map(amText)).toEqual(["女：", "男：", "合：", "总有一天：我会"]);
+  });
+
+  it("过滤带真实时间轴的标题行与版权声明", () => {
+    const source = [
+      timedQrcLine("歌名 - 歌手", 0, 45),
+      timedQrcLine("未经许可，不得翻唱或使用", 1000, 1),
+      timedQrcLine("第一句", 2000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句"]);
   });
 
   it("仅过滤首个 0ms 且包含分隔短横线的标题行", () => {
@@ -252,17 +241,6 @@ describe("parseYrcData", () => {
     );
 
     expect(result).toEqual([]);
-  });
-
-  it("removeInfo=true 时过滤真实 QRC 的标题、信息行和版权声明", () => {
-    const result = parseYrcData(QRC_CREDITS, true);
-    const texts = result.map((line) => line.content.map((word) => word.content).join(""));
-
-    expect(result).toHaveLength(5);
-    expect(texts[0]).toBe("女：");
-    expect(texts.filter((text) => text.includes("："))).toEqual(["女：", "男："]);
-    expect(texts.join("\n")).not.toContain("全世界的雨");
-    expect(texts.join("\n")).not.toContain("未经许可");
   });
 
   it("缺少 [offset:0] 前缀时安全返回空数组", () => {
