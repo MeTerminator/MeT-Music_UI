@@ -111,6 +111,13 @@ export const buildHookPayload = (): HookPayload | null => {
       lyricData = [];
     }
 
+    // 前奏等没有当前歌词的时段，由 UI 提供桌面歌词窗的占位文本。
+    if (!lyricText.trim()) {
+      lyricText = `${songName} - ${songArtist}`;
+      lyricTrans = "";
+      lyricData = [];
+    }
+
     return {
       contractVersion: CONTRACT_VERSION,
       songName,
