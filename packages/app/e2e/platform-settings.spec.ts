@@ -44,8 +44,9 @@ test("旧 QQ 设置保留，网易云音质独立选择并持久化", async ({ p
   await page.goto("/app/#/");
   await page.waitForFunction(() => !!(window as unknown as DebugWindow).__debugStores);
   await page.evaluate(() => (window as unknown as DebugWindow).__debugStores!.status.setState({ showSettingsPanel: true }));
-  const qq = page.getByText("QQ 音乐音质选择", { exact: true }).locator("../..");
-  const netease = page.getByText("网易云音乐音质选择", { exact: true }).locator("../..");
+  await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "播放", exact: true }).click();
+  const qq = page.getByText("QQ 音乐音质选择", { exact: true }).locator("../../..");
+  const netease = page.getByText("网易云音乐音质选择", { exact: true }).locator("../../..");
   await expect(qq.getByRole("combobox")).toContainText("无损 SQ");
   await expect(netease.getByRole("combobox")).toContainText("极高");
   await netease.getByRole("combobox").click();

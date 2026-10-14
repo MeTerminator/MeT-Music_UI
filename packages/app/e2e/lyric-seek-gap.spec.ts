@@ -40,7 +40,7 @@ async function prepare(page: Page, useAM: boolean, paused: boolean) {
 
 async function seek(page: Page, seconds: number) {
   await page.mouse.move(600, 700);
-  const bar = page.locator('[aria-label="播放进度"]').filter({ visible: true }).last();
+  const bar = page.getByRole("group", { name: "播放进度", exact: true }).filter({ visible: true }).last();
   await bar.hover(); // 等待全屏展开动画和控制条位置稳定。
   const box = (await bar.boundingBox())!;
   const x = box.x + 7 + (box.width - 14) * seconds / 223;

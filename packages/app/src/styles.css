@@ -222,3 +222,16 @@ body {
 img[loading="lazy"]:not(.met-img-plain) {
   background-color: var(--met-bg-elevated);
 }
+
+/* TTML 通知右侧的关闭按钮，放在卡片内部并为正文留出空间。 */
+[data-sonner-toast][data-styled="true"].met-ttml-toast {
+  padding-right: 48px;
+}
+[data-sonner-toast][data-styled="true"].met-ttml-toast [data-close-button] {
+  left: auto;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+}

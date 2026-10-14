@@ -29,12 +29,14 @@ test("窄屏搜索图标打开页面，热搜和补全在页面内展示", async
 test("播放器背景流速在设置中可修改并保存", async ({ page }) => {
   await page.route(/^https?:\/\/[^/]+\/api\//, route => route.abort());
   await page.goto("/app/#/setting");
+  await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "播放", exact: true }).click();
   const slider = page.getByRole("slider", { name: "全屏播放器背景流动速度" });
   await slider.scrollIntoViewIfNeeded();
   await slider.focus();
   await slider.press("ArrowRight");
   await expect(slider).toHaveAttribute("aria-valuenow", "2");
   await page.reload();
+  await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "播放", exact: true }).click();
   await expect(page.getByRole("slider", { name: "全屏播放器背景流动速度" })).toHaveAttribute("aria-valuenow", "2");
 });
 

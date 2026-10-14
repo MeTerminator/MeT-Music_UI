@@ -22,8 +22,8 @@ test("字重可自由设置,0 则跟随字体", async ({ page }) => {
   await page.goto("/app/#/");
   await page.waitForFunction(() => !!(window as unknown as { __debugStores?: unknown }).__debugStores);
 
-  // 默认:跟随字体(默认歌词字体 harmony_bold → bold)
-  expect(await weightVar(page)).toBe("bold");
+  // 默认字重 700
+  expect(await weightVar(page)).toBe("700");
 
   for (const w of [100, 400, 900]) {
     await setSetting(page, { lyricFontWeight: w });
@@ -53,5 +53,6 @@ test("设置面板「歌词」分组里有该项", async ({ page }) => {
   await page.evaluate(() =>
     (window as unknown as DebugWindow).__debugStores!.status.setState({ showSettingsPanel: true }),
   );
-  await expect(page.getByText("歌词字重")).toBeVisible();
+  await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "歌词", exact: true }).click();
+  await expect(page.getByText("歌词字重", { exact: true })).toBeVisible();
 });

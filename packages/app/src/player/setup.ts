@@ -24,7 +24,9 @@ import { broadcastHook } from "@/host";
 
 /** UI 反馈(sonner toast;fatal 用原生 confirm 兜底) */
 const notifier: Notifier = {
-  info: (m) => toast(m),
+  info: (m) => toast(m, m.startsWith("TTML 歌词作者：") || m === "使用 TTML 歌词"
+    ? { closeButton: true, className: "met-ttml-toast" }
+    : undefined),
   success: (m) => toast.success(m),
   warning: (m) => toast.warning(m),
   error: (m) => toast.error(m),

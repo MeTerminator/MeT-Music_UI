@@ -5,9 +5,9 @@
  * 从原路由页 pages/Setting.tsx 抽出,同时被两处复用:
  * - /setting 路由页(全页渲染,深链兼容);
  * - SettingsOverlay 悬浮层(内部滚动容器渲染)。
- * sticky 分段导航依赖最近的可滚动祖先(路由页为 <main>,悬浮层为其内部滚动 div),两处均可用。
+ * 左侧分类导航与右侧设置面板共用，窄屏保持紧凑分栏。
  */
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { soundStop } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
@@ -19,10 +19,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { SettingNumber } from "./SettingNumber";
+import { AmllSettings } from "./AmllSettings";
+import { Settings2, Play, Captions, SlidersHorizontal, Info } from "lucide-react";
 import { SettingItem, SettingSection, SliderMarks } from "./SettingItem";
 import {
   fontOptions,
-  lyricFontWeightOptions,
   loadSizeOptions,
   lyricsBlockOptions,
   lyricsPositionOptions,
@@ -41,8 +43,9 @@ import packageJson from "../../../package.json";
 
 const set = useSettingsStore.setState;
 
-/** 分区导航(点击滚动至对应分组) */
+/** 设置分类 */
 const sections = ["常规", "播放", "歌词", "其他", "关于"] as const;
+const sectionIcons = [Settings2, Play, Captions, SlidersHorizontal, Info];
 type SectionName = (typeof sections)[number];
 
 export interface SettingsContentProps {
@@ -55,86 +58,8 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const coverTheme = useStatusStore((s) => s.coverTheme);
 
   const [activeTab, setActiveTab] = useState<SectionName>("常规");
+  const rootRef = useRef<HTMLDivElement>(null);
   const [resetOpen, setResetOpen] = useState(false);
-  const sectionRefs = useRef<Partial<Record<SectionName, HTMLDivElement | null>>>({});
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  // ===== 滚动反向联动(对照旧 allSetScroll:滚动时按分组 offsetTop 高亮当前 tab) =====
-  // 滚动容器不固定:路由页为 <main>,悬浮层为其内部滚动 div,取最近可滚动祖先。
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    /** 最近可滚动祖先(overflow-y 可滚且内容溢出);找不到则回退 window */
-    const findScrollParent = (el: HTMLElement): HTMLElement | null => {
-      let node: HTMLElement | null = el.parentElement;
-      while (node) {
-        const { overflowY } = getComputedStyle(node);
-        if (
-          (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
-          node.scrollHeight > node.clientHeight
-        ) {
-          return node;
-        }
-        node = node.parentElement;
-      }
-      return null;
-    };
-
-    const container = findScrollParent(root);
-
-    const onScroll = (): void => {
-      // 对照旧 allSetScroll:distance = scrollTop + 偏移,逐组比较 offsetTop
-      // (偏移取 80,消化 sticky 分区导航自身高度)
-      const scrollTop = container ? container.scrollTop : window.scrollY;
-      const containerTop = container ? container.getBoundingClientRect().top : 0;
-      // 触底(2px 容差)时直接高亮最后一组:末尾分组不够高时其顶边永远
-      // 到不了判定线,否则只有过冲瞬间达标、回弹又退回上一组
-      const clientHeight = container ? container.clientHeight : window.innerHeight;
-      const scrollHeight = container
-        ? container.scrollHeight
-        : document.documentElement.scrollHeight;
-      if (scrollTop + clientHeight >= scrollHeight - 2) {
-        setActiveTab(sections[sections.length - 1]);
-        return;
-      }
-      const distance = scrollTop + 80;
-      let current: SectionName = sections[0];
-      for (const name of sections) {
-        const el = sectionRefs.current[name];
-        if (!el) continue;
-        const top = el.getBoundingClientRect().top - containerTop + scrollTop;
-        if (distance >= top) current = name;
-      }
-      setActiveTab(current);
-    };
-
-    // 节流 150ms(带尾调用,保证停止滚动后落在最终分组)
-    let last = 0;
-    let trailing: number | null = null;
-    const throttled = (): void => {
-      const now = Date.now();
-      const remain = 150 - (now - last);
-      if (remain <= 0) {
-        last = now;
-        onScroll();
-      } else if (trailing === null) {
-        trailing = window.setTimeout(() => {
-          trailing = null;
-          last = Date.now();
-          onScroll();
-        }, remain);
-      }
-    };
-
-    const target: HTMLElement | Window = container ?? window;
-    target.addEventListener("scroll", throttled, { passive: true });
-    return () => {
-      target.removeEventListener("scroll", throttled);
-      if (trailing !== null) window.clearTimeout(trailing);
-    };
-  }, []);
-
   const sessionId = getSessionId();
 
   // 明暗模式切换(对齐旧 setThemeType:setState + toast + 关闭跟随系统)
@@ -172,18 +97,8 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
     }, 1000);
   };
 
-  // 分区跳转
-  const scrollToSection = (name: SectionName) => {
-    setActiveTab(name);
-    sectionRefs.current[name]?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const bindSection = (name: SectionName) => (el: HTMLDivElement | null) => {
-    sectionRefs.current[name] = el;
-  };
-
   return (
-    <div ref={rootRef} className="mx-auto max-w-5xl px-8 py-8">
+    <div ref={rootRef} className="mx-auto w-full max-w-6xl px-3 py-5 md:px-6">
       {/* 标题(对齐旧页:标题 + 版本号;悬浮层内由 header 承担) */}
       {!hideHeader && (
         <div className="mb-5 flex items-end gap-3">
@@ -192,28 +107,22 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
         </div>
       )}
 
-      {/* 分区导航:全宽不透明底板遮住滚动内容,内层圆角 tab 组;激活态主色高亮 */}
-      <div className="sticky top-0 z-10 -mx-8 mb-4 bg-[var(--met-bg)] px-8 py-2">
-        <div className="flex gap-1 overflow-x-auto rounded-xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {sections.map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => scrollToSection(name)}
-              className={`flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${
-                activeTab === name
-                  ? "bg-[var(--met-primary)] font-medium text-[var(--met-primary-fg)]"
-                  : "text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]"
-              }`}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <div className="grid grid-cols-[76px_minmax(0,1fr)] items-start gap-3 md:grid-cols-[168px_minmax(0,1fr)] md:gap-6">
+        <nav aria-label="设置分类" className="sticky top-0 flex flex-col gap-1 rounded-2xl border border-[var(--met-border)] bg-[var(--met-bg-elevated)] p-1.5 md:p-2">
+          {sections.map((name, index) => {
+            const Icon = sectionIcons[index];
+            return (
+              <button key={name} type="button" aria-current={activeTab === name ? "page" : undefined}
+                onClick={() => { setActiveTab(name); rootRef.current?.scrollIntoView({ block: "start" }); }}
+                className={`flex min-h-12 cursor-pointer flex-col items-center gap-1 rounded-xl px-2 py-3 text-xs transition-colors md:flex-row md:gap-3 md:px-4 md:text-sm ${activeTab === name ? "bg-[var(--met-primary)] font-semibold text-[var(--met-primary-fg)]" : "text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]"}`}>
+                <Icon size={18} aria-hidden="true" />{name}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="min-w-0" key={activeTab}>
       {/* 常规 */}
-      <div className="scroll-mt-20" ref={bindSection("常规")}>
+      {activeTab === "常规" && <div>
         <SettingSection title="常规">
           <SettingItem name="明暗模式">
             <Select
@@ -291,10 +200,10 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
             </Button>
           </SettingItem>
         </SettingSection>
-      </div>
+      </div>}
 
       {/* 播放 */}
-      <div className="mt-8 scroll-mt-20" ref={bindSection("播放")}>
+      {activeTab === "播放" && <div>
         <SettingSection title="播放">
           <SettingItem
             name="QQ 音乐音质选择"
@@ -414,6 +323,13 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onCheckedChange={(v) => set({ showPlaylistCount: v })}
             />
           </SettingItem>
+          <SettingItem name="封面布局" tip="全屏播放器封面的呈现方式（桌面分栏生效）">
+            <Select value={settings.coverLayout} options={[{ label: "默认", value: "default" }, { label: "全幅封面", value: "fullscreen" }]} onValueChange={(v) => set({ coverLayout: v })} className="w-52" />
+          </SettingItem>
+          <SettingItem name="封面/歌词占比" column tip="播放页封面与歌词区域的宽度比例（桌面分栏生效）">
+            <SettingNumber label="封面/歌词占比" value={Math.round(settings.coverLyricRatio * 100)} min={30} max={60} step={1} unit="%" onChange={(v) => set({ coverLyricRatio: v / 100 })} />
+            <SliderMarks marks={["30%", "45%", "60%"]} />
+          </SettingItem>
           <SettingItem name="播放器样式" tip="播放器左侧区域样式">
             <Select
               value={settings.playCoverType}
@@ -427,6 +343,8 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
             tip={
               settings.playerBackgroundType === "animation"
                 ? "流体效果，较消耗性能，请谨慎开启"
+                : settings.playerBackgroundType === "amllAnimation"
+                  ? "AMLL 流体背景，可在下方调整渲染器与性能参数"
                 : settings.playerBackgroundType === "blur"
                   ? "将封面模糊处理为背景"
                   : "提取封面主色为渐变色"
@@ -449,16 +367,10 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               </>
             }
           >
-            <Slider
-              ariaLabel="全屏播放器背景流动速度"
-              value={settings.amllPlayerBackgroundFlowSpeed}
-              min={1}
-              max={10}
-              step={1}
-              onValueChange={(v) => set({ amllPlayerBackgroundFlowSpeed: v })}
-            />
-            <SliderMarks marks={["最小 / 默认 1", "最大 10"]} />
+            <SettingNumber label="全屏播放器背景流动速度" value={settings.amllPlayerBackgroundFlowSpeed} min={0} max={10} step={1} onChange={(v) => set({ amllPlayerBackgroundFlowSpeed: v })} />
+            <SliderMarks marks={["静止 0", "默认 1", "最大 10"]} />
           </SettingItem>
+          <AmllSettings kind="background" />
           <SettingItem name="显示前奏倒计时" tip="部分歌曲前奏可能存在显示错误">
             <Switch
               checked={settings.countDownShow}
@@ -466,29 +378,23 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
             />
           </SettingItem>
         </SettingSection>
-      </div>
+      </div>}
 
       {/* 歌词 */}
-      <div className="mt-8 scroll-mt-20" ref={bindSection("歌词")}>
+      {activeTab === "歌词" && <div>
         <SettingSection title="歌词">
           <SettingItem name="歌词文本大小" column tip="播放页歌词的文字大小">
             {/* 预览独立成行,避免与标题/说明重叠 */}
             <div className="mb-3 flex min-h-[72px] items-center justify-center overflow-hidden rounded-lg bg-[var(--met-bg)] px-4 py-2">
               <span
-                className="lyric-font truncate font-bold text-[var(--met-fg)]"
-                style={{ fontSize: `${settings.lyricsFontSize}px` }}
+                className="lyric-font truncate text-[var(--met-fg)]"
+                style={{ fontSize: `${settings.lyricsFontSize}px`, fontWeight: settings.lyricFontWeight || undefined }}
               >
                 我是一句歌词
               </span>
             </div>
-            <Slider
-              value={settings.lyricsFontSize}
-              min={36}
-              max={56}
-              step={1}
-              onValueChange={(v) => set({ lyricsFontSize: v })}
-            />
-            <SliderMarks marks={["最小", "默认 46", "最大"]} />
+            <SettingNumber label="歌词字号" value={settings.lyricsFontSize} min={16} max={96} step={1} unit="px" onChange={(v) => set({ lyricsFontSize: v })} />
+            <SliderMarks marks={["16px", "默认 42px", "96px"]} />
           </SettingItem>
           <SettingItem name="歌词显示字体" tip="播放页展示歌词所使用的字体">
             <Select
@@ -498,13 +404,8 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               className="w-52"
             />
           </SettingItem>
-          <SettingItem name="歌词字重" tip="覆盖歌词字体自带的粗细;跟随字体则不覆盖">
-            <Select
-              value={String(settings.lyricFontWeight)}
-              options={lyricFontWeightOptions}
-              onValueChange={(v) => set({ lyricFontWeight: Number(v) })}
-              className="w-52"
-            />
+          <SettingItem name="歌词字重" column tip="自定义 100–900；设为 0 时跟随字体，默认 700">
+            <SettingNumber label="歌词字重" value={settings.lyricFontWeight} min={0} max={900} step={1} onChange={(v) => set({ lyricFontWeight: v === 0 ? 0 : Math.max(100, v) })} />
           </SettingItem>
           <SettingItem
             name="歌词偏转"
@@ -576,7 +477,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onCheckedChange={(v) => set({ lrcMousePause: v })}
             />
           </SettingItem>
-          <SettingItem name="歌词位置" tip="歌词的默认垂直位置">
+          <SettingItem name="歌词位置" tip="普通歌词的水平对齐方式">
             <Select
               value={settings.lyricsPosition}
               options={lyricsPositionOptions}
@@ -584,11 +485,11 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               className="w-52"
             />
           </SettingItem>
-          <SettingItem name="歌词滚动位置" tip="歌词高亮时所处的位置">
+          <SettingItem name="歌词滚动位置" tip="普通歌词的高亮位置，同时设置 AMLL 聚焦行预设位置">
             <Select
               value={settings.lyricsBlock}
               options={lyricsBlockOptions}
-              onValueChange={(v) => set({ lyricsBlock: v })}
+              onValueChange={(v) => set({ lyricsBlock: v, amllAlignPosition: v === "center" ? 0.5 : 0.25 })}
               className="w-52"
             />
           </SettingItem>
@@ -663,6 +564,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onCheckedChange={(v) => set({ useAMScale: v })}
             />
           </SettingItem>
+          <AmllSettings kind="lyrics" />
           <SettingItem
             name="Apple Music-like Lyrics 去除歌词信息"
             tip="去除 AM 歌词最前面的版权信息"
@@ -730,10 +632,10 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
           </SettingItem>
 
         </SettingSection>
-      </div>
+      </div>}
 
       {/* 其他 */}
-      <div className="mt-8 scroll-mt-20" ref={bindSection("其他")}>
+      {activeTab === "其他" && <div>
         <SettingSection title="其他">
           <SettingItem name="默认加载数量" tip="在部分列表页面显示几条数据">
             <Select
@@ -752,10 +654,10 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
             />
           </SettingItem>
         </SettingSection>
-      </div>
+      </div>}
 
       {/* 关于 */}
-      <div className="mt-8 scroll-mt-20" ref={bindSection("关于")}>
+      {activeTab === "关于" && <div>
         <SettingSection title="关于">
         <SettingItem name="版本" tip="MeT-Music">
           <span className="text-sm text-[var(--met-fg-dim)]">v{packageJson.version}</span>
@@ -766,6 +668,8 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
           </Button>
         </SettingItem>
       </SettingSection>
+      </div>}
+        </div>
       </div>
 
       {/* 程序重置确认弹窗(对齐旧 $dialog.warning) */}

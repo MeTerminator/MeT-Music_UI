@@ -1,6 +1,6 @@
 {
   "name": "@met/app",
-  "version": "7.0.4",
+  "version": "7.0.5",
   "private": true,
   "description": "MeT-Music React SPA(web 版与 Electron renderer 共用)",
   "type": "module",
@@ -12,8 +12,8 @@
     "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@applemusic-like-lyrics/core": "^0.5.2",
-    "@applemusic-like-lyrics/react": "^0.5.2",
+    "@applemusic-like-lyrics/core": "^0.6.0",
+    "@applemusic-like-lyrics/react": "^0.6.0",
     "@base-ui-components/react": "1.0.0-rc.0",
     "@material/material-color-utilities": "^0.4.0",
     "@met/core": "workspace:*",

@@ -115,7 +115,7 @@ const queryClient = new QueryClient({
 /** Toaster 主题跟随 settings.themeType(旧版浅色主题下 toast 同步变浅) */
 const ThemedToaster = () => {
   const themeType = useSettingsStore((s) => s.themeType);
-  return <Toaster theme={themeType} position="top-center" richColors />;
+  return <Toaster theme={themeType} position="top-center" richColors toastOptions={{ closeButtonAriaLabel: "关闭提示" }} />;
 };
 
 createRoot(document.getElementById("root")!).render(

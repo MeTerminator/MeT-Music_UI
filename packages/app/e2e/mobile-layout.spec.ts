@@ -17,7 +17,7 @@ test("移动设置说明和控件分行且不溢出", async ({ page }) => {
   const control = (await card.getByRole("combobox").boundingBox())!;
   const box = (await card.boundingBox())!;
   expect(control.y).toBeGreaterThanOrEqual(info.y + info.height);
-  expect(info.width).toBeGreaterThan(200);
+  expect(info.width).toBeGreaterThan(100);
   expect(control.x + control.width).toBeLessThanOrEqual(box.x + box.width);
 });
 

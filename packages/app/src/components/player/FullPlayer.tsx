@@ -5,9 +5,9 @@ import {
   LyricPlayer,
   type LyricPlayerRef,
 } from "@applemusic-like-lyrics/react";
-import type { LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
+import { IsolationRenderer, LayoutReason, MeshGradientRenderer, PixiRenderer, type BaseRenderer, type LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
-import { Captions, CaptionsOff, ChevronDown, Columns2, Ellipsis, X } from "lucide-react";
+import { Captions, CaptionsOff, ChevronDown, Columns2, Ellipsis, Disc3, Mic2, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { fadePlayOrPause, setSeek, type AMLine, type Artist } from "@met/core";
 import { useStatusStore, type LyricViewMode } from "../../stores/status";
@@ -21,6 +21,7 @@ import { formatArtists } from "./format";
 import FullPlayerControls from "./FullPlayerControls";
 import LyricScroll from "./LyricScroll";
 import { useLyricTouchGuard } from "./useLyricTouchGuard";
+import { ConfiguredLyricPlayer } from "./ConfiguredLyricPlayer";
 import PlayerCover from "./PlayerCover";
 import { useSongMoreItems } from "./songMenu";
 
@@ -88,6 +89,11 @@ const FULL_PLAYER_CSS = `
 @keyframes met-fp-icon-in {
   from { opacity: 0; transform: scale(0.6) rotate(-25deg); }
   to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+.met-amll .amll-lyric-player.dom {
+  --amll-lp-line-width-aspect: var(--met-amll-line-width);
+  --amll-lp-line-padding-x: var(--met-amll-line-padding);
+  --amll-lp-bg-line-scale: var(--met-amll-bg-scale);
 }
 .met-fp-icon-in {
   animation: met-fp-icon-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -219,7 +225,11 @@ function FullPlayerInner() {
   const useAMScale = useSettingsStore((s) => s.useAMScale);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
   const useAMBlur = useSettingsStore((s) => s.useAMBlur);
-  const lyricsBlock = useSettingsStore((s) => s.lyricsBlock);
+  const amll = useSettingsStore();
+  const backgroundRenderer = amll.amllBackgroundRenderer === "isolation" ? IsolationRenderer : amll.amllBackgroundRenderer === "pixi" ? PixiRenderer : MeshGradientRenderer;
+  const configureRenderer = useCallback((renderer: BaseRenderer) => {
+    if (renderer instanceof IsolationRenderer) renderer.setOptions(amll.amllIsolationOptions);
+  }, [amll.amllIsolationOptions]);
 
   /** 窄屏(<768px)走两页式手机布局,与桌面左右分栏 DOM 结构不同,故用 JS 断点分支 */
   const isMobile = useIsMobile();
@@ -400,7 +410,7 @@ function FullPlayerInner() {
    * 封面栏宽度(百分比):歌词栏是 flex-1,宽度由本值反推,
    * 所以只要给封面栏的 width 做过渡,两栏就会一起平滑伸缩。
    */
-  const coverPaneWidth = viewMode === "only" ? "0%" : viewMode === "both" ? "45%" : "100%";
+  const coverPaneWidth = viewMode === "only" ? "0%" : viewMode === "both" ? `${amll.coverLyricRatio * 100}%` : "100%";
 
   // 切到无歌词的歌曲时第二页随之卸载(滚动位置由浏览器夹回 0),页码状态一并复位
   useEffect(() => {
@@ -445,7 +455,7 @@ function FullPlayerInner() {
       Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
     );
     core.setCurrentTime(time, true);
-    void core.calcLayout(true, true);
+    void core.calcLayout(LayoutReason.Seek);
     core.update();
   }, [lyricsShiftMs, applyAMOffset, lyricsAMOffset]);
 
@@ -462,7 +472,7 @@ function FullPlayerInner() {
       );
       core.setLyricLines(amLines, time);
       core.setCurrentTime(time, true);
-      void core.calcLayout(true, true);
+      void core.calcLayout(LayoutReason.Seek);
       core.update();
     }, 100);
     return () => window.clearTimeout(timer);
@@ -534,10 +544,14 @@ function FullPlayerInner() {
             album={amllAlbum}
             albumIsVideo={false}
             playing={playState}
-            fps={30}
+            fps={amll.amllBackgroundFPS}
             flowSpeed={amllPlayerBackgroundFlowSpeed}
-            renderScale={0.5}
-            hasLyric={hasLyric}
+            renderScale={amll.amllBackgroundRenderScale}
+            staticMode={amll.amllBackgroundStatic}
+            lowFreqVolume={amll.amllBackgroundLowFreqVolume}
+            renderer={backgroundRenderer}
+            configureRenderer={configureRenderer}
+            hasLyric={amll.amllBackgroundLyricReactive ? hasLyric : true}
           />
         </div>
       ) : showAnimationBackground ? (
@@ -553,11 +567,11 @@ function FullPlayerInner() {
               style={{
                 ...q.pos,
                 filter: "blur(80px) contrast(1.75)",
-                animation: `met-fp-cover-rotate ${q.duration * 2 / Math.max(1, amllPlayerBackgroundFlowSpeed)}s linear infinite${
+                animation: `met-fp-cover-rotate ${q.duration * 2 / Math.max(0.01, amllPlayerBackgroundFlowSpeed)}s linear infinite${
                   q.reverse ? " reverse" : ""
                 }`,
                 // 暂停冻结
-                animationPlayState: playState ? "running" : "paused",
+                animationPlayState: playState && amllPlayerBackgroundFlowSpeed > 0 ? "running" : "paused",
               }}
             />
           ))}
@@ -580,7 +594,7 @@ function FullPlayerInner() {
 
   /**
    * 歌词本体(桌面/窄屏共用):自身撑满,高度由外层容器决定。
-   * AM 歌词字号在窄屏收窄(设置项默认 46px 是给桌面大屏的,手机上会溢出)。
+   * 桌面与窄屏均使用用户设置的字号，由歌词行自动换行。
    */
   const lyricContent = !hasLyric ? null : useAM ? (
     <div
@@ -597,14 +611,17 @@ function FullPlayerInner() {
           // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
           key={`${playSongData.id}-${amLyricMode}-${amLines.length}`}
           ref={lyricPlayerRef}
-          className="lyric-font h-full w-full"
+          lyricPlayer={ConfiguredLyricPlayer}
+          className="met-amll lyric-font h-full w-full"
           style={
             {
-              fontSize: `${
-                isMobile ? Math.max(18, Math.min(lyricsFontSize, 28)) : lyricsFontSize
-              }px`,
+              fontSize: `${lyricsFontSize}px`,
               // 对照旧 AMLyric.vue 109-112:coverTheme shadeTwo rgba 0.95
               "--amll-lp-color": amLyricColor,
+              "--amll-lp-font-size": `${lyricsFontSize}px`,
+              "--met-amll-line-width": amll.amllLineWidth,
+              "--met-amll-line-padding": `${amll.amllLinePadding}em`,
+              "--met-amll-bg-scale": amll.amllBGLineScale,
             } as CSSProperties
           }
           lyricLines={amLines}
@@ -613,7 +630,15 @@ function FullPlayerInner() {
           enableSpring={useAMSpring}
           enableScale={useAMScale}
           enableBlur={useAMBlur}
-          alignPosition={lyricsBlock === "center" ? 0.5 : 0.25}
+          alignPosition={amll.amllAlignPosition}
+          alignAnchor={amll.amllAlignAnchor}
+          hidePassedLines={amll.amllHidePassedLines}
+          wordFadeWidth={amll.amllWordFadeWidth}
+          linePosYSpringParams={amll.amllSpringY}
+          lineScaleSpringParams={amll.amllSpringScale}
+          optimizeOptions={amll.amllOptimizeOptions}
+          maskObsceneWordsMode={amll.amllMaskMode}
+          maskObsceneWordChar={amll.amllMaskChar}
           onLyricLineClick={onLyricLineClick}
         />
       )}
@@ -665,6 +690,7 @@ function FullPlayerInner() {
         className={`truncate ${artistCls}`}
         style={{ color: "rgba(var(--fp-main-rgb), 0.7)" }}
       >
+        <Mic2 size={14} className="mr-1.5 inline-block align-[-2px]" aria-hidden="true" />
         {artistList && artistList.length > 0
           ? artistList.map((ar, index) => (
               <span key={`${ar.id ?? "no-id"}-${index}`}>
@@ -697,6 +723,7 @@ function FullPlayerInner() {
           className={`truncate ${albumCls}`}
           style={{ color: "rgba(var(--fp-main-rgb), 0.5)" }}
         >
+          <Disc3 size={14} className="mr-1.5 inline-block align-[-2px]" aria-hidden="true" />
           {albumData?.id != null ? (
             <span
               role="link"
@@ -901,7 +928,7 @@ function FullPlayerInner() {
       <div className="relative z-10 flex h-full w-full items-center">
         {/* 左半:大封面 + 歌曲信息(仅歌词模式下宽度收到 0 并淡出) */}
         <div
-          className="h-full shrink-0 overflow-hidden"
+          className="relative h-full shrink-0 overflow-hidden"
           style={{
             width: coverPaneWidth,
             opacity: purelyLyric ? 0 : 1,
@@ -911,19 +938,25 @@ function FullPlayerInner() {
           }}
           aria-hidden={purelyLyric}
         >
-          <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-10">
+          {amll.coverLayout === "fullscreen" && (playSongData.coverSize?.l || playSongData.localCover || playSongData.cover) && (
+            <div data-testid="full-cover-art" className="met-drag absolute inset-0" style={{ maskImage: "linear-gradient(to right, black 70%, transparent)" }}>
+              <img src={playSongData.coverSize?.l || playSongData.localCover || playSongData.cover} alt="" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
+            </div>
+          )}
+          <div className={`relative flex h-full w-full flex-col items-center gap-6 px-10 ${amll.coverLayout === "fullscreen" ? "justify-end pb-36" : "justify-center"}`}>
             {/* 封面(cover/record 两种模式,见 PlayerCover)。
                 met-drag:全屏播放器铺满整个窗口,顶栏那条拖拽区被它盖住,
                 桌面宿主里就没地方拖窗口了,故把封面本身当拖拽区。
                 封面内部没有可点元素,不必再标 no-drag;窄屏那份封面在横向分页里,
                 标成拖拽区会把滑动手势吃掉,所以只给桌面分栏这一份。 */}
-            <PlayerCover
+            {amll.coverLayout !== "fullscreen" && <PlayerCover
               className={`met-drag ${
                 playCoverType === "record" ? "max-w-[min(46vh,420px)]" : "max-w-[420px]"
               }`}
-            />
+            />}
             {renderSongInfo({
-              className: "w-full max-w-[420px] text-center",
+              className: `w-full max-w-[420px] text-center ${amll.coverLayout === "fullscreen" ? "[--fp-main-rgb:255,255,255]" : ""}`,
               titleCls: "text-2xl",
               aliaCls: "mt-1 text-base",
               artistCls: "mt-2 text-sm",
