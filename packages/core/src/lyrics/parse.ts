@@ -99,11 +99,21 @@ const CREDIT_ROLES: string[] = [
   "出品",
   "特别鸣谢",
   "歌曲营销",
+  "策划",
+  "策劃",
+  "运营",
+  "運營",
+  "推广",
+  "推廣",
   "发行统筹",
   "商务统筹",
   "项目企划",
   "企划",
   "统筹",
+  "总监",
+  "總監",
+  "版权",
+  "版權",
   "发行",
   "商务",
   "营销",
@@ -152,10 +162,69 @@ const CREDIT_ROLES: string[] = [
   "Publisher",
   "Label",
 ];
+const CREDIT_ROLE_PREFIXES = [
+  "总",
+  "總",
+  "联合",
+  "聯合",
+  "执行",
+  "執行",
+  "项目",
+  "項目",
+  "艺术",
+  "藝術",
+  "音乐",
+  "音樂",
+  "人声",
+  "人聲",
+  "弦乐",
+  "弦樂",
+  "乐队",
+  "樂隊",
+  "和声",
+  "和聲",
+  "歌曲",
+  "版权",
+  "版權",
+  "宣传",
+  "宣傳",
+];
+const CREDIT_ROLE_SUFFIXES = [
+  "师",
+  "師",
+  "工程师",
+  "工程師",
+  "室",
+  "棚",
+  "助理",
+  "统筹",
+  "統籌",
+  "处理",
+  "處理",
+  "指导",
+  "指導",
+  "协力",
+  "協力",
+  "总监",
+  "總監",
+  "监制",
+  "監製",
+  "编辑",
+  "編輯",
+  "策划",
+  "策劃",
+  "企划",
+  "企劃",
+  "人",
+  "方",
+];
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const ROLE = [...CREDIT_ROLES].sort((a, b) => b.length - a.length).map(escapeRegExp).join("|");
+const alt = (values: string[]): string =>
+  [...new Set(values)].sort((a, b) => b.length - a.length).map(escapeRegExp).join("|");
+const ROLE_PART = `(?:${alt(CREDIT_ROLE_PREFIXES)})?(?:${alt(CREDIT_ROLES)})(?:${alt(CREDIT_ROLE_SUFFIXES)})*`;
+const COPYRIGHT_NOTICE_RE = /^未经.*许可.*(?:不得|禁止)/;
 const CREDIT_HEADER_RE = new RegExp(
-  `^(?:${ROLE})(?:\\s*[/／&]\\s*(?:${ROLE}))*\\s*[:：]`,
+  `^(?:${ROLE_PART})(?:\\s*[/／&]\\s*(?:${ROLE_PART}))*\\s*[:：]`,
   "i",
 );
 const isCreditHeader = (text: string): boolean =>
@@ -575,6 +644,7 @@ export const parseYrcData = (
     qrc = qrc.replace(/\((\d+,\d+)\)/g, "{$1}");
 
     // 遍历每一行逐字歌词
+    let seenContent = false;
     const parsedLyrics = qrc
       .split("\n")
       .map((line) => {
@@ -621,10 +691,21 @@ export const parseYrcData = (
           })
           .filter((c): c is YrcWord => c !== null);
         if (removeInfo && contentArray.length > 0) {
-          // 信息行判定规则见 parseAMData 注释。
           const lineContent = contentArray.map((item) => item.content).join("");
+          const isFirstContentLine = !seenContent;
+          seenContent = true;
           if (isCreditHeader(lineContent)) {
             return null; // 返回 null 表示跳过当前元素
+          }
+          if (COPYRIGHT_NOTICE_RE.test(lineContent.trim())) {
+            return null;
+          }
+          if (
+            isFirstContentLine &&
+            Number(startTime) === 0 &&
+            /\s-\s/.test(lineContent)
+          ) {
+            return null;
           }
           const restDurations = contentArray.slice(1).map((item) => item.duration);
           const hasNoTiming =
@@ -656,9 +737,10 @@ export const parseYrcData = (
  * 处理 AM 歌词并适配 LyricLine 和 LyricWord 接口
  * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示
  *
- * 信息行判定不设字数门槛:行首为创作者信息头(角色后必须有冒号),或整行没有任何
- * 时间信息(行起止为 0 且逐字时长全 0)时丢弃。不能只看逐字时长匀速,否则会误杀
- * AI 生成的机械匀速卡拉 OK 正文行(如正文第一句全行每字 198ms)。
+ * 信息行判定不设字数门槛:①行首为创作者信息头(角色后必须有冒号);②整行没有任何
+ * 时间信息(行起止为 0 且逐字时长全 0);③未经许可的版权声明;④首个非空内容行从
+ * 0ms 开始且含「 - 」的标题行。不能只看逐字时长匀速,否则会误杀 AI 生成的机械
+ * 匀速卡拉 OK 正文行(如正文第一句全行每字 198ms)。
  *
  * 翻译对齐规则(对应 QQ 接口的数据结构),分两步:
  * - ① 头部连续丢弃块:翻译侧的 "//" 占位与空行只去掉「主数组头部同样会被丢弃」
@@ -680,10 +762,15 @@ export const parseAMData = (
   const lineText = (line?: LyricLine): string =>
     (line?.words ?? []).map((w) => w.word).join("");
 
-  // 信息行判定规则见函数注释。
-  const isInfoLine = (line: LyricLine): boolean => {
+  const firstContentIndex = lrcData.findIndex((line) => lineText(line).trim() !== "");
+  const isInfoLine = (line: LyricLine, index: number): boolean => {
+    const text = lineText(line);
     const words = line.words ?? [];
-    if (isCreditHeader(lineText(line))) return true;
+    if (isCreditHeader(text)) return true;
+    if (COPYRIGHT_NOTICE_RE.test(text.trim())) return true;
+    if (index === firstContentIndex && line.startTime === 0 && /\s-\s/.test(text)) {
+      return true;
+    }
     const durations = words.slice(1).map((word) => word.endTime - word.startTime);
     return (
       line.startTime === 0 &&
@@ -693,12 +780,12 @@ export const parseAMData = (
   };
 
   // 可丢弃的主行:空行,或 removeAMInfo 开启时的信息行
-  const isDroppableMain = (line: LyricLine): boolean =>
-    lineText(line).trim() === "" || (removeAMInfo && isInfoLine(line));
+  const isDroppableMain = (line: LyricLine, index: number): boolean =>
+    lineText(line).trim() === "" || (removeAMInfo && isInfoLine(line, index));
 
   // 翻译头部占位与丢弃行同步规则见函数注释。
   let maxStrip = 0;
-  while (maxStrip < lrcData.length && isDroppableMain(lrcData[maxStrip])) maxStrip++;
+  while (maxStrip < lrcData.length && isDroppableMain(lrcData[maxStrip], maxStrip)) maxStrip++;
   let tranCursor = 0;
   while (
     tranCursor < maxStrip &&
@@ -726,7 +813,7 @@ export const parseAMData = (
     const currentWords = line.words || [];
     // roma 对齐用原数组下标 index(roma 与主歌词同构),不受翻译消费顺序影响
     const currentRomaWords = romaData?.[index]?.words || [];
-    const info = isInfoLine(line);
+    const info = isInfoLine(line, index);
 
     // 1. 过滤信息行 / 空行;头部占位已预处理,中段信息行仅同步跳过对应占位。
     if ((info && removeAMInfo) || lineText(line).trim() === "") {
