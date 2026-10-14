@@ -75,5 +75,20 @@ export default defineConfig({
 
   build: {
     target: "esnext",
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            // 将体积较大的渲染库与公共 UI 依赖独立缓存。
+            { name: "pixi", test: /node_modules\/(?:@pixi\/|pixi\.js\/)/ },
+            { name: "lyrics", test: /node_modules\/@applemusic-like-lyrics\// },
+            { name: "react", test: /node_modules\/(?:react|react-dom|scheduler)\// },
+            { name: "router", test: /node_modules\/@tanstack\// },
+            { name: "ui", test: /node_modules\/(?:@base-ui-components\/|@floating-ui\/)/ },
+            { name: "motion", test: /node_modules\/(?:motion|motion-dom|motion-utils|framer-motion)\// },
+          ],
+        },
+      },
+    },
   },
 });

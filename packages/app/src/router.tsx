@@ -15,36 +15,38 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   redirect,
 } from "@tanstack/react-router";
 import RootLayout from "@/layout/RootLayout";
-import Home from "@/pages/Home";
-import History from "@/pages/History";
-import VideosPlayer from "@/pages/VideosPlayer";
-import Album from "@/pages/Album";
-import ArtistLayout from "@/pages/artist/ArtistLayout";
-import ArtistHot from "@/pages/artist/Hot";
-import ArtistSongs from "@/pages/artist/Songs";
-import ArtistAlbums from "@/pages/artist/Albums";
-import ArtistVideos from "@/pages/artist/Videos";
-import Setting from "@/pages/Setting";
-import SongDetail from "@/pages/Song";
-import Download from "@/pages/Download";
-import Comments from "@/pages/Comments";
-import ListenTogether from "@/pages/ListenTogether";
-import TestPage from "@/pages/Test";
-import NotFound from "@/pages/state/NotFound";
-import Forbidden from "@/pages/state/Forbidden";
-import ServerError from "@/pages/state/ServerError";
-// —— 以下页面由并行任务实现;文件尚未落地时的 TS2307 属预期 ——
-import SearchStart from "@/pages/search/SearchStart";
-import SearchLayout from "@/pages/search/SearchLayout";
-import SearchSongs from "@/pages/search/Songs";
-import SearchArtists from "@/pages/search/Artists";
-import SearchAlbums from "@/pages/search/Albums";
-import SearchVideos from "@/pages/search/Videos";
-import SearchPlaylists from "@/pages/search/Playlists";
-import Playlist from "@/pages/list/Playlist";
+
+// 页面按路由加载，避免视频播放器等非首屏依赖进入入口包。
+const Home = lazyRouteComponent(() => import("@/pages/Home"));
+const History = lazyRouteComponent(() => import("@/pages/History"));
+const VideosPlayer = lazyRouteComponent(() => import("@/pages/VideosPlayer"));
+const Album = lazyRouteComponent(() => import("@/pages/Album"));
+const ArtistLayout = lazyRouteComponent(() => import("@/pages/artist/ArtistLayout"));
+const ArtistHot = lazyRouteComponent(() => import("@/pages/artist/Hot"));
+const ArtistSongs = lazyRouteComponent(() => import("@/pages/artist/Songs"));
+const ArtistAlbums = lazyRouteComponent(() => import("@/pages/artist/Albums"));
+const ArtistVideos = lazyRouteComponent(() => import("@/pages/artist/Videos"));
+const Setting = lazyRouteComponent(() => import("@/pages/Setting"));
+const SongDetail = lazyRouteComponent(() => import("@/pages/Song"));
+const Download = lazyRouteComponent(() => import("@/pages/Download"));
+const Comments = lazyRouteComponent(() => import("@/pages/Comments"));
+const ListenTogether = lazyRouteComponent(() => import("@/pages/ListenTogether"));
+const TestPage = lazyRouteComponent(() => import("@/pages/Test"));
+const NotFound = lazyRouteComponent(() => import("@/pages/state/NotFound"));
+const Forbidden = lazyRouteComponent(() => import("@/pages/state/Forbidden"));
+const ServerError = lazyRouteComponent(() => import("@/pages/state/ServerError"));
+const SearchStart = lazyRouteComponent(() => import("@/pages/search/SearchStart"));
+const SearchLayout = lazyRouteComponent(() => import("@/pages/search/SearchLayout"));
+const SearchSongs = lazyRouteComponent(() => import("@/pages/search/Songs"));
+const SearchArtists = lazyRouteComponent(() => import("@/pages/search/Artists"));
+const SearchAlbums = lazyRouteComponent(() => import("@/pages/search/Albums"));
+const SearchVideos = lazyRouteComponent(() => import("@/pages/search/Videos"));
+const SearchPlaylists = lazyRouteComponent(() => import("@/pages/search/Playlists"));
+const Playlist = lazyRouteComponent(() => import("@/pages/list/Playlist"));
 
 /**
  * search 参数序列化:值全部按纯字符串处理(替代 TanStack Router 默认的
