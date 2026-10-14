@@ -221,7 +221,8 @@ const CREDIT_ROLE_SUFFIXES = [
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const alt = (values: string[]): string =>
   [...new Set(values)].sort((a, b) => b.length - a.length).map(escapeRegExp).join("|");
-const ROLE_PART = `(?:${alt(CREDIT_ROLE_PREFIXES)})?(?:${alt(CREDIT_ROLES)})(?:${alt(CREDIT_ROLE_SUFFIXES)})*`;
+const ROLE_PART =
+  `(?:${alt(CREDIT_ROLE_PREFIXES)})?(?:${alt(CREDIT_ROLES)})(?:${alt(CREDIT_ROLE_SUFFIXES)})*`;
 const COPYRIGHT_NOTICE_RE = /^未经.*许可.*(?:不得|禁止)/;
 const CREDIT_HEADER_RE = new RegExp(
   `^(?:${ROLE_PART})(?:\\s*[/／&]\\s*(?:${ROLE_PART}))*\\s*[:：]`,

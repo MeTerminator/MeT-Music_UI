@@ -147,9 +147,6 @@ importers:
       '@types/howler':
         specifier: ^2.2.13
         version: 2.2.13
-      '@types/node':
-        specifier: 24.0.10
-        version: 24.0.10
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -4626,6 +4623,7 @@ snapshots:
   '@types/node@24.0.10':
     dependencies:
       undici-types: 7.8.0
+    optional: true
 
   '@types/react-dom@19.2.4(@types/react@19.2.18)':
     dependencies:
@@ -6063,7 +6061,8 @@ snapshots:
       has-symbols: 1.1.0
       which-boxed-primitive: 1.1.1
 
-  undici-types@7.8.0: {}
+  undici-types@7.8.0:
+    optional: true
 
   unicode-canonical-property-names-ecmascript@2.0.1: {}
 

@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
+// 真实 QQ QRC 样本(《全世界的雨》头部):创作者行均带真实匀速时间轴
+export const QRC_CREDITS = String.raw`<?xml version="1.0" encoding="utf-8"?>
 <QrcInfos>
 <QrcHeadInfo SaveTime="248" Version="100"/>
 <LyricInfo LyricCount="1">
@@ -39,3 +40,4 @@
 "/>
 </LyricInfo>
 </QrcInfos>
+`;

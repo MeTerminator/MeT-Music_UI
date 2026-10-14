@@ -1,5 +1,4 @@
-/// <reference types="node" />
-import { readFileSync } from "node:fs";
+import { QRC_CREDITS } from "./fixtures/qrc-credits-quanshijiedeyu";
 import { describe, expect, it } from "vitest";
 import { parseLrc, parseQrc } from "@applemusic-like-lyrics/lyric";
 import {
@@ -25,11 +24,6 @@ const QRC =
   "[ti:test]\n[offset:0]\n" +
   "[600,2000]你(1000,500)好(1500,600)\n" +
   "[3000,2000]信(3000,400)息(3400,400)行(3800,400)\n";
-const QRC_CREDITS = readFileSync(
-  new URL("./fixtures/qrc-credits-quanshijiedeyu.xml", import.meta.url),
-  "utf8",
-);
-
 describe("parseLrcData", () => {
   it("解析 [mm:ss.xxx] 时间轴与文本", () => {
     const result = parseLrcData(LRC);
