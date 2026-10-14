@@ -121,6 +121,57 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     },
   );
 
+  it.each([
+    "词 Lyricist：五月天 阿信",
+    "共同制作人 Co-Producer：詹宏业",
+    "编曲 Music Arrangement：五月天 阿信",
+    "编曲协力 Music Arrangement Coordinator：黄庆原",
+    "和声编写/演唱 Backing Vocal/Arrangement：洪俊扬",
+    "大合唱 Crowd Vocals：詹宏业",
+    "母带后期处理工程师 Mastering Engineer：Wayson",
+    "母带后期处理录音室 Mastering Studio：Wayson",
+  ])("移除中英双语创作者信息行: %s", (credit) => {
+    const source = [timedQrcLine(credit, 1000), timedQrcLine("真实歌词", 5000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["真实歌词"]);
+  });
+
+  it("移除带括号前缀的版权声明", () => {
+    const notice = "【本作品声明，著作权权利保留。未经著作权人书面许可，不得以任何方式使用。】";
+    const source = [timedQrcLine(notice, 1000, 1), timedQrcLine("真实歌词", 5000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["真实歌词"]);
+  });
+
+  it("移除末尾双语创作者行时保持翻译对齐", () => {
+    const source = [
+      timedQrcLine("歌词一", 1000),
+      timedQrcLine("歌词二", 2000),
+      timedQrcLine("词 Lyricist：A", 3000),
+      timedQrcLine("曲 Composer：B", 4000),
+    ].join("\n");
+    const translation = parseLrc(
+      "[00:01.00]译一\n[00:02.00]译二\n[00:03.00]//\n[00:04.00]//",
+    );
+    const lines = parseAMData(parseQrc(source), translation, [], true);
+
+    expect(lines).toHaveLength(2);
+    expect(lines.map(amText)).toEqual(["歌词一", "歌词二"]);
+    expect(lines.map((line) => line.translatedLyric)).toEqual(["译一", "译二"]);
+  });
+
+  it("保留不匹配的英文正文和没有冒号的文本", () => {
+    const source = [
+      timedQrcLine("Music is my life：yeah", 1000),
+      timedQrcLine("Alive again a party & a game", 3000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["Music is my life：yeah", "Alive again a party & a game"]);
+  });
+
   it("不带冒号的正文不会因角色前缀被误删", () => {
     const source = [
       timedQrcLine("词穷了", 1000),

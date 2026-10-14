@@ -19,7 +19,7 @@ import { parseNeteaseLyric } from "./netease";
 /**
  * 创作者信息头:行首为「角色 + 冒号」的信息行,如「词:」「曲:」「编曲:」「制作人:」。
  * 冒号是强制的,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中);
- * 角色支持「A/B:」复合形式(如「混音/母带:」),分隔符可为 /、／ 或 &。
+ * 角色支持「A/B:」复合形式及空格连接的中英双语形式(如「词 Lyricist:」),分隔符可为 /、／、& 或空格。
  */
 const CREDIT_ROLES: string[] = [
   // 词曲作者
@@ -91,6 +91,8 @@ const CREDIT_ROLES: string[] = [
   "弦乐",
   "管乐",
   "打击乐",
+  "演唱",
+  "合唱",
   "貝斯",
   "鍵盤",
   "弦樂",
@@ -152,6 +154,11 @@ const CREDIT_ROLES: string[] = [
   "Vocal Producer",
   "Vocal Director",
   "Backing Vocals",
+  "Vocal",
+  "Vocals",
+  "Backing Vocal",
+  "Crowd Vocals",
+  "Studio",
   "Guitar",
   "Bass",
   "Drums",
@@ -161,12 +168,15 @@ const CREDIT_ROLES: string[] = [
   "Programming",
   "Publisher",
   "Label",
+  "Coordinator",
 ];
 const CREDIT_ROLE_PREFIXES = [
   "总",
   "總",
+  "大",
   "联合",
   "聯合",
+  "共同",
   "执行",
   "執行",
   "项目",
@@ -194,6 +204,8 @@ const CREDIT_ROLE_SUFFIXES = [
   "師",
   "工程师",
   "工程師",
+  "后期",
+  "後期",
   "室",
   "棚",
   "助理",
@@ -201,6 +213,10 @@ const CREDIT_ROLE_SUFFIXES = [
   "統籌",
   "处理",
   "處理",
+  "录音",
+  "錄音",
+  "编写",
+  "編寫",
   "指导",
   "指導",
   "协力",
@@ -223,9 +239,9 @@ const alt = (values: string[]): string =>
   [...new Set(values)].sort((a, b) => b.length - a.length).map(escapeRegExp).join("|");
 const ROLE_PART =
   `(?:${alt(CREDIT_ROLE_PREFIXES)})?(?:${alt(CREDIT_ROLES)})(?:${alt(CREDIT_ROLE_SUFFIXES)})*`;
-const COPYRIGHT_NOTICE_RE = /^未经.*许可.*(?:不得|禁止)/;
+const COPYRIGHT_NOTICE_RE = /未[经經].*[许許]可.*(?:不得|禁止)/;
 const CREDIT_HEADER_RE = new RegExp(
-  `^(?:${ROLE_PART})(?:\\s*[/／&]\\s*(?:${ROLE_PART}))*\\s*[:：]`,
+  `^(?:${ROLE_PART})(?:(?:\\s*[/／&]\\s*|\\s+)(?:${ROLE_PART}))*\\s*[:：]`,
   "i",
 );
 const isCreditHeader = (text: string): boolean =>
