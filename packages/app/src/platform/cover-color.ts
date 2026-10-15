@@ -6,17 +6,15 @@
  */
 import {
   themeFromSourceColor,
-  QuantizerCelebi,
   Hct,
-  Score,
   type Theme,
-  type TonalPalette,
+  TonalPalette,
 } from "@material/material-color-utilities";
 import { getColorSync, getPaletteSync } from "colorthief";
-import { chunk } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
-import { argb2Rgb, getGradientFromPalette, rgb2Argb } from "@/platform/color-utils";
+import { argb2Rgb, getGradientFromPalette } from "@/platform/color-utils";
+import { extractCoverDominant } from "./cover-dominant";
 import { toCoverProxyUrl } from "@/platform/cover-url";
 
 const DEFAULT_GRADIENT = "linear-gradient(-45deg, #666, #fff)";
@@ -72,7 +70,7 @@ export const getCoverGradient = (coverSrc: string): Promise<string> => {
           const palette = paletteColors.map((color) => [...color.array()] as number[]);
           const gradient = getGradientFromPalette(palette);
           console.log("图片加载完成，渐变色：", gradient);
-          calcAccentColor(image, palette[0]);
+          calcAccentColor(image);
           resolve(gradient);
         } catch (err) {
           console.error("颜色提取失败，使用默认渐变色：", err);
@@ -95,9 +93,8 @@ export const getCoverGradient = (coverSrc: string): Promise<string> => {
 /**
  * 计算图片的主色并更新主题(写入 useStatusStore.coverTheme)
  * @param dom - 包含图像的 DOM 元素
- * @param dominantColor - 主要颜色([R, G, B])
  */
-const calcAccentColor = (dom: HTMLImageElement, dominantColor: number[]): void => {
+const calcAccentColor = (dom: HTMLImageElement): void => {
   const settings = useSettingsStore.getState();
 
   const canvas = document.createElement("canvas");
@@ -107,27 +104,17 @@ const calcAccentColor = (dom: HTMLImageElement, dominantColor: number[]): void =
   if (!ctx) return;
   ctx.drawImage(dom, 0, 0, dom.naturalWidth, dom.naturalHeight, 0, 0, 50, 50);
 
-  const pixels = chunk(Array.from(ctx.getImageData(0, 0, 50, 50).data), 4).map((pixel) => {
-    return (
-      (((pixel[3] << 24) >>> 0) | ((pixel[0] << 16) >>> 0) | ((pixel[1] << 8) >>> 0) | pixel[2]) >>>
-      0
-    );
-  });
-
-  const quantizedColors = QuantizerCelebi.quantize(pixels, 64); // 限制颜色数为 64
-  const sortedColors = Array.from(quantizedColors).sort((a, b) => b[1] - a[1]);
-
-  const topColors = sortedColors.slice(0, 10).map((x) => argb2Rgb(x[0])); // 取前 10 颜色
-  const ranked = Score.score(new Map(sortedColors.slice(0, 10))); // 评分范围缩小
-  const top = ranked[0] || rgb2Argb(dominantColor[0], dominantColor[1], dominantColor[2]); // 选取最佳颜色
-
-  // 计算平均亮度
-  const avgBrightness =
-    topColors.reduce((sum, c) => sum + (c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114), 0) /
-    topColors.length;
-
-  // 计算主题色
-  const theme = themeFromSourceColor(top);
+  const dominant = extractCoverDominant(ctx.getImageData(0, 0, 50, 50).data);
+  if (!dominant) return;
+  const avgBrightness = dominant.brightness;
+  // 无彩色封面保留低彩度，避免默认 primary 调色板强行补入彩色。
+  const theme = themeFromSourceColor(dominant.color);
+  if (Hct.fromInt(dominant.color).chroma < 8) {
+    const neutral = TonalPalette.fromHueAndChroma(0, 0);
+    for (const key of ["primary", "secondary", "tertiary", "neutral", "neutralVariant"] as const) {
+      theme.palettes[key] = neutral;
+    }
+  }
   const variant = settings.themeAutoCoverType;
 
   useStatusStore.setState({

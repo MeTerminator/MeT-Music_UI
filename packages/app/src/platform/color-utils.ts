@@ -206,12 +206,18 @@ export const calcColorDifference = (
  * @returns 表示渐变背景颜色的CSS线性渐变字符串
  */
 export const getGradientFromPalette = (palette: number[][]): string => {
+  if (palette.length === 0) return "linear-gradient(-45deg, #666, #fff)";
+  // 不修改调用方的调色板。纯色封面也能生成有效的两端渐变。
+  if (palette.length === 1) {
+    const color = `rgb(${palette[0].join(", ")})`;
+    return `linear-gradient(-45deg, ${color}, ${color})`;
+  }
   // 根据亮度对调色板进行排序
-  palette = palette.sort((a, b) => {
+  palette = [...palette].sort((a, b) => {
     return calcLuminance(a) - calcLuminance(b);
   });
   // 选择亮度中间的8个颜色
-  palette = palette.slice(palette.length / 2 - 4, palette.length / 2 + 4);
+  palette = palette.slice(Math.max(0, Math.floor(palette.length / 2) - 4), Math.floor(palette.length / 2) + 4);
   // 根据饱和度对颜色进行排序
   palette = palette.sort((a, b) => {
     return rgb2Hsl(b)[1] - rgb2Hsl(a)[1];
@@ -219,9 +225,10 @@ export const getGradientFromPalette = (palette: number[][]): string => {
   // 选择最饱和的6个颜色
   palette = palette.slice(0, 6);
   // 计算颜色之间的差异
-  const differences: number[][] = new Array(6);
+  const count = palette.length;
+  const differences: number[][] = new Array(count);
   for (let i = 0; i < differences.length; i++) {
-    differences[i] = new Array(6).fill(0);
+    differences[i] = new Array(count).fill(0);
   }
   for (let i = 0; i < palette.length; i++) {
     for (let j = i + 1; j < palette.length; j++) {
@@ -230,25 +237,25 @@ export const getGradientFromPalette = (palette: number[][]): string => {
     }
   }
   // 使用深度优先搜索找到最佳颜色序列
-  const used: boolean[] = new Array(6).fill(false);
+  const used: boolean[] = new Array(count).fill(false);
   let min = 10000000;
   let ansSeq: number[] = [];
   const dfs = (depth: number, seq: number[] = [], currentMax = -1): void => {
-    if (depth === 6) {
+    if (depth === count) {
       if (currentMax < min) {
         min = currentMax;
         ansSeq = seq;
       }
       return;
     }
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < count; i++) {
       if (used[i]) continue;
       used[i] = true;
       dfs(depth + 1, seq.concat(i), Math.max(currentMax, differences[seq[depth - 1]][i]));
       used[i] = false;
     }
   };
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < count; i++) {
     used[i] = true;
     dfs(1, [i]);
     used[i] = false;
