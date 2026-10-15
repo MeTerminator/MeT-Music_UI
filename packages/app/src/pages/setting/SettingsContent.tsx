@@ -13,6 +13,7 @@ import { soundStop } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { cleanAll, getSessionId } from "@/platform/web";
+import { DEFAULT_DESKTOP_LYRIC_FALLBACK } from "@/platform/desktop-lyric-color";
 import { copyText } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -449,6 +450,27 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               onValueChange={(v) => set({ lyricsShiftMs: v })}
             />
             <SliderMarks marks={["-2000ms", "默认 0", "+2000ms"]} />
+          </SettingItem>
+          <SettingItem
+            name="桌面歌词备选主题色"
+            tip="封面主题色偏白时，桌面歌词使用此颜色"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                aria-label="桌面歌词备选主题色"
+                value={settings.desktopLyricFallbackColor}
+                onChange={(event) => set({ desktopLyricFallbackColor: event.target.value.toUpperCase() })}
+                className="h-9 w-12 cursor-pointer rounded border border-[var(--met-border)] bg-transparent p-1"
+              />
+              <span className="font-mono text-sm">{settings.desktopLyricFallbackColor}</span>
+              <Button
+                onClick={() => set({ desktopLyricFallbackColor: DEFAULT_DESKTOP_LYRIC_FALLBACK })}
+                disabled={settings.desktopLyricFallbackColor === DEFAULT_DESKTOP_LYRIC_FALLBACK}
+              >
+                恢复默认
+              </Button>
+            </div>
           </SettingItem>
           <SettingItem
             name="Hook 歌词偏转"

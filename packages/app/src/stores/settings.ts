@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { legacyStorage } from "./persist";
 import type { IsolationRendererOptions, OptimizeLyricOptions, spring } from "@applemusic-like-lyrics/core";
+import { DEFAULT_DESKTOP_LYRIC_FALLBACK, normalizeDesktopLyricFallback } from "@/platform/desktop-lyric-color";
 import { NETEASE_LEVELS } from "@met/core";
 
 /**
@@ -58,6 +59,7 @@ export interface SettingsState {
   lyricsAMEndTimeOffset: number;
   lyricsAMttmlUseOffset: boolean;
   lyricsHookOffset: number;
+  desktopLyricFallbackColor: string;
   useAMLyrics: boolean;
   useAMSpring: boolean;
   amllAlignPosition: number;
@@ -135,6 +137,7 @@ export const defaultSettings: SettingsState = {
   lyricsAMEndTimeOffset: 250,
   lyricsAMttmlUseOffset: false,
   lyricsHookOffset: 0.3,
+  desktopLyricFallbackColor: DEFAULT_DESKTOP_LYRIC_FALLBACK,
   useAMLyrics: true,
   useAMSpring: true,
   amllAlignPosition: 0.25,
@@ -185,6 +188,7 @@ export const useSettingsStore = create<SettingsState>()(
         rest.amllAlignPosition = rest.lyricsBlock === "center" ? 0.5 : 0.25;
       }
       const merged = { ...current, ...rest } as SettingsState;
+      merged.desktopLyricFallbackColor = normalizeDesktopLyricFallback(merged.desktopLyricFallbackColor);
       for (const key of ["amllSpringY", "amllSpringScale", "amllIsolationOptions", "amllOptimizeOptions"] as const) {
         Object.assign(merged, { [key]: { ...current[key], ...merged[key] } });
       }

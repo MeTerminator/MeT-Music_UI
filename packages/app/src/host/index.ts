@@ -37,6 +37,7 @@ import {
 import { getPlaySongData, useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
+import { desktopLyricColor } from "@/platform/desktop-lyric-color";
 import { cleanAll } from "@/platform/web";
 
 /** 宿主注册状态(导航栏据此渲染宿主按钮) */
@@ -85,11 +86,11 @@ export const buildHookPayload = (): HookPayload | null => {
     light?: Record<string, string | undefined>;
   };
   const pickSide = (side?: Record<string, string | undefined>) => ({
-    bg: side?.bg,
+    bg: desktopLyricColor(side?.bg, settings.desktopLyricFallbackColor),
     mainBg: side?.mainBg,
-    primary: side?.primary,
-    shade: side?.shade,
-    shadeTwo: side?.shadeTwo,
+    primary: desktopLyricColor(side?.primary, settings.desktopLyricFallbackColor),
+    shade: desktopLyricColor(side?.shade, settings.desktopLyricFallbackColor),
+    shadeTwo: desktopLyricColor(side?.shadeTwo, settings.desktopLyricFallbackColor),
   });
 
   try {
@@ -172,7 +173,7 @@ const broadcastPlaybackSync = (force = false): void => {
   const song = getPlaySongData();
   const key = [song, music.playSongLyric, status.coverTheme, status.playTimeData.duration,
     settings.showYrc, settings.lyricsOffset, settings.lyricsHookOffset, settings.lyricsShiftMs,
-    settings.lyricsAMttmlUseOffset, settings.lyricsAMOffset];
+    settings.lyricsAMttmlUseOffset, settings.lyricsAMOffset, settings.desktopLyricFallbackColor];
   const changed = key.length !== syncKey.length || key.some((value, i) => value !== syncKey[i]);
   const timestamp = Date.now();
   const progress: PlaybackProgress = {
@@ -419,7 +420,10 @@ export const initHostGlobals = (): void => {
       || state.coverTheme !== prev.coverTheme) broadcastPlaybackSync(force);
   });
   useMusicStore.subscribe(() => broadcastPlaybackSync());
-  useSettingsStore.subscribe(() => broadcastPlaybackSync());
+  useSettingsStore.subscribe((state, prev) => {
+    if (state.desktopLyricFallbackColor !== prev.desktopLyricFallbackColor) broadcastHook();
+    else broadcastPlaybackSync();
+  });
 
   // 程序重置
   (window as unknown as { $cleanAll: typeof cleanAll }).$cleanAll = cleanAll;

@@ -4,14 +4,27 @@ import { argb2Rgb, rgb2Argb } from "./color-utils";
 /** 按可见面积选择主色；相近色相的明暗变化合并，避免阴影把主色拆散。 */
 export const extractCoverDominant = (rgba: ArrayLike<number>) => {
   const pixels: number[] = [];
+  let visibleCount = 0;
   let brightness = 0;
   for (let i = 0; i + 3 < rgba.length; i += 4) {
     // 忽略透明区域，避免透明像素中的隐藏 RGB 影响取色。
     if (rgba[i + 3] < 128) continue;
-    pixels.push(rgb2Argb(rgba[i], rgba[i + 1], rgba[i + 2]) >>> 0);
+    visibleCount++;
     brightness += rgba[i] * 0.299 + rgba[i + 1] * 0.587 + rgba[i + 2] * 0.114;
+    // 在量化前排除近白/近黑背景，避免它们吞并面积较小的有效颜色。
+    // 三通道都接近端点才排除，保留明亮黄色、深蓝色等有明显色彩的区域。
+    const min = Math.min(rgba[i], rgba[i + 1], rgba[i + 2]);
+    const max = Math.max(rgba[i], rgba[i + 1], rgba[i + 2]);
+    if (min >= 220 || max <= 45) continue;
+    pixels.push(rgb2Argb(rgba[i], rgba[i + 1], rgba[i + 2]) >>> 0);
   }
-  if (!pixels.length) return null;
+  if (!visibleCount) return null;
+  const averageBrightness = brightness / visibleCount;
+  if (!pixels.length) {
+    // 全部为黑白区域时按整张封面的亮度回退到中性色。
+    const gray = Math.round(averageBrightness);
+    return { color: rgb2Argb(gray, gray, gray) >>> 0, brightness: averageBrightness };
+  }
 
   const colors = Array.from(QuantizerCelebi.quantize(pixels, 64), ([argb, population]) => ({
     argb,
@@ -41,6 +54,6 @@ export const extractCoverDominant = (rgba: ArrayLike<number>) => {
   }
   return {
     color: rgb2Argb(...rgb.map(Math.round) as [number, number, number]) >>> 0,
-    brightness: brightness / pixels.length,
+    brightness: averageBrightness,
   };
 };

@@ -42,6 +42,41 @@ test("neutral majority stays neutral, with no default blue", () => {
   expect(argb2Rgb(result.color)).toEqual([190, 190, 190]);
 });
 
+for (const background of [[255, 255, 255], [240, 232, 222], [0, 0, 0], [30, 35, 42]]) {
+  test(`excludes near-white/black background ${background.join(",")}`, () => {
+    const result = extractCoverDominant(pixels(
+      [background[0], background[1], background[2], 255, 850],
+      [205, 135, 85, 255, 100], [0, 80, 255, 255, 50],
+    ))!;
+    expect(argb2Rgb(result.color)).toEqual([205, 135, 85]);
+  });
+}
+
+test("excludes white and black together before comparing remaining areas", () => {
+  const result = extractCoverDominant(pixels(
+    [245, 245, 245, 255, 500], [20, 20, 20, 255, 350],
+    [180, 50, 40, 255, 100], [20, 170, 60, 255, 50],
+  ))!;
+  expect(argb2Rgb(result.color)).toEqual([180, 50, 40]);
+});
+
+for (const main of [[255, 255, 0], [15, 20, 100]]) {
+  test(`preserves saturated bright/dark color ${main.join(",")}`, () => {
+    const result = extractCoverDominant(pixels(
+      [main[0], main[1], main[2], 255, 800], [180, 50, 40, 255, 200],
+    ))!;
+    expect(argb2Rgb(result.color)).toEqual(main);
+  });
+}
+
+test("all near-white/black cover falls back to neutral without losing brightness", () => {
+  const result = extractCoverDominant(pixels([240, 232, 222, 255, 750], [30, 35, 42, 255, 250]))!;
+  const [r, g, b] = argb2Rgb(result.color);
+  expect(r).toBe(g);
+  expect(g).toBe(b);
+  expect(result.brightness).toBeCloseTo((240 * 0.299 + 232 * 0.587 + 222 * 0.114) * 0.75 + (30 * 0.299 + 35 * 0.587 + 42 * 0.114) * 0.25);
+});
+
 test("ignores transparent pixels and weights brightness by area", () => {
   const result = extractCoverDominant(pixels([255, 0, 0, 0, 900], [40, 40, 40, 255, 75], [200, 200, 200, 255, 25]))!;
   expect(result.brightness).toBeCloseTo(80);
