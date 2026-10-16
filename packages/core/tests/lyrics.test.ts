@@ -485,3 +485,75 @@ describe("computeWordProgress", () => {
     expect(result?.lrcAM?.[0].words[0].romanWord).toBe("ni hao");
   });
 });
+
+
+describe("首行歌曲名信息过滤", () => {
+  const getAMTexts = (lines: AMLine[] = []) => lines.map((line) => line.words.map((word) => word.word).join(""));
+
+  for (const platform of ["qq", "netease"] as const) {
+    for (const wordTimed of [false, true]) {
+      it(`${platform} ${wordTimed ? "逐字" : "普通"}歌词过滤非零时间首行，独立遵循普通/AM 开关`, async () => {
+        const texts = ["测试歌曲-另一位歌手", "真正歌词", "测试歌曲-正文保留"];
+        const data = wordTimed
+          ? platform === "netease"
+            ? { yrc: texts.map((text, index) => `[${1000 + index * 3000},2000](${1000 + index * 3000},2000,0)${text}`).join("\n") }
+            : { qrc: "[offset:0]\n" + texts.map((text, index) => `[${1000 + index * 3000},2000]${text}(${1000 + index * 3000},2000)`).join("\n") }
+          : { lrc: "[00:00.00]\n" + texts.map((text, index) => `[00:${String(1 + index * 3).padStart(2, "0")}.00]${text}`).join("\n") };
+        for (const removeInfo of [false, true]) {
+          for (const removeAMInfo of [false, true]) {
+            const result = await parseLyric(data, null, {
+              platform, title: "测试歌曲", artists: ["当前歌手"], removeInfo, removeAMInfo,
+            });
+            expect(result?.lrc.map((line) => line.content)).toEqual(removeInfo ? texts.slice(1) : texts);
+            expect(getAMTexts(wordTimed ? result?.yrcAM : result?.lrcAM)).toEqual(removeAMInfo ? texts.slice(1) : texts);
+            if (wordTimed) expect(result?.yrc.map((line) => line.content.map((word) => word.content).join("")))
+              .toEqual(removeInfo ? texts.slice(1) : texts);
+          }
+        }
+      });
+    }
+  }
+
+  it("首行缺少歌曲名或连字符时保留", async () => {
+    for (const content of ["别的歌曲-歌手", "测试歌曲的第一句"]) {
+      for (const platform of ["qq", "netease"] as const) {
+        const result = await parseLyric({ lrc: `[00:01.00]${content}\n[00:04.00]真正歌词` }, null, {
+          platform, title: "测试歌曲", removeInfo: true, removeAMInfo: true,
+        });
+        expect(result?.lrc[0].content).toBe(content);
+        expect(getAMTexts(result?.lrcAM)[0]).toBe(content);
+      }
+    }
+  });
+});
+
+
+describe("任意行歌手标签过滤", () => {
+  for (const platform of ["qq", "netease"] as const) {
+    for (const wordTimed of [false, true]) {
+      it(`${platform} ${wordTimed ? "逐字" : "普通"}歌词按独立开关移除歌手冒号行`, async () => {
+        const texts = ["开场歌词", "  歌手甲：  ", "第一句", "\t演唱 歌手乙 : ", "歌手甲：唱出歌词", "陌生人：", "歌手乙", "尾声"];
+        const data = wordTimed
+          ? platform === "netease"
+            ? { yrc: texts.map((text, index) => `[${1000 + index * 3000},2000](${1000 + index * 3000},2000,0)${text}`).join("\n") }
+            : { qrc: "[offset:0]\n" + texts.map((text, index) => `[${1000 + index * 3000},2000]${text}(${1000 + index * 3000},2000)`).join("\n") }
+          : { lrc: texts.map((text, index) => `[00:${String(1 + index * 3).padStart(2, "0")}.00]${text}`).join("\n") };
+        const expected = texts.map((text) => text.trim());
+        const filtered = expected.filter((_, index) => index !== 1 && index !== 3);
+        for (const removeInfo of [false, true]) {
+          for (const removeAMInfo of [false, true]) {
+            const result = await parseLyric(data, null, {
+              platform, title: "测试歌曲", artists: [" ", "歌手甲", " 歌手乙 "], removeInfo, removeAMInfo,
+            });
+            expect(result?.lrc.map((line) => line.content.trim())).toEqual(removeInfo ? filtered : expected);
+            const amLines = wordTimed ? result?.yrcAM : result?.lrcAM;
+            expect(amLines?.map((line) => line.words.map((word) => word.word).join("").trim()))
+              .toEqual(removeAMInfo ? filtered : expected);
+            if (wordTimed) expect(result?.yrc.map((line) => line.content.map((word) => word.content).join("").trim()))
+              .toEqual(removeInfo ? filtered : expected);
+          }
+        }
+      });
+    }
+  }
+});

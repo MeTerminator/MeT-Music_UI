@@ -15,6 +15,7 @@ import type { AMLine, LrcLine, ParsedLyric, YrcLine, YrcWord } from "../types/so
 import type { Notifier } from "../types/notify";
 import type { Platform } from "../types/platform";
 import { parseNeteaseLyric } from "./netease";
+import { isTitleInfo, isArtistInfo, stripSongInfo } from "./song-info";
 
 /** 角色后必须有冒号,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。 */
 const CREDIT_ROLES: string[] = [
@@ -259,6 +260,8 @@ const isCreditHeader = (text: string): boolean => {
   return false;
 };
 interface InfoLineInput {
+  artists?: string[];
+  title?: string;
   text: string;
   isFirstContent: boolean;
   startTime: number;
@@ -267,6 +270,8 @@ interface InfoLineInput {
 }
 /** 信息行:角色头 / 版权声明 / 首行「 - 」标题 / 整行无时间。不看匀速,见 parseAMData 注释。 */
 const isInfoLine = ({
+  artists,
+  title,
   text,
   isFirstContent,
   startTime,
@@ -275,9 +280,10 @@ const isInfoLine = ({
 }: InfoLineInput): boolean => {
   const trimmed = text.trim();
   return (
+    isArtistInfo(trimmed, artists) ||
     isCreditHeader(trimmed) ||
     COPYRIGHT_NOTICE_RE.test(trimmed) ||
-    (isFirstContent && startTime === 0 && /\s-\s/.test(text)) ||
+    (isFirstContent && (isTitleInfo(text, title) || (startTime === 0 && /\s-\s/.test(text)))) ||
     (startTime === 0 && endTime === 0 && restDurations.every((d) => d === 0))
   );
 };
@@ -423,7 +429,7 @@ export const parseLyric = async (
     // 逐字歌词
     if (lrcData.yrc) {
       qrcParseData = parseQrc(lrcData.yrc);
-      result.yrc = parseYrcData(lrcData.yrc, options.removeInfo);
+      result.yrc = parseYrcData(lrcData.yrc, options.removeInfo, options.title, options.artists);
       // 判断是否有其他翻译
       if (lrcData.ytlrc) {
         ytlrcParseData = parseLrc(lrcData.ytlrc);
@@ -447,6 +453,10 @@ export const parseLyric = async (
     // yrcAM 而放弃 AMLL。故以「确实解析出了逐字行」为准。
     result.hasYrc = result.yrc.length > 0;
 
+    if (options.removeInfo) {
+      result.lrc = stripSongInfo(result.lrc, (line) => line.content, options.title, options.artists);
+    }
+
     // 当仅有 逐字歌词 ,没有 普通歌词 时
     if (result.yrc.length && !result.lrc.length) {
       result.lrc = result.yrc.map((v) => {
@@ -459,7 +469,7 @@ export const parseLyric = async (
 
     // 重写修正:旧实现此处无视 removeAMInfo 设置恒用默认值 true,
     // 导致关闭"去除 AM 歌词歌曲信息"设置时 lrcAM 仍被过滤
-    let lrcAM = parseAMData(lrcParseData, tlyricParseData, romalrcParseData, options.removeAMInfo);
+    let lrcAM = parseAMData(lrcParseData, tlyricParseData, romalrcParseData, options.removeAMInfo, options.title, options.artists);
     // 去除 lrcAM 中的空行
     lrcAM = lrcAM.filter((v) => v.words?.[0]?.word !== "");
     result.lrcAM = lrcAM;
@@ -467,9 +477,9 @@ export const parseLyric = async (
     if (options.removeAMInfo) {
       // 头部 junk 行(标题/空行/创作者信息行)由 parseAMData 按内容判定跳过,
       // 不再按固定 slice(1):两边 junk 行数不对称时 slice 会让翻译系统性错位
-      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, true);
+      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, true, options.title, options.artists);
     } else {
-      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false);
+      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false, options.title, options.artists);
     }
 
     // 纯音乐清场:parseLrcData 只把提示行挡在 result.lrc 之外,AM 路线
@@ -683,6 +693,8 @@ export const parseLrcData = (lyrics: string | null | undefined, isTrim = true): 
 export const parseYrcData = (
   qrcSource: string | null | undefined,
   removeInfo: boolean,
+  title?: string,
+  artists?: string[],
 ): YrcLine[] => {
   if (!qrcSource) return [];
   try {
@@ -748,6 +760,8 @@ export const parseYrcData = (
           seenContent = true;
           if (
             isInfoLine({
+              title,
+              artists,
               text: lineContent,
               isFirstContent: isFirstContentLine,
               startTime: Number(startTime),
@@ -786,6 +800,8 @@ export const parseAMData = (
   tranData: LyricLine[],
   romaData: LyricLine[],
   removeAMInfo = true,
+  title?: string,
+  artists?: string[],
 ): AMLine[] => {
   const lineText = (line?: LyricLine): string =>
     (line?.words ?? []).map((w) => w.word).join("");
@@ -797,6 +813,8 @@ export const parseAMData = (
   const firstContentIndex = lrcData.findIndex((line) => lineText(line).trim() !== "");
   const isInfo = (line: LyricLine, index: number): boolean =>
     isInfoLine({
+      title,
+      artists,
       text: lineText(line),
       isFirstContent: index === firstContentIndex,
       startTime: line.startTime,

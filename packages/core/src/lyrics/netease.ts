@@ -6,6 +6,7 @@ import { parseLyric as parseNative, normalizeLyricLines, stripLyricMetadata, typ
 import { parseTTML } from "@applemusic-like-lyrics/lyric";
 import type { LyricApiData, ParseLyricOptions, TtmlLyricData } from "./parse";
 import type { AMLine, LrcLine, ParsedLyric, YrcLine } from "../types/song";
+import { stripSongInfo } from "./song-info";
 import type { Notifier } from "../types/notify";
 
 const text = (line: LyricLine): string => line.words.map((word) => word.word).join("");
@@ -73,7 +74,7 @@ export const parseNeteaseLyric = (
 
   const clean = (lines: LyricLine[], removeInfo: boolean): LyricLine[] => {
     let result = lines.map((line) => ({ ...line, words: line.words.map((word) => ({ ...word })) }));
-    if (removeInfo) result = stripLyricMetadata(result, {
+    if (removeInfo) result = stripLyricMetadata(stripSongInfo(result, text, options.title, options.artists), {
       useDefaultRules: true,
       matchMetadata: { title: options.title, artists: options.artists },
     });
