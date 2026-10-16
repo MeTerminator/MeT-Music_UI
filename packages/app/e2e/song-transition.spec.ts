@@ -40,6 +40,7 @@ for (const mobile of [false, true]) {
     })).toBe(true);
     // 扩散时新旧封面同时存在；信息没有位移动画。
     await expect(cover.locator("img")).toHaveCount(2);
+    const revealedImage = await reveal.locator("img").elementHandle();
     await expect(group).toHaveCSS("transform", "none");
     await expect(page.getByText("上一首专属歌词0", { exact: true })).toHaveCount(0);
     await expect(group).toContainText("稻香");
@@ -47,6 +48,10 @@ for (const mobile of [false, true]) {
     await expect(group).toHaveCSS("opacity", "1");
     await expect(reveal).toHaveCount(0);
     await expect(cover.locator("img")).toHaveCount(1);
+    // 动画结束沿用已经绘制的新图，不能卸载它再给底图换 src。
+    expect(await revealedImage!.evaluate(img => img.isConnected)).toBe(true);
+    expect(await cover.locator("img").evaluate((img, revealed) =>
+      img === revealed && img.complete && img.naturalWidth > 0, revealedImage)).toBe(true);
     // 连续切歌不会留下中间歌曲或多个退场层。
     await page.evaluate(() => {
       const { music } = (window as any).__debugStores;
