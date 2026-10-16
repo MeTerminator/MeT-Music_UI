@@ -1,3 +1,4 @@
+import qqTimingFixture from "./fixtures/qq-lyric-timing-001FgbLY33TZKq.json";
 import { describe, expect, it } from "vitest";
 import { parseLrc, parseQrc } from "@applemusic-like-lyrics/lyric";
 import {
@@ -556,4 +557,94 @@ describe("任意行歌手标签过滤", () => {
       });
     }
   }
+});
+
+describe("过滤歌曲信息后翻译和音译保持配对", () => {
+  for (const platform of ["qq", "netease"] as const) {
+    for (const wordTimed of [false, true]) {
+      for (const includeInfo of [false, true]) {
+        it(`${platform} ${wordTimed ? "逐字" : "普通"}歌词，辅助歌词${includeInfo ? "含有" : "省略"}信息行`, async () => {
+          const texts = ["测试歌曲-歌手甲", "第一句", "歌手甲：", "第二句", "歌手乙:", "第三句"];
+          const translations = ["Song - Singer", "译文一", "Singer A:", "译文二", "Singer B:", "译文三"];
+          const romaji = ["song - singer", "roma one", "singer a:", "roma two", "singer b:", "roma three"];
+          const isInfoIndex = (index: number) => [0, 2, 4].includes(index);
+          const lrc = (lines: string[], sidecar = false) => lines.flatMap((text, index) =>
+            sidecar && !includeInfo && isInfoIndex(index) ? [] : [`[00:${String(1 + index * 3).padStart(2, "0")}.00]${text}`],
+          ).join("\n");
+          const qrc = (lines: string[], sidecar = false) => "[offset:0]\n" + lines.flatMap((text, index) =>
+            sidecar && !includeInfo && isInfoIndex(index) ? [] : [`[${1000 + index * 3000},2000]${text}(${1000 + index * 3000},2000)`],
+          ).join("\n");
+          const data: LyricApiData = platform === "netease" ? {
+            lrc: lrc(texts),
+            ...(wordTimed ? { yrc: texts.map((text, index) => `[${1000 + index * 3000},2000](${1000 + index * 3000},2000,0)${text}`).join("\n") } : {}),
+            lrctrans: lrc(translations, true), romalrc: lrc(romaji, true),
+          } : {
+            lrc: lrc(texts), ...(wordTimed ? { qrc: qrc(texts) } : {}),
+            lrctrans: lrc(translations, true), qrctrans: lrc(translations, true),
+            qrcroma: wordTimed ? qrc(romaji, true) : lrc(romaji, true),
+          };
+          for (const removeInfo of [false, true]) {
+            const result = await parseLyric(data, null, {
+              platform, title: "测试歌曲", artists: ["歌手甲", "歌手乙"], removeInfo, removeAMInfo: removeInfo,
+            });
+            const expected = [1, 3, 5].map((index) => [texts[index], translations[index], romaji[index]]);
+            expect(result?.lrc.filter((line) => !isInfoIndex(texts.indexOf(line.content)))
+              .map((line) => [line.content, line.tran, line.roma])).toEqual(expected);
+            if (wordTimed) expect(result?.yrc.filter((line) => !isInfoIndex(texts.indexOf(line.content.map((word) => word.content).join(""))))
+              .map((line) => [line.content.map((word) => word.content).join(""), line.tran, line.roma])).toEqual(expected);
+            const am = wordTimed ? result?.yrcAM : result?.lrcAM;
+            expect(am?.filter((line) => !isInfoIndex(texts.indexOf(line.words.map((word) => word.word).join(""))))
+              .map((line) => [line.words.map((word) => word.word).join(""), line.translatedLyric,
+                platform === "netease" ? line.romanLyric : line.words.map((word) => word.romanWord).join("")])).toEqual(expected);
+          }
+        });
+      }
+    }
+  }
+});
+
+
+it("QQ 时间轴不一致时，先按原顺序配对再移除标题和歌手标签", () => {
+  const main = parseLrc("[00:01.00]测试歌曲-歌手甲\n[00:04.00]第一句\n[00:07.00]歌手甲：\n[00:10.00]第二句");
+  const tran = parseLrc("[00:01.50]Song - Singer\n[00:04.50]译文一\n[00:07.50]Singer:\n[00:10.50]译文二");
+  const roma = parseLrc("[00:01.50]title\n[00:04.50]roma one\n[00:07.50]singer\n[00:10.50]roma two");
+  const result = parseAMData(main, tran, roma, true, "测试歌曲", ["歌手甲"]);
+  expect(result.map((line) => [line.words[0].word, line.translatedLyric, line.words[0].romanWord]))
+    .toEqual([["第一句", "译文一", "roma one"], ["第二句", "译文二", "roma two"]]);
+});
+
+
+describe("QQ 001FgbLY33TZKq 的 QRC/LRC 时间精度回归", () => {
+  it.each([false, true])("过滤开关为 %s 时保留全部 56 行翻译及其对应关系", async (removeInfo) => {
+    // 使用实际接口的全部时间戳和占位分布，正文替换为测试文本。
+    const contents = qqTimingFixture.map((_, index) => index === 0 ? "测试歌曲-测试歌手"
+      : index === 1 ? "Lyrics by：作者" : index === 2 ? "Composed by：作者" : `正文${index}`);
+    const qrc = "[offset:0]\n" + qqTimingFixture.map((row, index) =>
+      `[${row.start},${row.duration}]${contents[index]}(${row.start},${row.duration})`,
+    ).join("\n");
+    const translation = qqTimingFixture.map((row, index) => {
+      const minutes = Math.floor(row.translationStart / 60000);
+      const seconds = ((row.translationStart % 60000) / 1000).toFixed(2).padStart(5, "0");
+      return `[${minutes}:${seconds}]${row.hasTranslation ? `译文${index}` : "//"}`;
+    }).join("\n");
+    const result = await parseLyric({ qrc, qrctrans: translation }, null, {
+      title: "测试歌曲", artists: ["测试歌手"], removeInfo, removeAMInfo: removeInfo,
+    });
+    expect(result?.yrcAM?.filter((line) => line.translatedLyric)).toHaveLength(56);
+    for (const line of result?.yrcAM ?? []) {
+      const content = line.words.map((word) => word.word).join("");
+      const index = contents.indexOf(content);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(line.translatedLyric).toBe(qqTimingFixture[index].hasTranslation ? `译文${index}` : "");
+    }
+  });
+
+  it("音译也允许不足 10ms 的时间精度差，缺失的行不借用后续音译", () => {
+    const main = parseLrc("[00:01.009]一句\n[00:04.007]二句\n[00:07.005]三句");
+    const translation = parseLrc("[00:01.00]译一\n[00:04.00]译二\n[00:07.00]译三");
+    const roma = parseLrc("[00:01.00]roma one\n[00:07.00]roma three");
+    const result = parseAMData(main, translation, roma, true);
+    expect(result.map((line) => [line.translatedLyric, line.words[0].romanWord]))
+      .toEqual([["译一", "roma one"], ["译二", ""], ["译三", "roma three"]]);
+  });
 });

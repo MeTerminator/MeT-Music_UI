@@ -791,9 +791,9 @@ export const parseYrcData = (
  * 处理 AM 歌词并适配 LyricLine 和 LyricWord 接口
  * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示。
  *
- * 信息行规则见 isInfoLine:角色头、版权声明、首行「 - 」标题和整行无时间,不看匀速。
+ * 信息行规则见 isInfoLine；新增的标题/歌手标签规则在主行与辅助行配对后应用。
  * 翻译对齐:头部丢弃块按 min() 剥离占位;中段信息行仅在占位时跳过;BG 不消费翻译,
- * 「//」映射为空串,roma 按原下标对齐,removeAMInfo=false 时信息行按位置消费一条翻译。
+ * 「//」映射为空串；翻译/音译优先按时间匹配，旧 QQ 时间轴不一致时回退原顺序。
  */
 export const parseAMData = (
   lrcData: LyricLine[],
@@ -813,14 +813,42 @@ export const parseAMData = (
   const firstContentIndex = lrcData.findIndex((line) => lineText(line).trim() !== "");
   const isInfo = (line: LyricLine, index: number): boolean =>
     isInfoLine({
-      title,
-      artists,
       text: lineText(line),
       isFirstContent: index === firstContentIndex,
       startTime: line.startTime,
       endTime: line.endTime,
       restDurations: (line.words ?? []).slice(1).map((word) => word.endTime - word.startTime),
     });
+
+  // 有正文时间戳锚点时按时间配对，允许译文/音译省略标题或歌手标签。
+  // 部分旧 QQ 数据的两条时间轴不同，仍保留原有顺序配对作为回退。
+  const timedSidecar = (sidecar: LyricLine[]): Map<number, LyricLine> | undefined => {
+    const byTime = new Map(sidecar.map((line) => [line.startTime, line]));
+    // QQ 的翻译 LRC 只有百分之一秒精度，QRC 保留毫秒；同一行可相差 0–9ms。
+    // 为主行查找最近的候选，精确匹配优先，不跨过 10ms 边界抢占其他行。
+    for (const main of lrcData) {
+      if (byTime.has(main.startTime)) continue;
+      let nearest: LyricLine | undefined;
+      let distance = 10;
+      for (const candidate of sidecar) {
+        const delta = Math.abs(candidate.startTime - main.startTime);
+        if (delta < distance) {
+          nearest = candidate;
+          distance = delta;
+        }
+      }
+      if (nearest) byTime.set(main.startTime, nearest);
+    }
+    const hasAnchor = lrcData.some((line, index) =>
+      line.startTime > 0 && !line.isBG && lineText(line).trim() !== "" &&
+      !isInfo(line, index) &&
+      !(index === firstContentIndex && isTitleInfo(lineText(line), title)) &&
+      !isArtistInfo(lineText(line), artists) && byTime.has(line.startTime),
+    );
+    return hasAnchor ? byTime : undefined;
+  };
+  const timedTranslations = timedSidecar(tranData);
+  const timedRomaji = timedSidecar(romaData);
 
   // 可丢弃的主行:空行,或 removeAMInfo 开启时的信息行
   const isDroppableMain = (line: LyricLine, index: number): boolean =>
@@ -842,17 +870,15 @@ export const parseAMData = (
   };
 
   // 顺序消费一条翻译;"//" 表示本行无翻译,条目缺失时兜底空串
-  const takeTranslation = (): string => {
-    const text = lineText(tranData[tranCursor]);
-    tranCursor++;
+  const takeTranslation = (line: LyricLine): string => {
+    const text = lineText(timedTranslations ? timedTranslations.get(line.startTime) : tranData[tranCursor++]);
     return text.trim() === "//" ? "" : text;
   };
 
   // 处理每一行
   const processLine = (line: LyricLine, index: number, lines: LyricLine[]): AMLine | null => {
     const currentWords = line.words || [];
-    // roma 对齐用原数组下标 index(roma 与主歌词同构),不受翻译消费顺序影响
-    const currentRomaWords = romaData?.[index]?.words || [];
+    const currentRomaWords = (timedRomaji ? timedRomaji.get(line.startTime) : romaData[index])?.words || [];
 
     // 1. 过滤信息行 / 空行
     if (removeAMInfo && isInfo(line, index)) {
@@ -888,7 +914,7 @@ export const parseAMData = (
     // BG 行(一般是译文本身或和声)不配翻译,置空;其余行按顺序消费翻译条目
     return {
       words: words,
-      translatedLyric: line.isBG === true ? "" : takeTranslation(),
+      translatedLyric: line.isBG === true ? "" : takeTranslation(line),
       romanLyric: "", // 已在 LyricWord 级别处理,整行字符串置空
       startTime: startTime,
       endTime: endTime,
@@ -897,5 +923,7 @@ export const parseAMData = (
     };
   };
 
-  return lrcData.map(processLine).filter((item): item is AMLine => item !== null);
+  // 先把正文、翻译和音译组成完整行，再一起删除新增规则命中的信息行。
+  const paired = lrcData.map(processLine).filter((item): item is AMLine => item !== null);
+  return removeAMInfo ? stripSongInfo(paired, lineText, title, artists) : paired;
 };
