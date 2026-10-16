@@ -20,6 +20,9 @@ export const isArtistInfo = (text: string, artists: string[] = []): boolean => {
 export const isPlanInfo = (text: string): boolean =>
   text.includes("计划") && ["酷狗", "音乐人", "QQ音乐"].some((keyword) => text.includes(keyword));
 
+/** 任意位置含 by: 或 by：时过滤整行。 */
+export const isByInfo = (text: string): boolean => /by[:：]/i.test(text);
+
 export const stripSongInfo = <T>(
   lines: T[],
   getText: (line: T) => string,
@@ -30,6 +33,6 @@ export const stripSongInfo = <T>(
   const first = lines.findIndex((line) => getText(line).trim() !== "");
   return lines.filter((line, index) => {
     const text = getText(line);
-    return !(index === first && isTitleInfo(text, title, artists, name)) && !isArtistInfo(text, artists) && !isPlanInfo(text) && !/^\s*(?:器乐团队|说唱作曲|戏曲|引用)\s*[：:]/.test(text);
+    return !(index === first && isTitleInfo(text, title, artists, name)) && !isArtistInfo(text, artists) && !isPlanInfo(text) && !isByInfo(text) && !/^\s*(?:器乐团队|说唱作曲|戏曲|引用)\s*[：:]/.test(text);
   });
 };

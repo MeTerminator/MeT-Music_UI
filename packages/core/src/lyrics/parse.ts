@@ -16,7 +16,7 @@ import type { Notifier } from "../types/notify";
 import type { Platform } from "../types/platform";
 import { stripVocalLabels } from "./vocal-labels";
 import { parseNeteaseLyric } from "./netease";
-import { isTitleInfo, isArtistInfo, isPlanInfo, stripSongInfo } from "./song-info";
+import { isTitleInfo, isArtistInfo, isPlanInfo, isByInfo, stripSongInfo } from "./song-info";
 
 /** 角色后必须有冒号,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。 */
 const CREDIT_ROLES: string[] = [
@@ -768,7 +768,7 @@ export const parseYrcData = (
           const isFirstContentLine = !seenContent;
           seenContent = true;
           if (
-            isPlanInfo(lineContent) || isInfoLine({
+            isPlanInfo(lineContent) || isByInfo(lineContent) || isInfoLine({
               name,
               title,
               artists,
