@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { prepareAmllLines, songIdentityKey, songPlatform } from "@met/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -513,6 +514,7 @@ function FullPlayerInner() {
     : null;
   const albumData =
     playSongData.album && typeof playSongData.album !== "string" ? playSongData.album : null;
+  const albumId = getAlbumPageId(albumData?.id);
   const albumText = playSongData.album
     ? typeof playSongData.album === "string"
       ? playSongData.album
@@ -554,7 +556,8 @@ function FullPlayerInner() {
     [navigate],
   );
   const gotoAlbum = useCallback(
-    (id: number | string) => {
+    (id: string) => {
+      if (!getAlbumPageId(id)) return;
       useStatusStore.setState({ showFullPlayer: false });
       void navigate({ to: "/album", search: { id: String(id), platform: songPlatform(useMusicStore.getState().playSongData) } });
     },
@@ -751,17 +754,17 @@ function FullPlayerInner() {
           style={{ color: "rgba(var(--fp-main-rgb), 0.5)" }}
         >
           <Disc3 size={14} className="mr-1.5 inline-block align-[-2px]" aria-hidden="true" />
-          {albumData?.id != null ? (
+          {albumId ? (
             <span
               role="link"
               tabIndex={0}
               className="cursor-pointer transition-colors hover:text-[rgb(var(--fp-main-rgb))] hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
-                gotoAlbum(albumData.id as number | string);
+                gotoAlbum(albumId);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") gotoAlbum(albumData.id as number | string);
+                if (e.key === "Enter") gotoAlbum(albumId);
               }}
             >
               {albumText}

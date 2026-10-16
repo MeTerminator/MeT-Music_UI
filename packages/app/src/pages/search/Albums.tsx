@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -85,12 +86,14 @@ export default function Albums() {
       {/* 专辑卡片 */}
       <div className="grid grid-cols-2 gap-4 py-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {albums.map((album) => {
+          const albumId = getAlbumPageId(album.id);
           const artistLine = formatArtists(album.artists);
           return (
             <div key={String(album.id)} className="group relative flex flex-col">
               <button
                 type="button"
-                onClick={() => navigate({ to: "/album", search: { platform,  id: String(album.id) } })}
+                disabled={!albumId}
+                onClick={() => albumId && navigate({ to: "/album", search: { platform,  id: albumId } })}
                 className="flex w-full flex-col text-left"
               >
                 <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-[var(--met-bg-elevated)]">
@@ -99,12 +102,12 @@ export default function Albums() {
                       src={album.coverSize.s}
                       alt=""
                       loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      className={`h-full w-full object-cover transition-transform duration-300 ${albumId ? "group-hover:scale-105" : ""}`}
                     />
                   ) : null}
                 </div>
                 <span
-                  className="mt-2 line-clamp-2 text-sm text-[var(--met-fg)] group-hover:text-[var(--met-primary)]"
+                  className={`mt-2 line-clamp-2 text-sm text-[var(--met-fg)] ${albumId ? "group-hover:text-[var(--met-primary)]" : ""}`}
                   title={album.name}
                 >
                   {album.name}
@@ -117,7 +120,7 @@ export default function Albums() {
               </button>
               {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
               <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
-                <CoverPlayButton platform={platform} id={album.id} type="album" className="pointer-events-auto" />
+                {albumId ? <CoverPlayButton platform={platform} id={albumId} type="album" className="pointer-events-auto" /> : null}
               </div>
             </div>
           );

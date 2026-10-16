@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 /**
  * 顶栏搜索框 + 搜索建议下拉。
  *
@@ -247,6 +248,7 @@ const SearchSuggest = ({ page = false }: { page?: boolean }) => {
       goDirectSearch(kw);
       return;
     }
+    if (entry.group === "albums" && !getAlbumPageId(entry.item.id)) return;
     const id = String(entry.group === "songs" ? entry.item.mid ?? entry.item.id : entry.item.id);
     const platform = entry.platform;
     close();
@@ -408,10 +410,11 @@ const SearchSuggest = ({ page = false }: { page?: boolean }) => {
                       key={`${key}-${item.id}`}
                       type="button"
                       role="option"
+                      disabled={key === "albums" && !getAlbumPageId(item.id)}
                       aria-selected={highlight === index}
                       onMouseEnter={() => setHighlight(index)}
                       onClick={() => selectEntry({ kind: "item", group: key, item, platform })}
-                      className={`flex w-full cursor-pointer items-baseline gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                      className={`flex w-full enabled:cursor-pointer items-baseline gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
                         highlight === index ? "bg-[var(--met-bg-hover)]" : ""
                       }`}
                     >

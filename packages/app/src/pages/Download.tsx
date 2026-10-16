@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 import PlatformLabel from "@/components/PlatformLabel";
 import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 /**
@@ -131,6 +132,7 @@ const Download = () => {
 
 
   const track = infoQuery.data?.[mid]?.track_info;
+  const albumId = getAlbumPageId(track?.album?.mid);
   const trackName: string = track?.title || track?.name || "";
 
   const singers: { mid?: string | null; name?: string | null; title?: string | null }[] = Array.isArray(
@@ -436,11 +438,12 @@ const Download = () => {
               {track?.album?.title || track?.album?.name ? (
                 <button
                   type="button"
+                  disabled={!albumId}
                   onClick={() =>
-                    track?.album?.mid &&
-                    navigate({ to: "/album", search: { platform,  id: String(track.album.mid) } })
+                    albumId &&
+                    navigate({ to: "/album", search: { platform,  id: albumId } })
                   }
-                  className="mt-0.5 block max-w-full cursor-pointer truncate text-xs text-[var(--met-fg-dim)] transition-opacity hover:opacity-60"
+                  className="mt-0.5 block max-w-full truncate text-xs text-[var(--met-fg-dim)] transition-opacity enabled:cursor-pointer enabled:hover:opacity-60"
                 >
                   {track.album.title || track.album.name}
                 </button>

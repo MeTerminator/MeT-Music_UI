@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 import { createPortal } from "react-dom";
 import { playbackLevel, songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -101,7 +102,7 @@ const getAlia = (song: Song): string | null => {
 
 /** 专辑 id(album 为对象且带 id 时可点击跳转专辑页) */
 const getAlbumId = (album: Song["album"]): string | null => {
-  if (album && typeof album === "object" && album.id != null) return String(album.id);
+  if (album && typeof album === "object") return getAlbumPageId(album.id);
   return null;
 };
 

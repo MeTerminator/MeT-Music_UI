@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -85,35 +86,39 @@ export default function Albums() {
     <div className="flex flex-col pt-4">
       {/* 专辑栅格 */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {albums.map((album, index) => (
-          <div key={`${album.id}-${index}`} className="group relative flex flex-col">
-            <Link
-              to="/album"
-              search={{ platform,  id: album.id != null ? String(album.id) : undefined }}
-              className="flex flex-col"
-            >
-              <img
-                src={album.coverSize?.m}
-                alt=""
-                loading="lazy"
-                className="aspect-square w-full rounded-xl bg-[var(--met-bg-elevated)] object-cover transition-transform group-hover:scale-[1.02]"
-              />
-              <span
-                className="mt-2 truncate text-sm text-[var(--met-fg)] transition-colors group-hover:text-[var(--met-primary)]"
-                title={album.name}
+        {albums.map((album, index) => {
+          const albumId = getAlbumPageId(album.id);
+          return (
+            <div key={`${album.id}-${index}`} className="group relative flex flex-col">
+              <Link
+                to="/album"
+                search={{ platform, id: albumId ?? undefined }}
+                disabled={!albumId}
+                className="flex flex-col"
               >
-                {album.name || "未知专辑"}
-              </span>
-              <span className="mt-0.5 truncate text-xs text-[var(--met-fg-dim)]">
-                {album.publishTime ? getTimestampTime(album.publishTime) : ""}
-              </span>
-            </Link>
-            {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
-              <CoverPlayButton platform={platform} id={album.id} type="album" className="pointer-events-auto" />
+                <img
+                  src={album.coverSize?.m}
+                  alt=""
+                  loading="lazy"
+                  className={`aspect-square w-full rounded-xl bg-[var(--met-bg-elevated)] object-cover transition-transform ${albumId ? "group-hover:scale-[1.02]" : ""}`}
+                />
+                <span
+                  className={`mt-2 truncate text-sm text-[var(--met-fg)] transition-colors ${albumId ? "group-hover:text-[var(--met-primary)]" : ""}`}
+                  title={album.name}
+                >
+                  {album.name || "未知专辑"}
+                </span>
+                <span className="mt-0.5 truncate text-xs text-[var(--met-fg-dim)]">
+                  {album.publishTime ? getTimestampTime(album.publishTime) : ""}
+                </span>
+              </Link>
+              {/* hover 播放全部(卡片兄弟层叠,点击不冒泡跳详情) */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-center justify-center">
+                {albumId ? <CoverPlayButton platform={platform} id={albumId} type="album" className="pointer-events-auto" /> : null}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {/* 分页 */}
       {total > pageSize ? (

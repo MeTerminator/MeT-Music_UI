@@ -1,3 +1,4 @@
+import { getAlbumPageId } from "@/lib/album";
 import { playbackLevel, songIdentityKey } from "@met/core";
 import PlatformLabel from "@/components/PlatformLabel";
 import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
@@ -112,6 +113,7 @@ export default function SongDetail() {
   const infoFields = useMemo<InfoField[]>(() => buildInfoFields(infoSource), [infoSource]);
 
   const song = useMemo<Song | null>(() => (track ? buildSong(track) : null), [track]);
+  const albumId = getAlbumPageId(typeof song?.album === "object" ? song.album.id : null);
 
   // 大图预览:Escape 关闭
   useEffect(() => {
@@ -259,10 +261,10 @@ export default function SongDetail() {
           {/* 专辑链接 */}
           <div className="flex items-center gap-1 text-sm text-[var(--met-fg-dim)]">
             <span className="mr-1">专辑:</span>
-            {typeof song.album === "object" && song.album?.id ? (
+            {typeof song.album === "object" && albumId ? (
               <Link
                 to="/album"
-                search={{ platform,  id: String(song.album.id) }}
+                search={{ platform,  id: albumId }}
                 className="truncate transition-colors hover:text-[var(--met-primary)]"
               >
                 {song.album.name}
