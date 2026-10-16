@@ -697,3 +697,43 @@ describe("首行匹配 name、title 或任一歌手名", () => {
     }
   });
 });
+
+
+describe("制作、来源及推广计划信息整行排除", () => {
+  for (const platform of ["qq", "netease"] as const) {
+    it.each(["器乐团队：", "器乐团队:", "说唱作曲：", "说唱作曲:", "戏曲：", "戏曲:", "引用：", "引用:", "酷狗音乐推广计划", "计划由酷狗发起", "音乐人成长计划", "计划支持音乐人", "QQ音乐新星计划", "计划来自QQ音乐"])(`${platform} 支持 %s，并遵循各自过滤开关`, async (role) => {
+      const texts = ["第一句", `${role}测试信息`, "第二句"];
+      const lrc = (lines: string[]) => lines.map((text, index) => `[00:${String(1 + index * 3).padStart(2, "0")}.00]${text}`).join("\n");
+      const data = {
+        lrc: lrc(texts), lrctrans: lrc(["译一", "乐团信息", "译二"]),
+        ...(platform === "qq"
+          ? { qrc: "[offset:0]\n" + texts.map((text, index) => `[${1000 + index * 3000},2000]${text}(${1000 + index * 3000},2000)`).join("\n"), qrctrans: lrc(["译一", "乐团信息", "译二"]) }
+          : { yrc: texts.map((text, index) => `[${1000 + index * 3000},2000](${1000 + index * 3000},2000,0)${text}`).join("\n"), ytlrc: lrc(["译一", "乐团信息", "译二"]) }),
+      };
+      for (const removeInfo of [false, true]) {
+        for (const removeAMInfo of [false, true]) {
+          const result = await parseLyric(data, null, { platform, removeInfo, removeAMInfo });
+          const all = texts.map((text, index) => [text, ["译一", "乐团信息", "译二"][index]]);
+          const filtered = [all[0], all[2]];
+          expect(result?.lrc.map((line) => [line.content, line.tran])).toEqual(removeInfo ? filtered : all);
+          expect(result?.yrc.map((line) => [line.content.map((word) => word.content).join(""), line.tran])).toEqual(removeInfo ? filtered : all);
+          for (const lines of [result?.lrcAM, result?.yrcAM]) {
+            expect(lines?.map((line) => [line.words.map((word) => word.word).join(""), line.translatedLyric]))
+              .toEqual(removeAMInfo ? filtered : all);
+          }
+        }
+      }
+    });
+  }
+});
+
+
+it("推广计划过滤要求同一行同时出现两组关键词", async () => {
+  const texts = ["独自规划未来的计划", "酷狗陪你听歌", "我是音乐人", "打开QQ音乐", "计划", "酷狗", "明天见"];
+  const lrc = texts.map((text, index) => `[00:${String(1 + index * 3).padStart(2, "0")}.00]${text}`).join("\n");
+  for (const platform of ["qq", "netease"] as const) {
+    const result = await parseLyric({ lrc }, null, { platform, removeInfo: true, removeAMInfo: true });
+    expect(result?.lrc.map((line) => line.content)).toEqual(texts);
+    expect(result?.lrcAM?.map((line) => line.words.map((word) => word.word).join(""))).toEqual(texts);
+  }
+});

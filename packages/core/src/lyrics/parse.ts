@@ -14,14 +14,16 @@ import {
 import type { AMLine, LrcLine, ParsedLyric, YrcLine, YrcWord } from "../types/song";
 import type { Notifier } from "../types/notify";
 import type { Platform } from "../types/platform";
+import { stripVocalLabels } from "./vocal-labels";
 import { parseNeteaseLyric } from "./netease";
-import { isTitleInfo, isArtistInfo, stripSongInfo } from "./song-info";
+import { isTitleInfo, isArtistInfo, isPlanInfo, stripSongInfo } from "./song-info";
 
 /** 角色后必须有冒号,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。 */
 const CREDIT_ROLES: string[] = [
   // 词曲作者
   "作词",
   "作曲",
+  "说唱作曲",
   "原唱",
   "中文填词",
   "说唱填词",
@@ -71,6 +73,9 @@ const CREDIT_ROLES: string[] = [
   "剪輯",
   "和聲",
   // 演奏
+  "器乐团队",
+  "戏曲",
+  "引用",
   "乐队",
   "吉他",
   "贝斯",
@@ -359,7 +364,7 @@ export const parseLyric = async (
 ): Promise<ParsedLyric | null> => {
   try {
     if (options.platform === "netease") {
-      return parseNeteaseLyric(data, ttmlLyric, options, notify);
+      return stripVocalLabels(parseNeteaseLyric(data, ttmlLyric, options, notify));
     }
     // 以下逻辑保持不变
 
@@ -533,7 +538,7 @@ export const parseLyric = async (
       }
     }
 
-    return result;
+    return stripVocalLabels(result);
   } catch (error) {
     console.error("解析歌词时出现错误：", error);
     return null;
@@ -580,7 +585,7 @@ export const parseLocalLrc = (data: string): ParsedLyric | null => {
     }
     // 改变输出结果
     result.lrc = parsedLyrics;
-    return result;
+    return stripVocalLabels(result);
   } catch (error) {
     console.error("解析本地歌词时出现错误：", error);
     return null;
@@ -763,7 +768,7 @@ export const parseYrcData = (
           const isFirstContentLine = !seenContent;
           seenContent = true;
           if (
-            isInfoLine({
+            isPlanInfo(lineContent) || isInfoLine({
               name,
               title,
               artists,

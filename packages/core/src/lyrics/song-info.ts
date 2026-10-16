@@ -16,6 +16,10 @@ export const isArtistInfo = (text: string, artists: string[] = []): boolean => {
   });
 };
 
+/** 平台推广/音乐人计划信息，两组关键词需出现在同一行，顺序不限。 */
+export const isPlanInfo = (text: string): boolean =>
+  text.includes("计划") && ["酷狗", "音乐人", "QQ音乐"].some((keyword) => text.includes(keyword));
+
 export const stripSongInfo = <T>(
   lines: T[],
   getText: (line: T) => string,
@@ -26,6 +30,6 @@ export const stripSongInfo = <T>(
   const first = lines.findIndex((line) => getText(line).trim() !== "");
   return lines.filter((line, index) => {
     const text = getText(line);
-    return !(index === first && isTitleInfo(text, title, artists, name)) && !isArtistInfo(text, artists);
+    return !(index === first && isTitleInfo(text, title, artists, name)) && !isArtistInfo(text, artists) && !isPlanInfo(text) && !/^\s*(?:器乐团队|说唱作曲|戏曲|引用)\s*[：:]/.test(text);
   });
 };
