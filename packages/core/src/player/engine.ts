@@ -1111,7 +1111,8 @@ const getSongLyricData = async (_islocal: boolean, data: Song, playId: number): 
       if (!isCurrent()) return;
       const result = await parseLyric(lyricResponse, ttmlLyricResponse, {
         platform: songPlatform(data),
-        title: data.name,
+        name: data.name,
+        title: data.title,
         artists: Array.isArray(data.artists)
           ? data.artists.map((artist) => artist.name)
           : data.artists ? [data.artists] : [],

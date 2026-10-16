@@ -648,3 +648,52 @@ describe("QQ 001FgbLY33TZKq 的 QRC/LRC 时间精度回归", () => {
       .toEqual([["译一", "roma one"], ["译二", ""], ["译三", "roma three"]]);
   });
 });
+
+describe("首行匹配 name、title 或任一歌手名", () => {
+  for (const platform of ["qq", "netease"] as const) {
+    for (const wordTimed of [false, true]) {
+      it.each(["主名称-版本", "显示标题 - 版本", "未知歌曲-歌手乙"])(
+        `${platform} ${wordTimed ? "逐字" : "普通"}过滤首行 %s 并保留辅助歌词配对`, async (first) => {
+          const texts = [first, "第一句", "歌手乙-中段正文", "第二句"];
+          const translations = ["header", "译一", "译二", "译三"];
+          const romaji = ["header", "roma one", "roma two", "roma three"];
+          const lrc = (lines: string[]) => lines.map((text, index) => `[00:${String(1 + index * 3).padStart(2, "0")}.00]${text}`).join("\n");
+          const qrc = (lines: string[]) => "[offset:0]\n" + lines.map((text, index) => `[${1000 + index * 3000},2000]${text}(${1000 + index * 3000},2000)`).join("\n");
+          const data: LyricApiData = platform === "qq" ? {
+            lrc: lrc(texts), ...(wordTimed ? { qrc: qrc(texts) } : {}),
+            lrctrans: lrc(translations), qrctrans: lrc(translations), qrcroma: qrc(romaji),
+          } : {
+            lrc: lrc(texts), ...(wordTimed ? { yrc: texts.map((text, index) => `[${1000 + index * 3000},2000](${1000 + index * 3000},2000,0)${text}`).join("\n") } : {}),
+            lrctrans: lrc(translations), romalrc: lrc(romaji),
+          };
+          for (const removeInfo of [false, true]) {
+            for (const removeAMInfo of [false, true]) {
+              const result = await parseLyric(data, null, {
+                platform, name: "主名称", title: "显示标题", artists: ["歌手甲", " 歌手乙 "], removeInfo, removeAMInfo,
+              });
+              const expected = texts.map((text, index) => [text, translations[index], romaji[index]]);
+              expect(result?.lrc.map((line) => [line.content, line.tran, line.roma]))
+                .toEqual(removeInfo ? expected.slice(1) : expected);
+              const am = wordTimed ? result?.yrcAM : result?.lrcAM;
+              expect(am?.map((line) => [line.words.map((word) => word.word).join(""), line.translatedLyric,
+                platform === "netease" ? line.romanLyric : line.words.map((word) => word.romanWord).join("")]))
+                .toEqual(removeAMInfo ? expected.slice(1) : expected);
+              if (wordTimed) expect(result?.yrc.map((line) => line.content.map((word) => word.content).join("")))
+                .toEqual(removeInfo ? texts.slice(1) : texts);
+            }
+          }
+        },
+      );
+    }
+  }
+
+  it("没有连字符或未匹配任何名称时保留，空名称不命中", async () => {
+    for (const first of ["未知歌曲-未知歌手", "主名称", "显示标题", "歌手乙"]) {
+      const result = await parseLyric({ lrc: `[00:01.00]${first}\n[00:04.00]正文` }, null, {
+        name: "主名称", title: "显示标题", artists: ["", " ", "歌手乙"], removeInfo: true, removeAMInfo: true,
+      });
+      expect(result?.lrc[0].content).toBe(first);
+      expect(result?.lrcAM?.[0].words[0].word).toBe(first);
+    }
+  });
+});

@@ -25,6 +25,7 @@ export interface Artist {
 
 /** 歌曲(在线或本地) */
 export interface Song {
+  title?: string;
   mid?: string;
   id: number | string;
   name: string;

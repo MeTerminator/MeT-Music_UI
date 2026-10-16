@@ -74,9 +74,9 @@ export const parseNeteaseLyric = (
 
   const clean = (lines: LyricLine[], removeInfo: boolean): LyricLine[] => {
     let result = lines.map((line) => ({ ...line, words: line.words.map((word) => ({ ...word })) }));
-    if (removeInfo) result = stripLyricMetadata(stripSongInfo(result, text, options.title, options.artists), {
+    if (removeInfo) result = stripLyricMetadata(stripSongInfo(result, text, options.title, options.artists, options.name), {
       useDefaultRules: true,
-      matchMetadata: { title: options.title, artists: options.artists },
+      matchMetadata: { title: options.title ?? options.name, artists: options.artists },
     });
     normalizeLyricLines(result);
     result = result.filter((line) => text(line).trim());

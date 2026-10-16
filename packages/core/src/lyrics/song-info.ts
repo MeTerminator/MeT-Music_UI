@@ -1,7 +1,10 @@
-/** 首行同时包含当前歌曲名和连字符时，视为歌曲信息；不限制时间戳或分隔符空格。 */
-export const isTitleInfo = (text: string, title?: string): boolean => {
-  const name = title?.trim();
-  return Boolean(name && text.includes(name) && text.includes("-"));
+/** 首行含连字符及任一歌曲名/歌手名时视为歌曲信息，不限制时间戳或空格。 */
+export const isTitleInfo = (text: string, title?: string, artists: string[] = [], name?: string): boolean => {
+  if (!text.includes("-")) return false;
+  return [name, title, ...artists].some((value) => {
+    const candidate = value?.trim();
+    return Boolean(candidate && text.includes(candidate));
+  });
 };
 
 /** 歌手标签可出现在任意行，冒号必须位于去掉首尾空白后的行尾。 */
@@ -18,10 +21,11 @@ export const stripSongInfo = <T>(
   getText: (line: T) => string,
   title?: string,
   artists?: string[],
+  name?: string,
 ): T[] => {
   const first = lines.findIndex((line) => getText(line).trim() !== "");
   return lines.filter((line, index) => {
     const text = getText(line);
-    return !(index === first && isTitleInfo(text, title)) && !isArtistInfo(text, artists);
+    return !(index === first && isTitleInfo(text, title, artists, name)) && !isArtistInfo(text, artists);
   });
 };

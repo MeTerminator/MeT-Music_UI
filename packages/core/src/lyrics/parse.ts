@@ -260,6 +260,7 @@ const isCreditHeader = (text: string): boolean => {
   return false;
 };
 interface InfoLineInput {
+  name?: string;
   artists?: string[];
   title?: string;
   text: string;
@@ -270,6 +271,7 @@ interface InfoLineInput {
 }
 /** 信息行:角色头 / 版权声明 / 首行「 - 」标题 / 整行无时间。不看匀速,见 parseAMData 注释。 */
 const isInfoLine = ({
+  name,
   artists,
   title,
   text,
@@ -283,13 +285,14 @@ const isInfoLine = ({
     isArtistInfo(trimmed, artists) ||
     isCreditHeader(trimmed) ||
     COPYRIGHT_NOTICE_RE.test(trimmed) ||
-    (isFirstContent && (isTitleInfo(text, title) || (startTime === 0 && /\s-\s/.test(text)))) ||
+    (isFirstContent && (isTitleInfo(text, title, artists, name) || (startTime === 0 && /\s-\s/.test(text)))) ||
     (startTime === 0 && endTime === 0 && restDurations.every((d) => d === 0))
   );
 };
 
 /** 解析行为开关(对应旧 siteSettings 中的同名设置项) */
 export interface ParseLyricOptions {
+  name?: string;
   platform?: Platform;
   title?: string;
   artists?: string[];
@@ -429,7 +432,7 @@ export const parseLyric = async (
     // 逐字歌词
     if (lrcData.yrc) {
       qrcParseData = parseQrc(lrcData.yrc);
-      result.yrc = parseYrcData(lrcData.yrc, options.removeInfo, options.title, options.artists);
+      result.yrc = parseYrcData(lrcData.yrc, options.removeInfo, options.title, options.artists, options.name);
       // 判断是否有其他翻译
       if (lrcData.ytlrc) {
         ytlrcParseData = parseLrc(lrcData.ytlrc);
@@ -454,7 +457,7 @@ export const parseLyric = async (
     result.hasYrc = result.yrc.length > 0;
 
     if (options.removeInfo) {
-      result.lrc = stripSongInfo(result.lrc, (line) => line.content, options.title, options.artists);
+      result.lrc = stripSongInfo(result.lrc, (line) => line.content, options.title, options.artists, options.name);
     }
 
     // 当仅有 逐字歌词 ,没有 普通歌词 时
@@ -469,7 +472,7 @@ export const parseLyric = async (
 
     // 重写修正:旧实现此处无视 removeAMInfo 设置恒用默认值 true,
     // 导致关闭"去除 AM 歌词歌曲信息"设置时 lrcAM 仍被过滤
-    let lrcAM = parseAMData(lrcParseData, tlyricParseData, romalrcParseData, options.removeAMInfo, options.title, options.artists);
+    let lrcAM = parseAMData(lrcParseData, tlyricParseData, romalrcParseData, options.removeAMInfo, options.title, options.artists, options.name);
     // 去除 lrcAM 中的空行
     lrcAM = lrcAM.filter((v) => v.words?.[0]?.word !== "");
     result.lrcAM = lrcAM;
@@ -477,9 +480,9 @@ export const parseLyric = async (
     if (options.removeAMInfo) {
       // 头部 junk 行(标题/空行/创作者信息行)由 parseAMData 按内容判定跳过,
       // 不再按固定 slice(1):两边 junk 行数不对称时 slice 会让翻译系统性错位
-      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, true, options.title, options.artists);
+      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, true, options.title, options.artists, options.name);
     } else {
-      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false, options.title, options.artists);
+      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false, options.title, options.artists, options.name);
     }
 
     // 纯音乐清场:parseLrcData 只把提示行挡在 result.lrc 之外,AM 路线
@@ -695,6 +698,7 @@ export const parseYrcData = (
   removeInfo: boolean,
   title?: string,
   artists?: string[],
+  name?: string,
 ): YrcLine[] => {
   if (!qrcSource) return [];
   try {
@@ -760,6 +764,7 @@ export const parseYrcData = (
           seenContent = true;
           if (
             isInfoLine({
+              name,
               title,
               artists,
               text: lineContent,
@@ -802,6 +807,7 @@ export const parseAMData = (
   removeAMInfo = true,
   title?: string,
   artists?: string[],
+  name?: string,
 ): AMLine[] => {
   const lineText = (line?: LyricLine): string =>
     (line?.words ?? []).map((w) => w.word).join("");
@@ -842,7 +848,7 @@ export const parseAMData = (
     const hasAnchor = lrcData.some((line, index) =>
       line.startTime > 0 && !line.isBG && lineText(line).trim() !== "" &&
       !isInfo(line, index) &&
-      !(index === firstContentIndex && isTitleInfo(lineText(line), title)) &&
+      !(index === firstContentIndex && isTitleInfo(lineText(line), title, artists, name)) &&
       !isArtistInfo(lineText(line), artists) && byTime.has(line.startTime),
     );
     return hasAnchor ? byTime : undefined;
@@ -925,5 +931,5 @@ export const parseAMData = (
 
   // 先把正文、翻译和音译组成完整行，再一起删除新增规则命中的信息行。
   const paired = lrcData.map(processLine).filter((item): item is AMLine => item !== null);
-  return removeAMInfo ? stripSongInfo(paired, lineText, title, artists) : paired;
+  return removeAMInfo ? stripSongInfo(paired, lineText, title, artists, name) : paired;
 };
