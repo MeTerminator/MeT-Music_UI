@@ -103,28 +103,52 @@ const FULL_PLAYER_CSS = `
 }
 `;
 
-/** 歌曲信息仅淡出淡入；连续切歌只呈现最新目标。 */
+/** 信息淡出淡入，高度连续过渡，让居中布局中的封面和信息同步移动。 */
 function SongInfoTransition({ songKey, className, children }: {
   songKey: string;
   className: string;
   children: ReactNode;
 }) {
   const reducedMotion = useReducedMotion();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number>();
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    // 测量自然高度的内层，避免读取动画外层导致反馈循环。
+    // wait 模式保留旧内容至淡出结束，此后才向新内容高度过渡。
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setHeight(entry.contentRect.height);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={songKey}
-        className={className}
-        data-testid="song-transition"
-        data-song-key={songKey}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0, pointerEvents: "none" }}
-        transition={{ duration: reducedMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      className={className}
+      style={{ flexShrink: 0 }}
+      initial={false}
+      animate={{ height: height ?? "auto" }}
+      transition={{ duration: reducedMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div ref={contentRef}>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={songKey}
+            data-testid="song-transition"
+            data-song-key={songKey}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, pointerEvents: "none" }}
+            transition={{ duration: reducedMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 }
 

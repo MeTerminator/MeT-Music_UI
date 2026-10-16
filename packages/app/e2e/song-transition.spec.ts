@@ -38,7 +38,7 @@ for (const mobile of [false, true]) {
       const radius = Number(getComputedStyle(el).clipPath.match(/circle\(([\d.]+)%/)?.[1]);
       return radius > 0 && radius < 72;
     })).toBe(true);
-    // 扩散时新旧封面同时存在；信息没有位移动画。
+    // 扩散时新旧封面同时存在；信息保留纯透明度动画，位置由外层布局调整。
     await expect(cover.locator("img")).toHaveCount(2);
     const revealedImage = await reveal.locator("img").elementHandle();
     await expect(group).toHaveCSS("transform", "none");
@@ -62,5 +62,55 @@ for (const mobile of [false, true]) {
     await expect(group).toHaveCount(1);
     await expect(group).toContainText("最终歌曲");
     await expect(group).toHaveCSS("opacity", "1");
+  });
+
+  test(`切歌时信息增高和缩短均平滑调整封面与信息位置（${mobile ? "手机" : "桌面"}）`, async ({ page }) => {
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+    await seedPlayback(page);
+    await page.goto("/app/#/");
+    await page.waitForFunction(() => Boolean((window as any).__debugStores));
+    await page.evaluate(() => {
+      const { music, status, settings } = (window as any).__debugStores;
+      settings.setState({ playerBackgroundType: "gradient", playCoverType: "cover", coverLayout: "default" });
+      music.setState({ playSongData: { ...music.getState().playList[0], alia: "" } });
+      status.setState({ showFullPlayer: true });
+    });
+    const info = page.getByTestId("song-transition");
+    await expect(info).toContainText("晴天");
+    // 等待播放器入场，避免把抽屉位移计入布局过渡。
+    await page.waitForTimeout(700);
+    for (const growing of [true, false]) {
+      const frames = await page.evaluate(async (growing) => {
+        const { music } = (window as any).__debugStores;
+        const info = document.querySelector('[data-testid="song-transition"]')!;
+        const heightBox = info.parentElement!.parentElement!;
+        const cover = heightBox.previousElementSibling!;
+        const sample = () => ({
+          height: heightBox.getBoundingClientRect().height,
+          coverY: cover.getBoundingClientRect().top,
+          infoY: heightBox.getBoundingClientRect().top,
+        });
+        const frames = [sample()];
+        music.setState({ playSongData: { ...music.getState().playList[growing ? 1 : 0], alia: growing ? "新增歌曲描述" : "" } });
+        const start = performance.now();
+        while (performance.now() - start < 1000) {
+          await new Promise(requestAnimationFrame);
+          frames.push(sample());
+        }
+        return frames;
+      }, growing);
+      const first = frames[0];
+      const last = frames[frames.length - 1];
+      expect((last.height - first.height) * (growing ? 1 : -1)).toBeGreaterThan(10);
+      for (const key of ["height", "coverY", "infoY"] as const) {
+        const delta = last[key] - first[key];
+        expect(Math.abs(delta)).toBeGreaterThan(5);
+        // 必须经历多个中间位置，不能只从起点跳到终点。
+        expect(frames.filter(frame => {
+          const progress = (frame[key] - first[key]) / delta;
+          return progress > 0.05 && progress < 0.95;
+        }).length).toBeGreaterThan(3);
+      }
+    }
   });
 }
