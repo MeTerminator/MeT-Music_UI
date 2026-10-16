@@ -18,6 +18,8 @@ export interface MusicState {
   playSongData: Song;
   privateFmSong?: Song;
   playSongLyric: ParsedLyric;
+  /** 未完成或失败时仍不能判定为无歌词。 */
+  playSongLyricStatus?: "idle" | "loading" | "ready" | "error";
   /** 私人 FM 模式下返回 privateFmSong,否则 playSongData(旧 getPlaySongData getter) */
   readonly getPlaySongData: Song;
   setPlayHistory(data: Song | null, clean?: boolean): void;

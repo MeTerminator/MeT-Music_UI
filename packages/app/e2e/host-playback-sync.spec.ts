@@ -1,3 +1,4 @@
+import { vividDesktopLyricColor } from "../src/platform/desktop-lyric-color";
 import { expect, test } from "@playwright/test";
 import { seedPlayback } from "./seed";
 
@@ -70,7 +71,7 @@ test("host capability sends full songs once, compact progress every 0.5s, and pa
   expect(result.pause[0]).toMatchObject({ kind: "progress", currentTime: 18, isPlaying: false });
   expect(result.changedLyrics[0]).toMatchObject({ kind: "song", lyrics: [{ content: "修改后的歌词" }] });
   expect(result.changedOffset[0]).toMatchObject({ kind: "song", lineOffset: -1000 });
-  expect(result.changedCover[0]).toMatchObject({ kind: "song", coverTheme: { light: { shadeTwo: "1, 2, 3" } } });
+  expect(result.changedCover[0]).toMatchObject({ kind: "song", coverTheme: { light: { shadeTwo: vividDesktopLyricColor("1, 2, 3") } } });
   expect(result.legacyBeforeFallback).toBe(0);
   expect(result.legacy).toBeGreaterThan(0);
 });

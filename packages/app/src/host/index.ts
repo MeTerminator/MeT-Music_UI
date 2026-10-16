@@ -37,7 +37,7 @@ import {
 import { getPlaySongData, useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
-import { desktopLyricColor } from "@/platform/desktop-lyric-color";
+import { desktopLyricColor, vividDesktopLyricColor } from "@/platform/desktop-lyric-color";
 import { cleanAll } from "@/platform/web";
 
 /** 宿主注册状态(导航栏据此渲染宿主按钮) */
@@ -90,7 +90,7 @@ export const buildHookPayload = (): HookPayload | null => {
     mainBg: side?.mainBg,
     primary: desktopLyricColor(side?.primary, settings.desktopLyricFallbackColor),
     shade: desktopLyricColor(side?.shade, settings.desktopLyricFallbackColor),
-    shadeTwo: desktopLyricColor(side?.shadeTwo, settings.desktopLyricFallbackColor),
+    shadeTwo: vividDesktopLyricColor(desktopLyricColor(side?.shadeTwo, settings.desktopLyricFallbackColor)) ?? undefined,
   });
 
   try {

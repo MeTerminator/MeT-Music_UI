@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { songIdentityKey, emptyLyric, type ParsedLyric, type Song } from "@met/core";
+import { songIdentityKey, emptyLyric, type MusicState, type ParsedLyric, type Song } from "@met/core";
 import { legacyStorage } from "./persist";
 import { useStatusStore } from "./status";
 
@@ -15,11 +15,12 @@ export interface MusicStoreState {
   privateFmSong?: Song;
   playSongSource: number;
   playSongLyric: ParsedLyric;
+  playSongLyricStatus: NonNullable<MusicState["playSongLyricStatus"]>;
   localSongPath: string[];
 }
 
 export const useMusicStore = create<MusicStoreState>()(
-  persist(
+  persist<MusicStoreState>(
     () => ({
       playList: [] as Song[],
       playListOld: [] as Song[],
@@ -27,14 +28,27 @@ export const useMusicStore = create<MusicStoreState>()(
       playSongData: {} as Song,
       playSongSource: 0,
       playSongLyric: emptyLyric(),
+      playSongLyricStatus: "idle",
       localSongPath: [] as string[],
     }),
     {
       name: "musicData",
       storage: legacyStorage(),
+      // 请求状态只对当前会话有效。
+      partialize: (state) => ({ ...state, playSongLyricStatus: "idle" as const }),
     },
   ),
 );
+
+// 歌曲状态先于引擎初始化更新，立即清除未随歌曲一起更新的歌词。
+// 同时提交歌曲与新歌词的原子更新（例如恢复有效缓存）仍然保留。
+useMusicStore.subscribe((state, previous) => {
+  if (songIdentityKey(state.playSongData) !== songIdentityKey(previous.playSongData)
+    && state.playSongLyric === previous.playSongLyric) {
+    useMusicStore.setState({ playSongLyric: emptyLyric(), playSongLyricStatus: "loading" });
+    useStatusStore.setState({ playSongLyricIndex: -1 });
+  }
+});
 
 /** 当前播放歌曲(旧 musicData.getPlaySongData getter:FM 模式下取 privateFmSong) */
 export const getPlaySongData = (): Song => {

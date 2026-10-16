@@ -1,3 +1,4 @@
+import { vividDesktopLyricColor } from "../src/platform/desktop-lyric-color";
 import { expect, test } from "@playwright/test";
 
 test("desktop fallback persists and updates modern and legacy hosts while paused", async ({ page }) => {
@@ -24,7 +25,7 @@ test("desktop fallback persists and updates modern and legacy hosts while paused
   });
   expect(result.sent).toMatchObject({ kind: "song", coverTheme: {
     dark: { primary: "255, 136, 0", bg: "255, 136, 0", mainBg: "255, 255, 255" },
-    light: { shadeTwo: "255, 136, 0", bg: "180, 50, 40" },
+    light: { shadeTwo: vividDesktopLyricColor("255, 136, 0"), bg: "180, 50, 40" },
   } });
   expect(result.original.dark.bg).toBe("240, 232, 222");
   await page.evaluate(() => {

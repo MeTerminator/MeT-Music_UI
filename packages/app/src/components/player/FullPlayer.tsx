@@ -1,5 +1,6 @@
-import { prepareAmllLines, songPlatform } from "@met/core";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { prepareAmllLines, songIdentityKey, songPlatform } from "@met/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   BackgroundRender,
   LyricPlayer,
@@ -23,6 +24,7 @@ import LyricScroll from "./LyricScroll";
 import { useLyricTouchGuard } from "./useLyricTouchGuard";
 import { ConfiguredLyricPlayer } from "./ConfiguredLyricPlayer";
 import PlayerCover from "./PlayerCover";
+import CircularCover from "./CircularCover";
 import { useSongMoreItems } from "./songMenu";
 
 /** 歌词区上下渐隐遮罩(对齐旧 AMLyric.vue / Lyric.vue) */
@@ -99,6 +101,31 @@ const FULL_PLAYER_CSS = `
   animation: met-fp-icon-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 `;
+
+/** 歌曲信息仅淡出淡入；连续切歌只呈现最新目标。 */
+function SongInfoTransition({ songKey, className, children }: {
+  songKey: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const reducedMotion = useReducedMotion();
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={songKey}
+        className={className}
+        data-testid="song-transition"
+        data-song-key={songKey}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, pointerEvents: "none" }}
+        transition={{ duration: reducedMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+      >
+        {children}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 /** 歌词视图三态图标(挂载即播一次弹入,配合外层 key 让每次切换都有反馈) */
 function LyricViewIcon({ mode }: { mode: LyricViewMode }) {
@@ -209,6 +236,7 @@ function FullPlayerInner() {
   const lyricViewMode = useStatusStore((s) => s.lyricViewMode);
   const playSongData = useMusicStore((s) => s.playSongData);
   const playSongLyric = useMusicStore((s) => s.playSongLyric);
+  const lyricStatus = useMusicStore((s) => s.playSongLyricStatus);
 
   const playerBackgroundType = useSettingsStore((s) => s.playerBackgroundType);
   const playCoverType = useSettingsStore((s) => s.playCoverType);
@@ -399,8 +427,9 @@ function FullPlayerInner() {
   const hasPlainLyric = Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
   const useAM = useAMLyrics && amLines.length > 0;
   const hasLyric = useAM || hasPlainLyric;
-  // 无歌词的歌曲强制退回“只有封面”的排布(三态按钮此时也不渲染)
-  const viewMode: LyricViewMode = hasLyric ? lyricViewMode : "hidden";
+  // 请求中或失败时保留空白歌词栏，只有成功确认无歌词才收拢。
+  const hasLyricArea = hasLyric || lyricStatus === "loading" || lyricStatus === "error";
+  const viewMode: LyricViewMode = hasLyricArea ? lyricViewMode : "hidden";
   const purelyLyric = viewMode === "only";
   /**
    * 封面栏宽度(百分比):歌词栏是 flex-1,宽度由本值反推,
@@ -410,8 +439,8 @@ function FullPlayerInner() {
 
   // 切到无歌词的歌曲时第二页随之卸载(滚动位置由浏览器夹回 0),页码状态一并复位
   useEffect(() => {
-    if (!hasLyric) setPage(0);
-  }, [hasLyric]);
+    if (!hasLyricArea) setPage(0);
+  }, [hasLyricArea]);
 
   // currentTime 偏移修正(对齐旧 AMLyric.vue 三元):仅 TTML 歌词且开启
   // lyricsAMttmlUseOffset 时叠加 lyricsAMOffset,其余路径用原始 playSeekMs
@@ -475,7 +504,8 @@ function FullPlayerInner() {
   }, [lyricReady, useAM, amLines, applyAMOffset, lyricsAMOffset, lyricsShiftMs]);
 
   // ===== 封面与背景 =====
-  const coverSmall = playSongData.coverSize?.s || playSongData.localCover || playSongData.cover;
+  const coverSmall = playSongData.coverSize?.s || playSongData.coverSize?.m || playSongData.coverSize?.l
+    || playSongData.localCover || playSongData.cover;
   const amllAlbum = toAmllAlbumUrl(coverSmall);
   const artistsText = formatArtists(playSongData.artists);
   const artistList: Artist[] | null = Array.isArray(playSongData.artists)
@@ -533,17 +563,18 @@ function FullPlayerInner() {
 
   // ===== 背景层(桌面/窄屏共用;按 settings.playerBackgroundType 分支) =====
   const backgroundNode = (
-    <div className="absolute inset-0 z-0 overflow-hidden">
+    <div className="absolute inset-0 z-0 overflow-hidden" data-testid="full-player-background">
       {showAmllBackground ? (
         <div className="absolute inset-0">
           <BackgroundRender
             album={amllAlbum}
             albumIsVideo={false}
-            playing={playState}
+            // pause() 会阻止封面异步加载后的首帧；静态模式会绘制完整背景再停止。
+            playing={true}
             fps={amll.amllBackgroundFPS}
             flowSpeed={amllPlayerBackgroundFlowSpeed}
             renderScale={amll.amllBackgroundRenderScale}
-            staticMode={amll.amllBackgroundStatic}
+            staticMode={amll.amllBackgroundStatic || !playState}
             lowFreqVolume={amll.amllBackgroundLowFreqVolume}
             renderer={backgroundRenderer}
             configureRenderer={configureRenderer}
@@ -605,7 +636,7 @@ function FullPlayerInner() {
       {lyricReady && (
         <LyricPlayer
           // 歌词数据变化时强制重建 core player,规避绑定层 setLyricLines 时序缺陷
-          key={`${playSongData.id}-${amLyricMode}-${amLines.length}`}
+          key={`${songIdentityKey(playSongData)}-${amLyricMode}-${amLines.length}`}
           ref={lyricPlayerRef}
           lyricPlayer={ConfiguredLyricPlayer}
           className="met-amll lyric-font h-full w-full"
@@ -798,25 +829,30 @@ function FullPlayerInner() {
           className="relative z-10 flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {/* 第一页:封面 + 歌曲信息 */}
-          <section className="flex h-full w-full min-w-full shrink-0 snap-center flex-col items-center justify-center gap-7 px-8">
-            <PlayerCover
-              className={
-                playCoverType === "record"
-                  ? "max-w-[min(72vw,300px)]"
-                  : "max-w-[min(76vw,340px)]"
-              }
-            />
-            {renderSongInfo({
-              className: "w-full text-center",
-              titleCls: "text-xl",
-              aliaCls: "mt-1 text-sm",
-              artistCls: "mt-1.5 text-sm",
-              albumCls: "mt-1 text-xs",
-            })}
+          <section className="h-full w-full min-w-full shrink-0 snap-center px-8">
+            <div className="flex h-full w-full flex-col items-center justify-center gap-7">
+              <PlayerCover
+                song={playSongData}
+                className={
+                  playCoverType === "record"
+                    ? "max-w-[min(72vw,300px)]"
+                    : "max-w-[min(76vw,340px)]"
+                }
+              />
+              <SongInfoTransition songKey={songIdentityKey(playSongData)} className="w-full">
+                {renderSongInfo({
+                  className: "w-full text-center",
+                  titleCls: "text-xl",
+                  aliaCls: "mt-1 text-sm",
+                  artistCls: "mt-1.5 text-sm",
+                  albumCls: "mt-1 text-xs",
+                })}
+              </SongInfoTransition>
+            </div>
           </section>
 
           {/* 第二页:顶部左封面 + 右信息,下方歌词 */}
-          {hasLyric && (
+          {hasLyricArea && (
             <section className="flex h-full w-full min-w-full shrink-0 snap-center flex-col px-5">
               <div className="flex shrink-0 items-center gap-3 pb-2">
                 {coverSmall ? (
@@ -845,7 +881,7 @@ function FullPlayerInner() {
         </div>
 
         {/* 页码圆点(点按跳页) */}
-        {hasLyric && (
+        {hasLyricArea && (
           <div className="relative z-20 flex shrink-0 items-center justify-center gap-0">
             {[0, 1].map((i) => (
               <button
@@ -887,7 +923,7 @@ function FullPlayerInner() {
         }`}
       >
         <div>
-          {hasLyric && (
+          {hasLyricArea && (
             <button
               type="button"
               className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[rgba(var(--fp-main-rgb),0.7)] transition-all hover:scale-105 hover:bg-[rgba(var(--fp-main-rgb),0.14)] hover:text-[rgb(var(--fp-main-rgb))]"
@@ -934,36 +970,41 @@ function FullPlayerInner() {
           }}
           aria-hidden={purelyLyric}
         >
-          {amll.coverLayout === "fullscreen" && (playSongData.coverSize?.l || playSongData.localCover || playSongData.cover) && (
-            <div data-testid="full-cover-art" className="met-drag absolute inset-0" style={{ maskImage: "linear-gradient(to right, black 70%, transparent)" }}>
-              <img src={playSongData.coverSize?.l || playSongData.localCover || playSongData.cover} alt="" className="h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
+          <div className="relative h-full w-full">
+            {amll.coverLayout === "fullscreen" && (playSongData.coverSize?.l || playSongData.localCover || playSongData.cover) && (
+              <div data-testid="full-cover-art" className="met-drag absolute inset-0" style={{ maskImage: "linear-gradient(to right, black 70%, transparent)" }}>
+                <CircularCover src={playSongData.coverSize?.l || playSongData.localCover || playSongData.cover} alt="" className="h-full w-full" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
+              </div>
+            )}
+            <div className={`relative flex h-full w-full flex-col items-center gap-6 px-10 ${amll.coverLayout === "fullscreen" ? "justify-end pb-36" : "justify-center"}`}>
+              {/* 封面(cover/record 两种模式,见 PlayerCover)。
+                  met-drag:全屏播放器铺满整个窗口,顶栏那条拖拽区被它盖住,
+                  桌面宿主里就没地方拖窗口了,故把封面本身当拖拽区。
+                  封面内部没有可点元素,不必再标 no-drag;窄屏那份封面在横向分页里,
+                  标成拖拽区会把滑动手势吃掉,所以只给桌面分栏这一份。 */}
+              {amll.coverLayout !== "fullscreen" && <PlayerCover
+                song={playSongData}
+                className={`met-drag ${
+                  playCoverType === "record" ? "max-w-[min(46vh,420px)]" : "max-w-[420px]"
+                }`}
+              />}
+              <SongInfoTransition songKey={songIdentityKey(playSongData)} className="w-full max-w-[420px]">
+                {renderSongInfo({
+                  className: `w-full max-w-[420px] text-center ${amll.coverLayout === "fullscreen" ? "[--fp-main-rgb:255,255,255]" : ""}`,
+                  titleCls: "text-2xl",
+                  aliaCls: "mt-1 text-base",
+                  artistCls: "mt-2 text-sm",
+                  albumCls: "mt-1 text-sm",
+                })}
+              </SongInfoTransition>
             </div>
-          )}
-          <div className={`relative flex h-full w-full flex-col items-center gap-6 px-10 ${amll.coverLayout === "fullscreen" ? "justify-end pb-36" : "justify-center"}`}>
-            {/* 封面(cover/record 两种模式,见 PlayerCover)。
-                met-drag:全屏播放器铺满整个窗口,顶栏那条拖拽区被它盖住,
-                桌面宿主里就没地方拖窗口了,故把封面本身当拖拽区。
-                封面内部没有可点元素,不必再标 no-drag;窄屏那份封面在横向分页里,
-                标成拖拽区会把滑动手势吃掉,所以只给桌面分栏这一份。 */}
-            {amll.coverLayout !== "fullscreen" && <PlayerCover
-              className={`met-drag ${
-                playCoverType === "record" ? "max-w-[min(46vh,420px)]" : "max-w-[420px]"
-              }`}
-            />}
-            {renderSongInfo({
-              className: `w-full max-w-[420px] text-center ${amll.coverLayout === "fullscreen" ? "[--fp-main-rgb:255,255,255]" : ""}`,
-              titleCls: "text-2xl",
-              aliaCls: "mt-1 text-base",
-              artistCls: "mt-2 text-sm",
-              albumCls: "mt-1 text-sm",
-            })}
           </div>
         </div>
 
         {/* 右半:歌词区(关闭歌词时被封面栏挤到 0 宽并淡出) */}
         {/* record 唱片模式歌词区高度 70vh(对照旧 AMLyric.vue getDynamicHeight 76-84) */}
-        {hasLyric && (
+        {hasLyricArea && (
           <div
             className="flex h-full min-w-0 flex-1 flex-col justify-center overflow-hidden"
             style={{
@@ -971,6 +1012,8 @@ function FullPlayerInner() {
               transition: `opacity ${viewMode === "hidden" ? 220 : 380}ms ease`,
             }}
             aria-hidden={viewMode === "hidden"}
+            aria-busy={lyricStatus === "loading"}
+            data-testid="full-player-lyrics"
           >
             {/* 左右留白放在内层:外层带 padding 的话(border-box)宽度收不到 0,
                 关闭歌词时会留下一条 40px 的空栏把封面栏顶出屏幕 */}

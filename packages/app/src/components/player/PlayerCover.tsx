@@ -1,3 +1,5 @@
+import CircularCover from "./CircularCover";
+import type { Song } from "@met/core";
 import { useMusicStore } from "../../stores/music";
 import { useStatusStore } from "../../stores/status";
 import { useSettingsStore } from "../../stores/settings";
@@ -6,6 +8,8 @@ import { getAssetUrl } from "@/platform/web";
 export interface PlayerCoverProps {
   /** 根容器附加类(尺寸/响应式由父级 FullPlayer 控制) */
   className?: string;
+  /** 可显式指定当前封面所属歌曲。 */
+  song?: Song;
 }
 
 /**
@@ -18,13 +22,14 @@ export interface PlayerCoverProps {
  *     旧实现用 vh 定位(盘 46vh / 针 14vh / top -11.5vh / origin 1.8vh),
  *     此处换算为相对盘面的百分比(30.4% / -25% / origin 12.86%),任意尺寸下针盘对齐。
  */
-export default function PlayerCover({ className = "" }: PlayerCoverProps) {
+export default function PlayerCover({ className = "", song }: PlayerCoverProps) {
   const playState = useStatusStore((s) => s.playState);
   const playSongData = useMusicStore((s) => s.playSongData);
   const playCoverType = useSettingsStore((s) => s.playCoverType);
 
+  const coverSong = song ?? playSongData;
   const cover =
-    playSongData.coverSize?.l || playSongData.localCover || playSongData.cover;
+    coverSong.coverSize?.l || coverSong.localCover || coverSong.cover;
   const isRecord = playCoverType === "record";
 
   return (
@@ -56,14 +61,7 @@ export default function PlayerCover({ className = "" }: PlayerCoverProps) {
             className="met-pcover-disc"
             style={{ animationPlayState: playState ? "running" : "paused" }}
           >
-            {cover ? (
-              <img src={cover} alt="封面" className="met-pcover-disc-img" />
-            ) : (
-              <div
-                className="met-pcover-disc-img"
-                style={{ background: "rgba(255, 255, 255, 0.08)" }}
-              />
-            )}
+            <CircularCover src={cover} className="met-pcover-disc-img" />
           </div>
         </>
       ) : (
@@ -78,18 +76,10 @@ export default function PlayerCover({ className = "" }: PlayerCoverProps) {
               style={{ filter: "blur(20px)" }}
             />
           )}
-          {cover ? (
-            <img
-              src={cover}
-              alt="封面"
-              className="relative z-10 aspect-square w-full rounded-xl object-cover shadow-2xl"
-            />
-          ) : (
-            <div
-              className="relative z-10 aspect-square w-full rounded-xl"
-              style={{ background: "rgba(255, 255, 255, 0.08)" }}
-            />
-          )}
+          <CircularCover
+            src={cover}
+            className="z-10 aspect-square w-full rounded-xl shadow-2xl"
+          />
         </>
       )}
     </div>

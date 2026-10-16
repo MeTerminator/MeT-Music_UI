@@ -1,3 +1,4 @@
+import * as songApi from "../src/api/song";
 import { setApiBaseURL } from "../src/api/client";
 /**
  * 播放引擎测试。走模拟播放(simulationPlaying)路径,不触真实音频;
@@ -148,6 +149,7 @@ beforeEach(() => {
 
 afterEach(() => {
   soundStop();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -380,5 +382,81 @@ describe("playback feedback", () => {
     fadePlayOrPause("pause");
     await Promise.resolve();
     expect(fetchSpy.mock.calls.filter(([url]) => typeof url === "string")).toHaveLength(0);
+  });
+});
+
+
+describe("切歌歌词隔离", () => {
+  const response = (text: string) => ({ code: 200, source: "network", lrc: `[00:01.000]${text}`,
+    lrctrans: "", qrc: "", qrctrans: "", qrcroma: "" }) as Awaited<ReturnType<typeof songApi.getSongLyric>>;
+  const pending = <T>() => {
+    let resolve!: (value: T) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+    return { promise, resolve, reject };
+  };
+
+  it("切歌立即清空，当前请求失败后仍无旧歌词", async () => {
+    const f = makeFixture();
+    const request = pending<Awaited<ReturnType<typeof songApi.getSongLyric>>>();
+    vi.spyOn(songApi, "getSongLyric").mockReturnValue(request.promise);
+    f.music.playSongData = song(1);
+    f.music.playSongLyric = { ...emptyLyric(), lrc: [{ time: 1, content: "旧歌词" }] };
+    await initPlayer(false);
+    expect(f.music.playSongLyric).toEqual(emptyLyric());
+    expect(f.status.playSongLyricIndex).toBe(-1);
+    expect(f.music.playSongLyricStatus).toBe("loading");
+    request.reject(new Error("network failed"));
+    await vi.waitFor(() => expect(f.deps.notify.error).toHaveBeenCalledWith("歌词处理出错"));
+    expect(f.music.playSongLyric).toEqual(emptyLyric());
+    expect(f.music.playSongLyricStatus).toBe("error");
+  });
+
+  it.each([false, true])("旧请求晚返回或失败不能影响新歌（失败=%s）", async (fail) => {
+    const f = makeFixture();
+    const old = pending<Awaited<ReturnType<typeof songApi.getSongLyric>>>();
+    vi.spyOn(songApi, "getSongLyric").mockReturnValueOnce(old.promise).mockResolvedValueOnce(response("新歌歌词"));
+    f.music.playSongData = song(1);
+    await initPlayer(false);
+    f.music.playSongData = song(2);
+    await initPlayer(false);
+    await vi.waitFor(() => expect(f.music.playSongLyric.lrc[0]?.content).toBe("新歌歌词"));
+    if (fail) old.reject(new Error("stale failure"));
+    else old.resolve(response("旧歌歌词"));
+    await old.promise.catch(() => undefined);
+    expect(f.music.playSongLyric.lrc[0]?.content).toBe("新歌歌词");
+    expect(f.deps.notify.error).not.toHaveBeenCalled();
+    expect(f.music.playSongLyricStatus).toBe("ready");
+  });
+
+  it("A→B→A 时第一次 A 的结果也已过期", async () => {
+    const f = makeFixture();
+    const old = pending<Awaited<ReturnType<typeof songApi.getSongLyric>>>();
+    vi.spyOn(songApi, "getSongLyric").mockReturnValueOnce(old.promise)
+      .mockResolvedValueOnce(response("B")).mockResolvedValueOnce(response("新的 A"));
+    for (const id of [1, 2, 1]) {
+      f.music.playSongData = song(id);
+      await initPlayer(false);
+    }
+    await vi.waitFor(() => expect(f.music.playSongLyric.lrc[0]?.content).toBe("新的 A"));
+    old.resolve(response("过期的 A"));
+    await old.promise;
+    expect(f.music.playSongLyric.lrc[0]?.content).toBe("新的 A");
+  });
+
+  it("旧曲等待 TTML 期间切歌，不能回写旧曲的解析结果", async () => {
+    const f = makeFixture({ settings: { useAMttmlDB: true } });
+    const ttml = pending<Awaited<ReturnType<typeof songApi.getAMttmlLyric>>>();
+    vi.spyOn(songApi, "getSongLyric").mockResolvedValueOnce(response("旧曲")).mockResolvedValueOnce(response("当前曲"));
+    const ttmlSpy = vi.spyOn(songApi, "getAMttmlLyric").mockReturnValueOnce(ttml.promise).mockResolvedValueOnce({ status: "no_lyrics" });
+    f.music.playSongData = song(1);
+    await initPlayer(false);
+    await vi.waitFor(() => expect(ttmlSpy).toHaveBeenCalledTimes(1));
+    f.music.playSongData = song(2);
+    await initPlayer(false);
+    await vi.waitFor(() => expect(f.music.playSongLyric.lrc[0]?.content).toBe("当前曲"));
+    ttml.resolve({ status: "no_lyrics" });
+    await ttml.promise;
+    expect(f.music.playSongLyric.lrc[0]?.content).toBe("当前曲");
   });
 });

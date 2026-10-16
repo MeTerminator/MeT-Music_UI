@@ -157,6 +157,10 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
     const music = deps.music();
     const status = deps.status();
     const settings = deps.settings();
+    // 在封面、播放地址等任何异步操作前清空，失败时也不能保留上一曲歌词。
+    music.playSongLyricStatus = status.playMode === "dj" || !music.getPlaySongData?.id ? "ready" : "loading";
+    music.playSongLyric = emptyLyric();
+    status.playSongLyricIndex = -1;
     const { playIndex, playMode } = status;
     const { playList } = music;
     // 当前播放歌曲数据
@@ -222,7 +226,7 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       }
 
       // 加载歌词、封面等非音频资源
-      if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData);
+      if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData, myPlayId);
       initMediaSession(playSongData, cover, isLocalSong, playMode === "dj");
       getColorMainColor(isLocalSong, cover);
 
@@ -296,7 +300,7 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       return;
     }
     // 获取歌词
-    if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData);
+    if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData, myPlayId);
     // 初始化媒体会话控制
     initMediaSession(playSongData, cover, isLocalSong, playMode === "dj");
     // 获取图片主色
@@ -1085,8 +1089,11 @@ export const refreshPlayProgress = (): void => {
  * @param islocal - 是否为本地歌曲
  * @param data - 歌曲的数据
  */
-const getSongLyricData = async (islocal: boolean, data: Song): Promise<boolean | void> => {
+const getSongLyricData = async (_islocal: boolean, data: Song, playId: number): Promise<boolean | void> => {
   if (!data?.id) return false;
+  const isCurrent = () => playId === currentPlayId
+    && songIdentityKey(deps.music().getPlaySongData) === songIdentityKey(data);
+  if (!isCurrent()) return;
   try {
     const music = deps.music();
     const settings = deps.settings();
@@ -1094,12 +1101,14 @@ const getSongLyricData = async (islocal: boolean, data: Song): Promise<boolean |
       music.playSongLyric = emptyLyric();
     };
     const lyricResponse = await getSongLyric(data?.id, songPlatform(data));
+    if (!isCurrent()) return;
     const lyricData = lyricResponse?.lrc || lyricResponse?.yrc || lyricResponse?.qrc;
     if (lyricData) {
       let ttmlLyricResponse = null;
       if (settings.useAMttmlDB) {
         ttmlLyricResponse = await getAMttmlLyric(data?.id, songPlatform(data));
       }
+      if (!isCurrent()) return;
       const result = await parseLyric(lyricResponse, ttmlLyricResponse, {
         platform: songPlatform(data),
         title: data.name,
@@ -1109,15 +1118,21 @@ const getSongLyricData = async (islocal: boolean, data: Song): Promise<boolean |
         removeInfo: settings.removeInfo,
         removeAMInfo: settings.removeAMInfo,
       }, deps.notify);
+      if (!isCurrent()) return;
       result ? (music.playSongLyric = result) : setDefaults();
     } else {
       console.log("该歌曲暂无歌词");
       setDefaults();
     }
+    music.playSongLyricStatus = "ready";
     // 歌词异步加载完成后，立即强制触发一次进度与歌词索引更新，防止不同步
     setAudioTime(true);
     justSetSeek(true);
   } catch (err) {
+    if (!isCurrent()) return;
+    deps.music().playSongLyric = emptyLyric();
+    deps.music().playSongLyricStatus = "error";
+    deps.status().playSongLyricIndex = -1;
     deps.notify.error("歌词处理出错");
     console.error("歌词处理出错：", err);
   }
