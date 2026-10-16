@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { parseLrc, parseQrc } from "@applemusic-like-lyrics/lyric";
 import {
+  parseAMData,
   parseLyric,
   parseLocalLrc,
   parseLrcData,
@@ -8,7 +10,7 @@ import {
   type ParseLyricOptions,
 } from "../src/lyrics/parse";
 import { computeWordProgress } from "../src/lyrics/word-progress";
-import type { YrcLine } from "../src/types/song";
+import type { AMLine, YrcLine } from "../src/types/song";
 
 const defaultOptions: ParseLyricOptions = { removeInfo: false, removeAMInfo: false };
 
@@ -53,6 +55,208 @@ describe("翻译对齐 (parseLyric lrc + tlyric)", () => {
   });
 });
 
+describe("parseAMData 信息行过滤与翻译对齐", () => {
+  // 贴近真实 QQ QRC 的结构:标题行/空行/创作者信息行(均为零时长) +
+  // 正文第一句(匀速卡拉 OK,逐字时长全相等) + 交错的 BG 翻译行;
+  // 翻译文件头部是创作者行对应的 "//" 占位
+  const QRC_AM = [
+    "[0,0]歌(0,0)名(0,0)-(0,0)手(0,0)",
+    "[0,0](0,0)",
+    "[0,0]作(0,0)词(0,0):(0,0)某(0,0)某(0,0)",
+    "[0,2178]This (0,198)is (198,198)a (396,198)test (594,198)",
+    "[2385,2160](你(2385,216)是(2601,216)测(2817,216)试(3033,216))(3249,216)",
+    "[4770,2000]What (4770,330)is (5100,150)this (5250,450)",
+  ].join("\n");
+  const TRAN_AM = ["[00:00.00]//", "[00:00.16]//", "[00:00.97]你是一个测试", "[00:05.05]这是什么"].join(
+    "\n",
+  );
+  const amText = (l: AMLine) => l.words.map((w) => w.word).join("");
+  const timedQrcLine = (text: string, start: number, wordDuration = 200): string => {
+    const characters = Array.from(text);
+    return `[${start},${characters.length * wordDuration}]${characters
+      .map((character, index) => `${character}(${start + index * wordDuration},${wordDuration})`)
+      .join("")}`;
+  };
+
+  it("匀速正文行保留、创作者行丢弃、翻译按行对齐", () => {
+    const lines = parseAMData(parseQrc(QRC_AM), parseLrc(TRAN_AM), [], true);
+    expect(lines).toHaveLength(3);
+    // 正文第一句(全行 198ms 匀速)必须保留,不再被误判为信息行
+    expect(amText(lines[0])).toBe("This is a test ");
+    // 翻译与主行按顺序一一对应,不再整体错位一行
+    expect(lines[0].translatedLyric).toBe("你是一个测试");
+    // BG 翻译行本身即译文,不再配翻译(也不挤占翻译位置)
+    expect(amText(lines[1])).toBe("你是测试");
+    expect(lines[1].translatedLyric).toBe("");
+    expect(amText(lines[2])).toBe("What is this ");
+    expect(lines[2].translatedLyric).toBe("这是什么");
+  });
+
+  it("removeAMInfo=false 时信息行保留但不挤占翻译位置", () => {
+    const lines = parseAMData(parseQrc(QRC_AM), parseLrc(TRAN_AM), [], false);
+    const texts = lines.map(amText);
+    // 标题行与创作者行保留(旧 false 分支本就不 slice),翻译置空且不挤占位置
+    expect(texts[0]).toBe("歌名-手");
+    expect(lines[0].translatedLyric).toBe("");
+    expect(texts[1]).toContain("作词");
+    expect(lines[1].translatedLyric).toBe("");
+    expect(texts[2]).toBe("This is a test ");
+    expect(lines[2].translatedLyric).toBe("你是一个测试");
+    expect(texts[3]).toBe("你是测试");
+    expect(lines[3].translatedLyric).toBe("");
+    expect(texts[4]).toBe("What is this ");
+    expect(lines[4].translatedLyric).toBe("这是什么");
+  });
+
+  it.each([
+    "词曲:张三",
+    "Producer:X",
+    "作詞:山田",
+    "編曲／混音:李四",
+    "mixed by: Y",
+    "词 Lyricist：五月天 阿信",
+    "共同制作人 Co-Producer：詹宏业",
+    "编曲 Music Arrangement：五月天 阿信",
+    "编曲协力 Music Arrangement Coordinator：黄庆原",
+    "和声编写/演唱 Backing Vocal/Arrangement：洪俊扬",
+    "大合唱 Crowd Vocals：詹宏业",
+    "母带后期处理工程师 Mastering Engineer：Wayson",
+    "母带后期处理录音室 Mastering Studio：Wayson",
+    "艺术总监：李朋",
+    "母带处理工程师：赵靖",
+    "总策划/监制：李静楠",
+    "混音室：@SBMS",
+    "配唱制作人：吴青峰/陈君豪",
+    "音频剪辑：叶育轩/陈君豪",
+    "词曲版权管理：索尼音乐版权代理（北京）有限公司",
+  ])(
+    "移除有真实时间轴的创作者信息行并保持翻译对齐: %s",
+    (credit) => {
+      const source = [timedQrcLine(credit, 1000), timedQrcLine("真实歌词", 5000)].join("\n");
+      const translation = parseLrc("[00:01.00]//\n[00:05.00]正确翻译");
+      const lines = parseAMData(parseQrc(source), translation, [], true);
+
+      expect(lines).toHaveLength(1);
+      expect(amText(lines[0])).toBe("真实歌词");
+      expect(lines[0].translatedLyric).toBe("正确翻译");
+    },
+  );
+
+  it("移除带括号前缀的版权声明", () => {
+    const notice = "【本作品声明，著作权权利保留。未经著作权人书面许可，不得以任何方式使用。】";
+    const source = [timedQrcLine(notice, 1000, 1), timedQrcLine("真实歌词", 5000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["真实歌词"]);
+  });
+
+  it("移除末尾双语创作者行时保持翻译对齐", () => {
+    const source = [
+      timedQrcLine("歌词一", 1000),
+      timedQrcLine("歌词二", 2000),
+      timedQrcLine("词 Lyricist：A", 3000),
+      timedQrcLine("曲 Composer：B", 4000),
+    ].join("\n");
+    const translation = parseLrc(
+      "[00:01.00]译一\n[00:02.00]译二\n[00:03.00]//\n[00:04.00]//",
+    );
+    const lines = parseAMData(parseQrc(source), translation, [], true);
+
+    expect(lines).toHaveLength(2);
+    expect(lines.map(amText)).toEqual(["歌词一", "歌词二"]);
+    expect(lines.map((line) => line.translatedLyric)).toEqual(["译一", "译二"]);
+  });
+
+  it("不匹配角色和没有冒号的正文不会被误删", () => {
+    const source = [
+      timedQrcLine("词穷了", 1000),
+      timedQrcLine("Producer of dreams", 3000),
+      timedQrcLine("Music is my life：yeah", 5000),
+      timedQrcLine("Alive again a party & a game", 7000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual([
+      "词穷了",
+      "Producer of dreams",
+      "Music is my life：yeah",
+      "Alive again a party & a game",
+    ]);
+  });
+
+  it("移除开头的 1–2 字零时长标题行", () => {
+    const source = ["[0,0]晴(0,0)天(0,0)", timedQrcLine("第一句", 1000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(amText(lines[0])).toBe("第一句");
+  });
+
+  const midBlockQrc = [
+    "[0,0]晴(0,0)天(0,0)",
+    timedQrcLine("第一句", 1000),
+    "[3000,1000]制(3000,200)作(3200,200)人(3400,200):(3600,200)某(3800,200)",
+    timedQrcLine("第二句", 5000),
+  ].join("\n");
+
+  it("中段信息行有占位时跳过占位并保持翻译对齐", () => {
+    const translation = parseLrc(
+      "[00:00.00]//\n[00:01.00]翻译一\n[00:03.00]//\n[00:05.00]翻译二",
+    );
+    const lines = parseAMData(parseQrc(midBlockQrc), translation, [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句", "第二句"]);
+    expect(lines.map((line) => line.translatedLyric)).toEqual(["翻译一", "翻译二"]);
+  });
+
+  it("中段信息行没有占位时不跳过后续有效翻译", () => {
+    const translation = parseLrc("[00:00.00]//\n[00:01.00]翻译一\n[00:05.00]翻译二");
+    const lines = parseAMData(parseQrc(midBlockQrc), translation, [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句", "第二句"]);
+    expect(lines.map((line) => line.translatedLyric)).toEqual(["翻译一", "翻译二"]);
+  });
+
+  it("保留歌手标记和不匹配角色的正文", () => {
+    const source = [
+      timedQrcLine("女：", 1000),
+      timedQrcLine("男：", 2000),
+      timedQrcLine("合：", 3000),
+      timedQrcLine("人声：某某", 4000),
+      timedQrcLine("总有一天：我会", 5000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["女：", "男：", "合：", "总有一天：我会"]);
+  });
+
+  it("过滤带真实时间轴的标题行与版权声明", () => {
+    const source = [
+      timedQrcLine("歌名 - 歌手", 0, 45),
+      timedQrcLine("未经许可，不得翻唱或使用", 1000, 1),
+      timedQrcLine("第一句", 2000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句"]);
+  });
+
+  it("仅过滤首个 0ms 且包含分隔短横线的标题行", () => {
+    const source = [timedQrcLine("第一句", 1000), timedQrcLine("A - B", 3000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual(["第一句", "A - B"]);
+  });
+
+  it("超长连写角色串不会卡住解析", () => {
+    const first = "词曲".repeat(500);
+    const second = `${first}x：y`;
+    const source = [timedQrcLine(first, 1000), timedQrcLine(second, 3000)].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines.map(amText)).toEqual([first, second]);
+  });
+});
+
 describe("parseYrcData", () => {
   it("解析 QRC 行头与逐字时间戳(圆括号先替换为花括号)", () => {
     const result = parseYrcData(QRC, false);
@@ -69,11 +273,23 @@ describe("parseYrcData", () => {
     expect(result[1].content.map((w) => w.content).join("")).toBe("信息行");
   });
 
-  it("removeInfo=true 时,字数 >2 且第 2 字起持续时间全等的行被丢弃", () => {
+  it("removeInfo=true 时,有真实时间轴的匀速行不再被误判为信息行", () => {
     const result = parseYrcData(QRC, true);
-    // 第二行 3 个字持续时间均为 400ms,被判定为信息行丢弃;第一行仅 2 字,保留
-    expect(result).toHaveLength(1);
+    // 第二行 3 个字持续时间均为 400ms,但行时间戳 [3000,2000] 有真实时间轴:
+    // 旧启发式「逐字时长全相等即信息行」会把它误杀,正文第一句就是这么丢的。
+    // 修正后只有「整行没有任何时间信息」的行才会被丢弃;第一行仅 2 字,保留
+    expect(result).toHaveLength(2);
     expect(result[0].time).toBe(0.6);
+    expect(result[1].time).toBe(3);
+  });
+
+  it("removeInfo=true 时移除只有两个字词的信息行", () => {
+    const result = parseYrcData(
+      "[offset:0]\n[5000,600]词:(5000,300)甲(5300,300)\n",
+      true,
+    );
+
+    expect(result).toEqual([]);
   });
 
   it("缺少 [offset:0] 前缀时安全返回空数组", () => {

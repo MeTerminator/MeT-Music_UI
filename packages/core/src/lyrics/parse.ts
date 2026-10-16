@@ -16,6 +16,272 @@ import type { Notifier } from "../types/notify";
 import type { Platform } from "../types/platform";
 import { parseNeteaseLyric } from "./netease";
 
+/** 角色后必须有冒号,避免把正文里以"词/曲/原"开头的句子误判(如"词穷"不会命中)。 */
+const CREDIT_ROLES: string[] = [
+  // 词曲作者
+  "作词",
+  "作曲",
+  "原唱",
+  "中文填词",
+  "说唱填词",
+  "填词",
+  "改编词",
+  "词曲",
+  "作词作曲",
+  "填詞",
+  "中文填詞",
+  "词",
+  "曲",
+  "原",
+  "作詞",
+  "詞",
+  // 制作
+  "总制作人",
+  "联合制作人",
+  "音乐制作",
+  "监制",
+  "音乐总监",
+  "项目总监",
+  "营销推广",
+  "编曲",
+  "編曲",
+  "制作",
+  "總製作人",
+  "聯合製作人",
+  "製作",
+  "音樂製作",
+  "監製",
+  // 录混
+  "混音",
+  "母带",
+  "和声",
+  "和音",
+  "配唱",
+  "人声",
+  "录音勤务",
+  "录音",
+  "声乐指导",
+  "配乐",
+  "音频编辑",
+  "剪辑",
+  "音乐编辑",
+  "母帶",
+  "錄音",
+  "剪輯",
+  "和聲",
+  // 演奏
+  "乐队",
+  "吉他",
+  "贝斯",
+  "鼓",
+  "键盘",
+  "弦乐",
+  "管乐",
+  "打击乐",
+  "演唱",
+  "合唱",
+  "貝斯",
+  "鍵盤",
+  "弦樂",
+  // 发行宣传
+  "出品",
+  "特别鸣谢",
+  "歌曲营销",
+  "策划",
+  "策劃",
+  "运营",
+  "運營",
+  "推广",
+  "推廣",
+  "项目企划",
+  "企划",
+  "统筹",
+  "总监",
+  "總監",
+  "版权",
+  "版權",
+  "发行",
+  "商务",
+  "营销",
+  "宣传",
+  "發行",
+  "企劃",
+  "統籌",
+  // 英文
+  "OP",
+  "SP",
+  "Lyrics",
+  "Lyricist",
+  "Lyrics by",
+  "Written by",
+  "Words by",
+  "Music",
+  "Music by",
+  "Composer",
+  "Composed by",
+  "Arranger",
+  "Arranged by",
+  "Arrangement",
+  "Producer",
+  "Produced by",
+  "Executive Producer",
+  "Co-Producer",
+  "Mixing",
+  "Mixed by",
+  "Mixing Engineer",
+  "Mastering",
+  "Mastered by",
+  "Mastering Engineer",
+  "Recording",
+  "Recorded by",
+  "Recording Engineer",
+  "Vocal Director",
+  "Backing Vocals",
+  "Vocal",
+  "Vocals",
+  "Backing Vocal",
+  "Crowd Vocals",
+  "Studio",
+  "Guitar",
+  "Bass",
+  "Drums",
+  "Keyboard",
+  "Piano",
+  "Strings",
+  "Programming",
+  "Publisher",
+  "Label",
+  "Coordinator",
+];
+const CREDIT_ROLE_PREFIXES = [
+  "音频",
+  "音頻",
+  "总",
+  "總",
+  "大",
+  "联合",
+  "聯合",
+  "共同",
+  "执行",
+  "執行",
+  "项目",
+  "項目",
+  "艺术",
+  "藝術",
+  "音乐",
+  "音樂",
+  "人声",
+  "人聲",
+  "弦乐",
+  "弦樂",
+  "乐队",
+  "樂隊",
+  "和声",
+  "和聲",
+  "歌曲",
+  "版权",
+  "版權",
+  "宣传",
+  "宣傳",
+];
+const CREDIT_ROLE_SUFFIXES = [
+  "师",
+  "師",
+  "工程师",
+  "工程師",
+  "管理",
+  "后期",
+  "後期",
+  "室",
+  "棚",
+  "助理",
+  "统筹",
+  "統籌",
+  "处理",
+  "處理",
+  "录音",
+  "錄音",
+  "编写",
+  "編寫",
+  "指导",
+  "指導",
+  "协力",
+  "協力",
+  "总监",
+  "總監",
+  "监制",
+  "監製",
+  "编辑",
+  "編輯",
+  "策划",
+  "策劃",
+  "企划",
+  "企劃",
+  "人",
+  "方",
+];
+const lowerSet = (values: string[]): string[] => [...new Set(values.map((v) => v.toLowerCase()))];
+const PREFIX_TOKENS = lowerSet(CREDIT_ROLE_PREFIXES);
+const ROLE_TOKENS = lowerSet(CREDIT_ROLES);
+const SUFFIX_TOKENS = lowerSet(CREDIT_ROLE_SUFFIXES);
+const COPYRIGHT_NOTICE_RE = /未[经經].*[许許]可.*(?:不得|禁止)/;
+/**
+ * 冒号前的部分能否完整切分为「[前缀]角色[后缀…]」单元序列;单元之间可用 /、／、&、空格分隔或直接连写。
+ * 按位置推进状态集合匹配,避免正则在连写角色上回溯爆炸。
+ */
+const isCreditHeader = (text: string): boolean => {
+  const match = /^([^:：]+)[:：]/.exec(text);
+  if (!match) return false;
+  const head = match[1].trimEnd().toLowerCase();
+  const n = head.length;
+  const unitStart = new Set<number>([0]);
+  const afterPrefix = new Set<number>();
+  const afterRole = new Set<number>();
+  const advance = (from: number, tokens: string[], into: Set<number>): void => {
+    for (const token of tokens) if (head.startsWith(token, from)) into.add(from + token.length);
+  };
+  for (let i = 0; i <= n; i++) {
+    if (afterRole.has(i)) {
+      if (i === n) return true;
+      advance(i, SUFFIX_TOKENS, afterRole);
+      let j = i;
+      while (j < n && /\s/.test(head[j])) j++;
+      if (j < n && "/／&".includes(head[j])) {
+        j++;
+        while (j < n && /\s/.test(head[j])) j++;
+      }
+      unitStart.add(i);
+      unitStart.add(j);
+    }
+    if (unitStart.has(i)) advance(i, PREFIX_TOKENS, afterPrefix);
+    if (unitStart.has(i) || afterPrefix.has(i)) advance(i, ROLE_TOKENS, afterRole);
+  }
+  return false;
+};
+interface InfoLineInput {
+  text: string;
+  isFirstContent: boolean;
+  startTime: number;
+  endTime: number;
+  restDurations: number[];
+}
+/** 信息行:角色头 / 版权声明 / 首行「 - 」标题 / 整行无时间。不看匀速,见 parseAMData 注释。 */
+const isInfoLine = ({
+  text,
+  isFirstContent,
+  startTime,
+  endTime,
+  restDurations,
+}: InfoLineInput): boolean => {
+  const trimmed = text.trim();
+  return (
+    isCreditHeader(trimmed) ||
+    COPYRIGHT_NOTICE_RE.test(trimmed) ||
+    (isFirstContent && startTime === 0 && /\s-\s/.test(text)) ||
+    (startTime === 0 && endTime === 0 && restDurations.every((d) => d === 0))
+  );
+};
+
 /** 解析行为开关(对应旧 siteSettings 中的同名设置项) */
 export interface ParseLyricOptions {
   platform?: Platform;
@@ -199,12 +465,9 @@ export const parseLyric = async (
     result.lrcAM = lrcAM;
 
     if (options.removeAMInfo) {
-      result.yrcAM = parseAMData(
-        qrcParseData.slice(1),
-        ytlrcParseData.slice(1),
-        yromalrcParseData.slice(1),
-        true,
-      );
+      // 头部 junk 行(标题/空行/创作者信息行)由 parseAMData 按内容判定跳过,
+      // 不再按固定 slice(1):两边 junk 行数不对称时 slice 会让翻译系统性错位
+      result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, true);
     } else {
       result.yrcAM = parseAMData(qrcParseData, ytlrcParseData, yromalrcParseData, false);
     }
@@ -433,6 +696,7 @@ export const parseYrcData = (
     qrc = qrc.replace(/\((\d+,\d+)\)/g, "{$1}");
 
     // 遍历每一行逐字歌词
+    let seenContent = false;
     const parsedLyrics = qrc
       .split("\n")
       .map((line) => {
@@ -478,14 +742,20 @@ export const parseYrcData = (
             };
           })
           .filter((c): c is YrcWord => c !== null);
-        if (removeInfo && contentArray.length > 2) {
-          const allDurationsEqual = contentArray
-            .slice(1)
-            .every((item) => item.duration === contentArray[1].duration);
-
-          // 如果所有持续时间相等,则跳过当前元素
-          if (allDurationsEqual) {
-            return null; // 返回 null 表示跳过当前元素
+        if (removeInfo && contentArray.length > 0) {
+          const lineContent = contentArray.map((item) => item.content).join("");
+          const isFirstContentLine = !seenContent;
+          seenContent = true;
+          if (
+            isInfoLine({
+              text: lineContent,
+              isFirstContent: isFirstContentLine,
+              startTime: Number(startTime),
+              endTime: Number(endTime),
+              restDurations: contentArray.slice(1).map((item) => item.duration),
+            })
+          ) {
+            return null;
           }
         }
         // 返回当前行解析出的时间信息和歌词内容信息
@@ -505,7 +775,11 @@ export const parseYrcData = (
 
 /**
  * 处理 AM 歌词并适配 LyricLine 和 LyricWord 接口
- * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示
+ * 如果单词的罗马音与原文一致,则 romanWord 置为空字符串以隐藏显示。
+ *
+ * 信息行规则见 isInfoLine:角色头、版权声明、首行「 - 」标题和整行无时间,不看匀速。
+ * 翻译对齐:头部丢弃块按 min() 剥离占位;中段信息行仅在占位时跳过;BG 不消费翻译,
+ * 「//」映射为空串,roma 按原下标对齐,removeAMInfo=false 时信息行按位置消费一条翻译。
  */
 export const parseAMData = (
   lrcData: LyricLine[],
@@ -513,28 +787,61 @@ export const parseAMData = (
   romaData: LyricLine[],
   removeAMInfo = true,
 ): AMLine[] => {
-  // 过滤翻译数据中无效的空行
-  const filteredTranData = tranData.filter(
-    (item) => !(item?.words?.length === 1 && item.words[0]?.word === ""),
-  );
+  const lineText = (line?: LyricLine): string =>
+    (line?.words ?? []).map((w) => w.word).join("");
+  const isTranPlaceholder = (line?: LyricLine): boolean => {
+    const t = lineText(line).trim();
+    return t === "" || t === "//";
+  };
 
-  // 获取整行翻译文本
-  const getTranslationString = (index: number): string => {
-    const lyric = filteredTranData?.[index]?.words?.map((w) => w.word).join("") ?? "";
-    return lyric === "//" ? "" : lyric;
+  const firstContentIndex = lrcData.findIndex((line) => lineText(line).trim() !== "");
+  const isInfo = (line: LyricLine, index: number): boolean =>
+    isInfoLine({
+      text: lineText(line),
+      isFirstContent: index === firstContentIndex,
+      startTime: line.startTime,
+      endTime: line.endTime,
+      restDurations: (line.words ?? []).slice(1).map((word) => word.endTime - word.startTime),
+    });
+
+  // 可丢弃的主行:空行,或 removeAMInfo 开启时的信息行
+  const isDroppableMain = (line: LyricLine, index: number): boolean =>
+    lineText(line).trim() === "" || (removeAMInfo && isInfo(line, index));
+
+  let maxStrip = 0;
+  while (maxStrip < lrcData.length && isDroppableMain(lrcData[maxStrip], maxStrip)) maxStrip++;
+  let tranCursor = 0;
+  while (
+    tranCursor < maxStrip &&
+    tranCursor < tranData.length &&
+    isTranPlaceholder(tranData[tranCursor])
+  ) {
+    tranCursor++;
+  }
+  const skipTranPlaceholder = (): void => {
+    if (tranCursor >= tranData.length) return;
+    if (isTranPlaceholder(tranData[tranCursor])) tranCursor++;
+  };
+
+  // 顺序消费一条翻译;"//" 表示本行无翻译,条目缺失时兜底空串
+  const takeTranslation = (): string => {
+    const text = lineText(tranData[tranCursor]);
+    tranCursor++;
+    return text.trim() === "//" ? "" : text;
   };
 
   // 处理每一行
   const processLine = (line: LyricLine, index: number, lines: LyricLine[]): AMLine | null => {
     const currentWords = line.words || [];
+    // roma 对齐用原数组下标 index(roma 与主歌词同构),不受翻译消费顺序影响
     const currentRomaWords = romaData?.[index]?.words || [];
 
-    // 1. 过滤冗余的 AM 信息行
-    if (removeAMInfo && currentWords.length > 2) {
-      const timeDifferences = currentWords.slice(1).map((word) => word.endTime - word.startTime);
-      const allDifferencesEqual = timeDifferences.every((diff) => diff === timeDifferences[0]);
-      if (allDifferencesEqual) return null;
+    // 1. 过滤信息行 / 空行
+    if (removeAMInfo && isInfo(line, index)) {
+      if (index >= maxStrip) skipTranPlaceholder();
+      return null;
     }
+    if (lineText(line).trim() === "") return null;
 
     // 2. 映射 LyricWord 数组
     const words = currentWords.map((wordObj, wordIndex) => {
@@ -560,9 +867,10 @@ export const parseAMData = (
       lines[index + 1]?.words?.[0]?.startTime ?? words[words.length - 1]?.endTime ?? Infinity;
 
     // 4. 构建符合 LyricLine 接口的对象
+    // BG 行(一般是译文本身或和声)不配翻译,置空;其余行按顺序消费翻译条目
     return {
       words: words,
-      translatedLyric: getTranslationString(index),
+      translatedLyric: line.isBG === true ? "" : takeTranslation(),
       romanLyric: "", // 已在 LyricWord 级别处理,整行字符串置空
       startTime: startTime,
       endTime: endTime,
