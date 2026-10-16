@@ -9,6 +9,7 @@ export * from "./lib/time";
 export * from "./lib/format";
 
 export * from "./lyrics/parse";
+export * from "./lyrics/profanity";
 export * from "./lyrics/amll-timestamps";
 export * from "./lyrics/word-progress";
 export * from "./lyrics/ttml-current-line";

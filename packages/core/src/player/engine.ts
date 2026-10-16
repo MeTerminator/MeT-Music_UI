@@ -25,6 +25,7 @@ import type { CoverSize, Song } from "../types/song";
 import { emptyLyric, songIdentityKey } from "../types/song";
 import { getSongUrl, getSongLyric, getAMttmlLyric } from "../api/song";
 import { parseLyric } from "../lyrics/parse";
+import { applyProfanityUncensor } from "../lyrics/profanity";
 import { getSongPlayTime } from "../lib/time";
 import { parseDurationToSeconds } from "../lib/format";
 import type { PlayerDeps, StatusState } from "./deps";
@@ -1072,6 +1073,13 @@ const justSetSeek = (force = false): void => {
   }
 };
 
+/** 从原文重新应用开关，不重新请求歌词，暂停时也立即更新。 */
+export const refreshLyricProfanity = (): void => {
+  const music = deps.music();
+  const result = applyProfanityUncensor(music.playSongLyric, !!deps.settings().uncensorMaskedProfanity);
+  if (result !== music.playSongLyric) music.playSongLyric = result;
+};
+
 /**
  * 立即重算一次进度与歌词索引。
  *
@@ -1120,7 +1128,7 @@ const getSongLyricData = async (_islocal: boolean, data: Song, playId: number): 
         removeAMInfo: settings.removeAMInfo,
       }, deps.notify);
       if (!isCurrent()) return;
-      result ? (music.playSongLyric = result) : setDefaults();
+      result ? (music.playSongLyric = applyProfanityUncensor(result, !!settings.uncensorMaskedProfanity)) : setDefaults();
     } else {
       console.log("该歌曲暂无歌词");
       setDefaults();

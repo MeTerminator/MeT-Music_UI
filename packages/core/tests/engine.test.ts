@@ -10,6 +10,7 @@ import {
   addSongToNext,
   changePlayIndex,
   configurePlayer,
+  refreshLyricProfanity,
   fadePlayOrPause,
   getSeek,
   initPlayer,
@@ -458,5 +459,45 @@ describe("切歌歌词隔离", () => {
     ttml.resolve({ status: "no_lyrics" });
     await ttml.promise;
     expect(f.music.playSongLyric.lrc[0]?.content).toBe("当前曲");
+  });
+});
+
+
+describe("歌词脏字补全设置", () => {
+  it.each([false, true])("歌词异步返回时使用最新开关（enabled=%s）", async (enabled) => {
+    const f = makeFixture({ settings: { uncensorMaskedProfanity: !enabled } });
+    let resolve!: (value: Awaited<ReturnType<typeof songApi.getSongLyric>>) => void;
+    const pending = new Promise<Awaited<ReturnType<typeof songApi.getSongLyric>>>((done) => { resolve = done; });
+    vi.spyOn(songApi, "getSongLyric").mockReturnValue(pending);
+    f.music.playSongData = song(1);
+    await initPlayer(false);
+    f.settings.uncensorMaskedProfanity = enabled;
+    refreshLyricProfanity();
+    resolve({ code: 200, source: "network", lrc: "[00:01.000]sh*t", lrctrans: "", qrc: "", qrctrans: "", qrcroma: "" } as Awaited<ReturnType<typeof songApi.getSongLyric>>);
+    await vi.waitFor(() => expect(f.music.playSongLyricStatus).toBe("ready"));
+    expect(f.music.playSongLyric.lrc[0].content).toBe(enabled ? "shit" : "sh*t");
+  });
+
+  it("默认不补全，暂停时切换立即生效且不请求歌词；换歌不沿用旧原文", () => {
+    const f = makeFixture();
+    const fetch = vi.spyOn(songApi, "getSongLyric");
+    const source = { ...emptyLyric(), lrc: [{ time: 0, content: "sh*t d**n" }] };
+    f.music.playSongLyric = source;
+    refreshLyricProfanity();
+    expect(f.music.playSongLyric).toBe(source);
+    f.settings.uncensorMaskedProfanity = true;
+    refreshLyricProfanity();
+    expect(f.music.playSongLyric.lrc[0].content).toBe("shit damn");
+    f.settings.uncensorMaskedProfanity = false;
+    refreshLyricProfanity();
+    expect(f.music.playSongLyric).toBe(source);
+    f.music.playSongLyric = { ...emptyLyric(), lrc: [{ time: 0, content: "b*tches" }] };
+    f.settings.uncensorMaskedProfanity = true;
+    refreshLyricProfanity();
+    expect(f.music.playSongLyric.lrc[0].content).toBe("bitches");
+    f.settings.uncensorMaskedProfanity = false;
+    refreshLyricProfanity();
+    expect(f.music.playSongLyric.lrc[0].content).toBe("b*tches");
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

@@ -1,14 +1,16 @@
 import { Switch as BaseSwitch } from "@base-ui-components/react/switch";
 
 export interface SwitchProps {
+  "aria-label"?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
 }
 
 /** 开关(Base UI Switch 薄封装) */
-export const Switch = ({ checked, onCheckedChange, disabled }: SwitchProps) => (
+export const Switch = ({ checked, onCheckedChange, disabled, "aria-label": ariaLabel }: SwitchProps) => (
   <BaseSwitch.Root
+    aria-label={ariaLabel}
     checked={checked}
     onCheckedChange={onCheckedChange}
     disabled={disabled}

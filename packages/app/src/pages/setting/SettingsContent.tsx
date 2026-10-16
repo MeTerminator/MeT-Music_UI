@@ -384,6 +384,13 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
       {/* 歌词 */}
       {activeTab === "歌词" && <div>
         <SettingSection title="歌词">
+          <SettingItem name="歌词脏字补全" tip="还原 f**k、sh*t 等英文屏蔽词及常见变形；无法确定的词保留原样">
+            <Switch
+              aria-label="歌词脏字补全"
+              checked={settings.uncensorMaskedProfanity}
+              onCheckedChange={(v) => set({ uncensorMaskedProfanity: v })}
+            />
+          </SettingItem>
           <SettingItem name="歌词文本大小" column tip="播放页歌词的文字大小">
             {/* 预览独立成行,避免与标题/说明重叠 */}
             <div className="mb-3 flex min-h-[72px] items-center justify-center overflow-hidden rounded-lg bg-[var(--met-bg)] px-4 py-2">

@@ -72,6 +72,7 @@ export interface PlayerSettings {
   lyricsOffset: number;
   /** 歌词时间平移(ms,可负):正值让歌词整体延后出现,负值提前 */
   lyricsShiftMs: number;
+  uncensorMaskedProfanity?: boolean;
   useAMttmlDB: boolean;
   removeInfo: boolean;
   removeAMInfo: boolean;

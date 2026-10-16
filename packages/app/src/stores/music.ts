@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { songIdentityKey, emptyLyric, type MusicState, type ParsedLyric, type Song } from "@met/core";
+import { songIdentityKey, emptyLyric, originalLyric, type MusicState, type ParsedLyric, type Song } from "@met/core";
 import { legacyStorage } from "./persist";
 import { useStatusStore } from "./status";
 
@@ -35,7 +35,7 @@ export const useMusicStore = create<MusicStoreState>()(
       name: "musicData",
       storage: legacyStorage(),
       // 请求状态只对当前会话有效。
-      partialize: (state) => ({ ...state, playSongLyricStatus: "idle" as const }),
+      partialize: (state) => ({ ...state, playSongLyric: originalLyric(state.playSongLyric), playSongLyricStatus: "idle" as const }),
     },
   ),
 );

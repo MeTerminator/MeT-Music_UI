@@ -52,6 +52,7 @@ export interface SettingsState {
   loadSize: number;
   searchLoadSize: number;
   // 歌词部分
+  uncensorMaskedProfanity: boolean;
   lyricsOffset: number;
   /** 歌词时间平移(ms,可负):正值让歌词整体延后出现 */
   lyricsShiftMs: number;
@@ -131,6 +132,7 @@ export const defaultSettings: SettingsState = {
   listenTogetherSyncThreshold: 300,
   loadSize: 100,
   searchLoadSize: 30,
+  uncensorMaskedProfanity: false,
   lyricsOffset: 0.4,
   lyricsShiftMs: 0,
   lyricsAMOffset: 150,

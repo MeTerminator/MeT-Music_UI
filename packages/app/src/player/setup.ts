@@ -3,7 +3,7 @@
  * 应用启动时调用一次 setupPlayer()。
  */
 import { toast } from "sonner";
-import { configurePlayer, refreshPlayProgress } from "@met/core";
+import { configurePlayer, refreshPlayProgress, refreshLyricProfanity } from "@met/core";
 import type {
   MusicState,
   Notifier,
@@ -46,6 +46,8 @@ export const setupPlayer = (): void => {
     useMusicStore,
     {
       getPlaySongData: asGetter(getPlaySongData),
+      // 歌词整体不可变替换，读取原始对象，避免动态代理身份变化影响原文映射。
+      playSongLyric: asGetter(() => useMusicStore.getState().playSongLyric),
       setPlayHistory,
       setPersonalFm,
     },
@@ -84,9 +86,15 @@ export const setupPlayer = (): void => {
     },
   });
 
+  refreshLyricProfanity();
+
   // 歌词时间类设置改完立即生效:歌词索引平时只在播放 tick 里重算,
   // 暂停态下不改这一下就完全看不出变化(全屏控制条的 ±10ms 按钮亦经此路径)。
   useSettingsStore.subscribe((state, prev) => {
+    if (state.uncensorMaskedProfanity !== prev.uncensorMaskedProfanity) {
+      refreshLyricProfanity();
+      refreshPlayProgress();
+    }
     if (
       state.lyricsShiftMs !== prev.lyricsShiftMs ||
       state.lyricsOffset !== prev.lyricsOffset ||
