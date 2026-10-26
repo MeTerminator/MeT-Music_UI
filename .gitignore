@@ -27,6 +27,7 @@ test
 
 # NAC runtime is copied from the pinned onnxruntime-web dependency before dev/build.
 packages/app/public/nac/vendor/*.mjs
+packages/app/public/nac/vendor/*.js
 packages/app/public/nac/vendor/*.wasm
 
 

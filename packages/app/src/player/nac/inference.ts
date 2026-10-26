@@ -102,8 +102,12 @@ export async function createDecoder(
   model: string | Uint8Array,
   wasmPath: string,
 ): Promise<Decoder> {
-  ort = await import(/* @vite-ignore */ new URL('ort.wasm.min.mjs', wasmPath).href);
-  ort.env.wasm.wasmPaths = wasmPath;
+  ort = await import(/* @vite-ignore */ new URL('ort.wasm.min.js', wasmPath).href);
+  // 同时覆盖 WASM 胶水模块路径，防止 ORT 内部再次按默认 .mjs 文件名取模块。
+  ort.env.wasm.wasmPaths = {
+    mjs: new URL('ort-wasm-simd-threaded.js', wasmPath).href,
+    wasm: new URL('ort-wasm-simd-threaded.wasm', wasmPath).href,
+  };
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.proxy = false;
   const options: Ort.InferenceSession.SessionOptions = {
