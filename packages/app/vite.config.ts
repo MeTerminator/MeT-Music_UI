@@ -35,6 +35,8 @@ export default defineConfig({
         "images/icons/safari-pinned-tab.svg",
       ],
       workbox: {
+        // NAC 模型/运行时按需加载，避免每次安装 PWA 都下载解码资源。
+        globIgnores: ["**/nac/**"],
         clientsClaim: true,
         skipWaiting: true,
         cleanupOutdatedCaches: true,

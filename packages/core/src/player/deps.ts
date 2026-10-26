@@ -117,6 +117,26 @@ export const noopMediaSession: MediaSessionAdapter = {
 };
 
 /** 环境能力(浏览器/Electron 差异全部收敛在这里) */
+/** 播放控制公共接口，由 Howler 或 NAC AudioWorklet 实现。 */
+export interface PlayerAudio {
+  on(event: string, callback: (...args: any[]) => void): unknown;
+  once(event: string, callback: (...args: any[]) => void): unknown;
+  off(event: string, callback?: (...args: any[]) => void): unknown;
+  play(): unknown;
+  pause(): unknown;
+  stop(): unknown;
+  unload(): unknown;
+  playing(): boolean;
+  state(): string;
+  duration(): number;
+  seek(): number;
+  seek(value: number): unknown;
+  volume(): number;
+  volume(value: number): unknown;
+  rate(value: number): unknown;
+  fade(from: number, to: number, duration: number): unknown;
+}
+
 export interface PlayerEnv {
   /** 更新页面标题(旧 document.title 写入点) */
   setTitle(title: string): void;
@@ -131,6 +151,14 @@ export interface PlayerEnv {
    * onProgress 为下载进度回调(0-100),供 UI 把进度条临时用作下载进度显示。
    */
   toBlobUrl?(url: string, onProgress?: (percent: number) => void): Promise<string>;
+  /** 在取链前的用户手势内解锁 NAC 音频上下文。 */
+  unlockNac?(): void;
+  /** NAC 首块就绪即返回播放器；后台继续解码，dispose 释放资源。 */
+  decodeNac?(url: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<{
+    url: string;
+    format: string;
+    dispose(): void;
+  } | { player: PlayerAudio; dispose(): void }>;
   /** 封面渐变取色(旧 utils/cover-color.getCoverGradient,DOM 实现留在应用层) */
   coverGradient?(coverUrl: string): Promise<string>;
   /**

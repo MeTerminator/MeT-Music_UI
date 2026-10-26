@@ -5,12 +5,13 @@
   "description": "MeT-Music React SPA(web 版与 Electron renderer 共用)",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
+    "dev": "node scripts/prepare-nac-assets.mjs && vite dev",
+    "build": "node scripts/prepare-nac-assets.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "test": "vitest run --config vitest.config.ts"
+    "test": "node scripts/prepare-nac-assets.mjs && vitest run --config vitest.config.ts",
+    "e2e:nac:production": "pnpm build && playwright test --config playwright.nac-production.config.ts"
   },
   "dependencies": {
     "@applemusic-like-lyrics/core": "^0.6.0",
@@ -31,6 +32,7 @@
     "idb-keyval": "^6.3.0",
     "lucide-react": "^1.32.0",
     "motion": "^13.1.0",
+    "onnxruntime-web": "1.23.2",
     "plyr": "^3.8.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

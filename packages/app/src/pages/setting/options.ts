@@ -5,6 +5,11 @@ import type { SelectOption } from "@/components/ui/select";
 
 /** 音质数据(label 为选项文案,tip 为当前音质说明) */
 export const songLevelData: Record<string, { label: string; tip: string; value: string }> = {
+  nac: {
+    label: "NAC",
+    tip: "神经音频编码（有损），本机边解码边播放，首次使用需加载解码模型",
+    value: "nac",
+  },
   web: {
     label: "普通 WEB",
     tip: "在线流媒体音质",

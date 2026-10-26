@@ -28,11 +28,13 @@ import { parseLyric } from "../lyrics/parse";
 import { applyProfanityUncensor } from "../lyrics/profanity";
 import { getSongPlayTime } from "../lib/time";
 import { parseDurationToSeconds } from "../lib/format";
-import type { PlayerDeps, StatusState } from "./deps";
+import type { PlayerAudio, PlayerDeps, StatusState } from "./deps";
 
 // 全局播放器
-let player: Howl | null = null;
+let player: PlayerAudio | null = null;
 let currentPlayId = 0;
+let audioPreparation: AbortController | null = null;
+let releasePreparedAudio: (() => void) | null = null;
 // 时长定时器
 let seekInterval: ReturnType<typeof setInterval> | undefined;
 let reportInterval: ReturnType<typeof setInterval> | undefined;
@@ -48,7 +50,7 @@ export const configurePlayer = (d: PlayerDeps): void => {
 };
 
 /** 当前 Howl 实例(对应旧 window.$player;可能为 null) */
-export const getPlayerInstance = (): Howl | null => player;
+export const getPlayerInstance = (): PlayerAudio | null => player;
 
 // ---
 // 记忆播放位置
@@ -158,6 +160,7 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
     const music = deps.music();
     const status = deps.status();
     const settings = deps.settings();
+    if (settings.songLevel === "nac" && songPlatform(music.getPlaySongData) === "qq") deps.env.unlockNac?.();
     // 在封面、播放地址等任何异步操作前清空，失败时也不能保留上一曲歌词。
     music.playSongLyricStatus = status.playMode === "dj" || !music.getPlaySongData?.id ? "ready" : "loading";
     music.playSongLyric = emptyLyric();
@@ -383,7 +386,7 @@ export const createPlayer = async (
   src: string,
   autoPlay = true,
   playId: number | null = null,
-): Promise<Howl | void> => {
+): Promise<PlayerAudio | void> => {
   console.log("[engine] createPlayer called with src =", src, "autoPlay =", autoPlay, "playId =", playId);
   try {
     // --- 确保已退出模拟模式 ---
@@ -402,9 +405,48 @@ export const createPlayer = async (
     const restoreSeek = takeRestoreSeek(playSongData?.id ?? null);
     // 本次装载是否仍是最新一次(并发切歌时旧装载不得再写状态)
     const isCurrent = (): boolean => !playId || playId === currentPlayId;
+    if (!isCurrent()) return;
+    soundStop();
     // 获取播放链接（非电台及云盘歌曲）
     let songUrl = src;
-    if (useMusicCache && playMode !== "dj" && !playSongData.pc && deps.env.toBlobUrl) {
+    let preparedFormat: string | undefined;
+    let preparedPlayer: PlayerAudio | undefined;
+    let preparing = true;
+    const needsNac = /\.nac(?:[?#]|$)/i.test(src) || (
+      songPlatform(playSongData) === "qq" && settings.songLevel === "nac" &&
+      !playSongData.path && !playSongData.pc && playMode !== "dj"
+    );
+    if (needsNac) {
+      if (!deps.env.decodeNac) throw new Error("当前平台未提供 NAC 解码器");
+      audioPreparation?.abort();
+      const controller = new AbortController();
+      audioPreparation = controller;
+      status.songCacheProgress = 0;
+      try {
+        const prepared = await deps.env.decodeNac(src, controller.signal, (percent) => {
+          if (preparing && isCurrent() && !controller.signal.aborted) status.songCacheProgress = percent;
+        });
+        if (!isCurrent() || controller.signal.aborted) {
+          prepared.dispose();
+          return;
+        }
+        if ("player" in prepared) preparedPlayer = prepared.player;
+        else {
+          songUrl = prepared.url;
+          preparedFormat = prepared.format;
+        }
+        releasePreparedAudio = prepared.dispose;
+      } catch (error) {
+        if (controller.signal.aborted || !isCurrent()) return;
+        status.playLoading = false;
+        status.playState = false;
+        throw error;
+      } finally {
+        preparing = false;
+        if (audioPreparation === controller) audioPreparation = null;
+        if (isCurrent() && !controller.signal.aborted) status.songCacheProgress = -1;
+      }
+    } else if (useMusicCache && playMode !== "dj" && !playSongData.pc && deps.env.toBlobUrl) {
       // 需先整首下载再播放:进度条此时临时充当下载进度显示器
       status.songCacheProgress = 0;
       try {
@@ -439,12 +481,11 @@ export const createPlayer = async (
     status.playSeek = 0;
     status.playSeekMs = 0;
     status.playSongLyricIndex = -1;
-    if (player) soundStop();
     // blob: 链接没有扩展名,必须显式给 format,否则 Howler 认不出编码直接失败
     const blobFormat = songUrl.startsWith("blob:")
-      ? [guessAudioFormat(src) ?? "mp3"]
+      ? [preparedFormat ?? guessAudioFormat(src) ?? "mp3"]
       : undefined;
-    player = new Howl({
+    player = preparedPlayer ?? new Howl({
       src: [songUrl],
       ...(blobFormat ? { format: blobFormat } : {}),
       html5: html5Player,
@@ -452,6 +493,8 @@ export const createPlayer = async (
       volume: status.playVolume,
       rate: status.playRate,
     });
+    preparedPlayer?.volume(status.playVolume);
+    preparedPlayer?.rate(status.playRate);
     // 允许跨域(Howler 载入失败时 _sounds 为空,这里不能硬取下标)
     const audioDom = (player as any)._sounds?.[0]?._node as HTMLAudioElement | undefined;
     if (audioDom) audioDom.crossOrigin = "anonymous";
@@ -571,10 +614,16 @@ export const createPlayer = async (
       }
     };
     player?.on("loaderror", onLoadError);
+    player?.on("playerror", () => {
+      status.playState = false;
+      status.playLoading = false;
+      cleanAllInterval();
+      deps.notify.warning("音频尚未解锁，请点击播放重试");
+    });
     // Howler 的 load() 在构造函数里同步执行,若此时就判定源不可用(如认不出格式),
     // 它 emit 的 loaderror 早于上面的监听注册、无人接收,表现为「什么都不发生」。
     // 用 _sounds 是否创建来补判这一次同步失败,走同一套错误处理。
-    if (!(player as any)._sounds?.length) {
+    if (!preparedPlayer && !(player as any)._sounds?.length) {
       console.warn("[engine] Howler 未能创建音频实例(源格式不被支持?)");
       onLoadError(null, 4);
       return;
@@ -819,6 +868,8 @@ export const setVolume = (volume: number | string): void => {
  */
 export const soundStop = (): void => {
   console.log("[engine] soundStop called");
+  audioPreparation?.abort();
+  audioPreparation = null;
   // 清理 Howler
   const settings = deps.settings();
   const status = deps.status();
@@ -849,6 +900,8 @@ export const soundStop = (): void => {
   fadePauseHandler = null;
 
   player = null;
+  releasePreparedAudio?.();
+  releasePreparedAudio = null;
   // 注意:此处不调用 deps.media.clear() —— soundStop 也在切歌路径(initPlayer/
   // createPlayer)被调用,旧版从不在切歌时清媒体会话,清了会导致 SMTC 瞬断。
   // 真正终止播放时用 stopPlayback()。

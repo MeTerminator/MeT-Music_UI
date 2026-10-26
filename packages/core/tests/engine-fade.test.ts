@@ -23,7 +23,7 @@ const { FakeHowl } = vi.hoisted(() => {
     private _volume: number;
     _sounds = [{ _node: {} }];
 
-    constructor(opts: { volume?: number }) {
+    constructor(public opts: { volume?: number; src?: string[]; format?: string[] }) {
       this._volume = opts.volume ?? 1;
       FakeHowl.instances.push(this);
     }
@@ -278,5 +278,87 @@ describe("fadePlayOrPause 渐出竞态", () => {
     // 标志已清理:再次 play 应走常规 play() 路径而非取消渐出路径
     fadePlayOrPause("play");
     expect(howl.playing()).toBe(true);
+  });
+});
+
+describe("NAC 在线播放", () => {
+  it("流式播放器沿用加载、音量和进度控制，后台解码不占用进度条", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "nac";
+    f.status.playLoading = true;
+    const stream = new FakeHowl({});
+    const dispose = vi.fn();
+    let progress!: (percent: number) => void;
+    f.deps.env.decodeNac = vi.fn(async (_url, _signal, onProgress) => {
+      progress = onProgress;
+      return { player: stream, dispose };
+    });
+    await createPlayer("https://example.com/song.nac", false);
+    expect(FakeHowl.instances).toHaveLength(1);
+    expect(stream.volume()).toBe(f.status.playVolume);
+    stream.emit("load");
+    expect(f.status.playLoading).toBe(false);
+    progress(75);
+    expect(f.status.songCacheProgress).toBe(-1);
+    soundStop();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("关闭自动缓存仍解码 NAC，并以 WAV 交付 Howler，停止时释放", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "nac";
+    const dispose = vi.fn();
+    f.deps.env.decodeNac = vi.fn(async (_url, _signal, progress) => {
+      progress(50);
+      return { url: "blob:nac-wav", format: "wav", dispose };
+    });
+    f.deps.env.toBlobUrl = vi.fn();
+    await createPlayer("https://example.com/song", false);
+    expect(f.deps.env.decodeNac).toHaveBeenCalledOnce();
+    expect(f.deps.env.toBlobUrl).not.toHaveBeenCalled();
+    expect(FakeHowl.instances.at(-1)?.opts).toMatchObject({ src: ["blob:nac-wav"], format: ["wav"] });
+    expect(f.status.songCacheProgress).toBe(-1);
+    soundStop();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("停止期间取消解码，迟到的结果释放且不能创建播放器", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "nac";
+    const dispose = vi.fn();
+    let signal!: AbortSignal;
+    let complete!: (value: { url: string; format: string; dispose(): void }) => void;
+    f.deps.env.decodeNac = vi.fn((_url, inputSignal) => {
+      signal = inputSignal;
+      return new Promise<{ url: string; format: string; dispose(): void }>((resolve) => { complete = resolve; });
+    });
+    const loading = createPlayer("https://example.com/song.nac", false);
+    soundStop();
+    expect(signal.aborted).toBe(true);
+    complete({ url: "blob:obsolete", format: "wav", dispose });
+    await loading;
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(FakeHowl.instances).toHaveLength(0);
+  });
+
+  it("解码失败不将 NAC 直链交给浏览器，并清除加载状态", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "nac";
+    f.status.playLoading = true;
+    f.deps.env.decodeNac = vi.fn(async () => { throw new Error("CRC mismatch"); });
+    await expect(createPlayer("https://example.com/song.nac", false)).rejects.toThrow("CRC mismatch");
+    expect(FakeHowl.instances).toHaveLength(0);
+    expect(f.status.playLoading).toBe(false);
+    expect(f.status.songCacheProgress).toBe(-1);
+  });
+
+  it("QQ 的 NAC 设置不影响网易云普通音频", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "nac";
+    f.music.playSongData.source = "netease";
+    f.deps.env.decodeNac = vi.fn();
+    await createPlayer("https://example.com/song.mp3", false);
+    expect(f.deps.env.decodeNac).not.toHaveBeenCalled();
+    expect(FakeHowl.instances.at(-1)?.opts.src).toEqual(["https://example.com/song.mp3"]);
   });
 });

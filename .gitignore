@@ -25,4 +25,9 @@ test
 # MacOS
 .DS_Store
 
+# NAC runtime is copied from the pinned onnxruntime-web dependency before dev/build.
+packages/app/public/nac/vendor/*.mjs
+packages/app/public/nac/vendor/*.wasm
 
+
+packages/app/public/nac/vendor/*.map
