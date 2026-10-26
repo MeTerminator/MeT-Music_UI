@@ -1,5 +1,5 @@
 import { getAlbumPageId } from "@/lib/album";
-import { playbackLevel, songIdentityKey } from "@met/core";
+import { parseLyric, playbackLevel, songIdentityKey } from "@met/core";
 import PlatformLabel from "@/components/PlatformLabel";
 import { useMusicPlatform, platformApi } from "@/lib/musicPlatform";
 import type { QmcTrackInfo, QmcInfoSection } from "@met/core";
@@ -80,6 +80,7 @@ export default function SongDetail() {
   const musicApi = platformApi(platform);
   const id = search.id;
   const songLevel = useSettingsStore((s) => playbackLevel(s, platform));
+  const removeInfo = useSettingsStore((s) => s.removeInfo);
   const isInRoom = useStatusStore((s) => s.isInRoom);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -125,11 +126,27 @@ export default function SongDetail() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [previewOpen]);
 
-  // 当前播放歌曲为该 id 时,用 store 歌词做文本预览
-  const playingId = useMusicStore((s) => s.playSongData?.id);
+  // 当前歌曲复用播放器歌词,其他歌曲独立加载,避免修改播放状态。
+  const playingSong = useMusicStore((s) => s.playSongData);
   const lyric = useMusicStore((s) => s.playSongLyric);
-  const isCurrent = song != null && playingId != null && songIdentityKey(useMusicStore.getState().playSongData) === songIdentityKey(song);
-  const lrcLines = isCurrent ? lyric.lrc : [];
+  const lyricStatus = useMusicStore((s) => s.playSongLyricStatus);
+  const isCurrent = song != null && playingSong != null && songIdentityKey(playingSong) === songIdentityKey(song);
+  const lyricQuery = useQuery({
+    queryKey: [platform, "song", "lyric-preview", id, removeInfo],
+    queryFn: async () => {
+      const response = await musicApi.getSongLyric(id as string);
+      const parsed = await parseLyric(response, null, {
+        platform,
+        removeInfo,
+        removeAMInfo: false,
+      });
+      if (!parsed) throw new Error("歌词解析失败");
+      return parsed.lrc;
+    },
+    enabled: song != null && !isCurrent,
+  });
+  const lrcLines = isCurrent ? lyric.lrc : (lyricQuery.data ?? []);
+  const isLyricLoading = isCurrent ? lyricStatus === "loading" : lyricQuery.isPending;
 
   const handlePlay = async (): Promise<void> => {
     if (!song) return;
@@ -347,7 +364,7 @@ export default function SongDetail() {
       {/* 歌词预览 */}
       <div className="mt-8">
         <h2 className="mb-3 text-base font-semibold text-[var(--met-fg)]">歌词预览</h2>
-        {isCurrent && lrcLines.length ? (
+        {lrcLines.length ? (
           <div className="max-h-80 overflow-y-auto rounded-xl bg-[var(--met-bg-elevated)] p-4">
             {lrcLines.map((line, i) => (
               <p key={`${line.time}-${i}`} className="py-1 text-sm leading-relaxed text-[var(--met-fg-dim)]">
@@ -357,7 +374,7 @@ export default function SongDetail() {
           </div>
         ) : (
           <div className="rounded-xl bg-[var(--met-bg-elevated)] p-6 text-center text-sm text-[var(--met-fg-dim)]">
-            {isCurrent ? "当前歌曲暂无歌词" : "播放该歌曲后可在此查看歌词"}
+            {isLyricLoading ? "歌词加载中…" : !isCurrent && lyricQuery.isError ? "歌词加载失败，请稍后重试" : "该歌曲暂无歌词"}
           </div>
         )}
       </div>
