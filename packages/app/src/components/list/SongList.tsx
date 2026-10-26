@@ -4,7 +4,7 @@ import { playbackLevel, songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ContextMenu as BaseContextMenu } from "@base-ui-components/react/context-menu";
-import { Ellipsis, ListEnd, Locate, Play } from "lucide-react";
+import { Clapperboard, Download, Ellipsis, FileMusic, Hash, Link, ListEnd, Locate, MessageSquare, Play, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   addSongToNext,
@@ -243,11 +243,13 @@ export default function SongList({
     const items: MenuItemDef[] = [
       {
         key: "play",
+        icon: Play,
         label: "立即播放",
         onSelect: () => void playFromList(displaySongs, song, index, playBehavior),
       },
       {
         key: "next-play",
+        icon: ListEnd,
         label: "下一首播放",
         // 对照旧逻辑:当前播放歌曲不可再「下一首播放」;房内改为添加到一起听队列
         disabled: playingId != null && playingKey === songIdentityKey(song),
@@ -258,6 +260,7 @@ export default function SongList({
     if (isInRoom) {
       items.push({
         key: "add-listen-together",
+        icon: Users,
         label: "添加到一起听",
         onSelect: () => ltAddSong(song),
       });
@@ -265,6 +268,7 @@ export default function SongList({
     if (mvId && !isLocalSong) {
       items.push({
         key: "mv",
+        icon: Clapperboard,
         label: "观看 MV",
         onSelect: () => void navigate({ to: "/videos-player", search: { platform: songPlatform(song), id: mvId } }),
       });
@@ -273,16 +277,19 @@ export default function SongList({
       items.push(
         {
           key: "comment",
+          icon: MessageSquare,
           label: "查看评论",
           onSelect: () => void navigate({ to: "/comments", search: { platform: songPlatform(song), id: songId } }),
         },
         {
           key: "song-detail",
+          icon: FileMusic,
           label: "查看单曲详情",
           onSelect: () => void navigate({ to: "/song", search: { platform: songPlatform(song), id: songId } }),
         },
         {
           key: "download",
+          icon: Download,
           label: "下载歌曲",
           // 对照旧 UrlDownloadSong:附带 music_quality=settings.songLevel(/download 路由已透传)
           onSelect: () =>
@@ -296,11 +303,13 @@ export default function SongList({
         },
         {
           key: "share",
+          icon: Link,
           label: "复制歌曲链接",
           onSelect: () => void copySongLink(song),
         },
         {
           key: "copy-id",
+          icon: Hash,
           label: "复制歌曲 ID",
           onSelect: () => void copyText(songId, "复制歌曲 ID 成功"),
         },
@@ -309,6 +318,7 @@ export default function SongList({
     // 同名搜索(对照旧 SongListDropdown,本地歌曲同样可用)
     items.push({
       key: "search-same-name",
+      icon: Search,
       label: "同名搜索",
       onSelect: () =>
         void navigate({ to: "/search/songs", search: { platform: songPlatform(song), keywords: song.name } }),

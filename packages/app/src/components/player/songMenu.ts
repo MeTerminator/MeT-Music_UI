@@ -1,3 +1,4 @@
+import { Clapperboard, Download, ExternalLink, FileMusic, Hash, Link, MessageSquare } from "lucide-react";
 import { songPlatform } from "@met/core";
 /**
  * 当前播放歌曲的「更多操作」菜单项(对照旧 MainControl.vue 的 songMoreOptions)。
@@ -52,11 +53,13 @@ export const useSongMoreItems = (
   const items: MenuItemDef[] = [
     {
       key: "comment",
+      icon: MessageSquare,
       label: "查看评论",
       onSelect: () => go("/comments", String(songId)),
     },
     {
       key: "original-page",
+      icon: ExternalLink,
       label: "查看原始页面",
       onSelect: () => {
         window.open(song?.source === "netease" ? `https://music.163.com/#/song?id=${songId}` : `https://y.qq.com/n/ryqq/songDetail/${String(songId)}`);
@@ -64,16 +67,19 @@ export const useSongMoreItems = (
     },
     {
       key: "song-detail",
+      icon: FileMusic,
       label: "查看单曲详情",
       onSelect: () => go("/song", String(songId)),
     },
     {
       key: "download",
+      icon: Download,
       label: "下载歌曲",
       onSelect: () => go("/download", String(songId)),
     },
     {
       key: "share",
+      icon: Link,
       label: "复制歌曲链接",
       onSelect: () =>
         void copyText(
@@ -83,6 +89,7 @@ export const useSongMoreItems = (
     },
     {
       key: "copy-id",
+      icon: Hash,
       label: "复制歌曲 ID",
       onSelect: () => void copyText(String(songId), "复制歌曲 ID 成功"),
     },
@@ -92,6 +99,7 @@ export const useSongMoreItems = (
   if (mvId) {
     items.splice(1, 0, {
       key: "mv",
+      icon: Clapperboard,
       label: "观看 MV",
       onSelect: () => go("/videos-player", mvId),
     });

@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import { Menu as BaseMenu } from "@base-ui-components/react/menu";
 
 /** 菜单项定义(DropdownMenu 与 ContextMenu 共用) */
 export interface MenuItemDef {
   key: string;
   label: ReactNode;
+  /** 菜单项前的装饰图标 */
+  icon?: LucideIcon;
   /** 危险操作(红色文案) */
   danger?: boolean;
   disabled?: boolean;
@@ -42,6 +45,7 @@ export const MenuItems = ({ items }: { items: readonly MenuItemDef[] }) => (
           item.danger ? "text-[var(--met-danger)]" : "text-[var(--met-fg)]"
         }`}
       >
+        {item.icon ? <item.icon size={16} strokeWidth={1.75} className="shrink-0 opacity-70" aria-hidden="true" /> : null}
         {item.label}
       </BaseMenu.Item>
     ))}
