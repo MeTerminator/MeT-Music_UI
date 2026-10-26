@@ -1,6 +1,7 @@
 import type { Platform } from "../types/platform";
 import { request } from "./client";
 import type { ApiResponseFor } from "./contracts";
+import { withLyricCache } from "./lyric-cache";
 
 /**
  * 获取音乐 URL
@@ -25,18 +26,16 @@ export const getSongUrl = async (
  */
 export const getSongLyric = async (
   id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/lyric/new">> => {
-  const res = await request("GET", "/lyric/new", {
+  return withLyricCache("/lyric/new", platform, id, () => request("GET", "/lyric/new", {
     platform,
     id,
-  });
-  return res;
+  }));
 };
 
 export const getAMttmlLyric = async (
   mid: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/lyric/ttml">> => {
-  const res = await request("GET", "/lyric/ttml", {
+  return withLyricCache("/lyric/ttml", platform, mid, () => request("GET", "/lyric/ttml", {
     platform,
     mid,
-  });
-  return res;
+  }));
 };

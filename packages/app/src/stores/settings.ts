@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { legacyStorage } from "./persist";
 import type { IsolationRendererOptions, OptimizeLyricOptions, spring } from "@applemusic-like-lyrics/core";
 import { DEFAULT_DESKTOP_LYRIC_FALLBACK, normalizeDesktopLyricFallback } from "@/platform/desktop-lyric-color";
-import { NETEASE_LEVELS } from "@met/core";
+import { NETEASE_LEVELS, configureLyricCache, normalizeLyricCacheDays, DEFAULT_LYRIC_CACHE_DAYS } from "@met/core";
 
 /**
  * 站点设置。沿用旧 siteSettings 持久化格式，并补齐播放器与 AMLL 可调参数。
@@ -52,6 +52,8 @@ export interface SettingsState {
   loadSize: number;
   searchLoadSize: number;
   // 歌词部分
+  /** 0 不缓存，-1 永不过期，正数为缓存天数。 */
+  lyricCacheDays: number;
   uncensorMaskedProfanity: boolean;
   lyricsOffset: number;
   /** 歌词时间平移(ms,可负):正值让歌词整体延后出现 */
@@ -133,6 +135,7 @@ export const defaultSettings: SettingsState = {
   loadSize: 100,
   searchLoadSize: 30,
   uncensorMaskedProfanity: false,
+  lyricCacheDays: DEFAULT_LYRIC_CACHE_DAYS,
   lyricsOffset: 0.4,
   lyricsShiftMs: 0,
   lyricsAMOffset: 150,
@@ -190,6 +193,7 @@ export const useSettingsStore = create<SettingsState>()(
         rest.amllAlignPosition = rest.lyricsBlock === "center" ? 0.5 : 0.25;
       }
       const merged = { ...current, ...rest } as SettingsState;
+      merged.lyricCacheDays = normalizeLyricCacheDays(merged.lyricCacheDays);
       merged.desktopLyricFallbackColor = normalizeDesktopLyricFallback(merged.desktopLyricFallbackColor);
       for (const key of ["amllSpringY", "amllSpringScale", "amllIsolationOptions", "amllOptimizeOptions"] as const) {
         Object.assign(merged, { [key]: { ...current[key], ...merged[key] } });
@@ -198,3 +202,8 @@ export const useSettingsStore = create<SettingsState>()(
     },
   }),
 );
+
+configureLyricCache({
+  getDays: () => useSettingsStore.getState().lyricCacheDays,
+  getStorage: () => typeof window === "undefined" ? undefined : window.localStorage,
+});

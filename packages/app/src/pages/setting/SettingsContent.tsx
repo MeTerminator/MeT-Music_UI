@@ -61,6 +61,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const [activeTab, setActiveTab] = useState<SectionName>("常规");
   const rootRef = useRef<HTMLDivElement>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [lyricCacheDraft, setLyricCacheDraft] = useState<string | null>(null);
   const sessionId = getSessionId();
 
   // 明暗模式切换(对齐旧 setThemeType:setState + toast + 关闭跟随系统)
@@ -384,6 +385,43 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
       {/* 歌词 */}
       {activeTab === "歌词" && <div>
         <SettingSection title="歌词">
+          <SettingItem name="歌词缓存" tip="普通歌词和 TTML 歌词共用本地缓存，刷新页面后仍然有效">
+            <Select
+              value={settings.lyricCacheDays === 0 ? "disabled" : settings.lyricCacheDays === -1 ? "forever" : "custom"}
+              options={[
+                { label: "不缓存", value: "disabled" },
+                { label: "自定义有效期", value: "custom" },
+                { label: "永不过期", value: "forever" },
+              ]}
+              onValueChange={(value) => {
+                setLyricCacheDraft(null);
+                set({ lyricCacheDays: value === "disabled" ? 0 : value === "forever" ? -1 : 7 });
+              }}
+              className="w-52"
+            />
+          </SettingItem>
+          {settings.lyricCacheDays > 0 && (
+            <SettingItem name="歌词缓存有效期" tip="单位为天，默认 7 天，支持小数；修改后立即按新有效期检查已有缓存">
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="number" aria-label="歌词缓存有效期（天）" min={0} step="any"
+                  value={lyricCacheDraft ?? settings.lyricCacheDays}
+                  onChange={(event) => setLyricCacheDraft(event.target.value)}
+                  onBlur={() => {
+                    const days = lyricCacheDraft === null || lyricCacheDraft.trim() === "" ? NaN : Number(lyricCacheDraft);
+                    if (Number.isFinite(days) && days > 0) set({ lyricCacheDays: days });
+                    setLyricCacheDraft(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") setLyricCacheDraft(null);
+                  }}
+                  className="w-24 rounded-lg border border-[var(--met-border)] bg-[var(--met-bg)] px-2 py-1.5 text-[var(--met-fg)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--met-primary)]"
+                />
+                <span>天</span>
+              </div>
+            </SettingItem>
+          )}
           <SettingItem name="歌词脏字补全" tip="还原 f**k、sh*t 等英文屏蔽词及常见变形；无法确定的词保留原样">
             <Switch
               aria-label="歌词脏字补全"
