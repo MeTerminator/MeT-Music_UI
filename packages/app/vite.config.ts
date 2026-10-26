@@ -22,9 +22,18 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
     wasm(),
-    // PWA 配置(manifest 与旧应用一致)
+    // 品牌资源预缓存,更新时同步替换旧 favicon / 安装图标。
     VitePWA({
       registerType: "autoUpdate",
+      includeAssets: [
+        "favicon.ico",
+        "favicon.png",
+        "images/icons/favicon*",
+        "images/icons/apple-touch-icon.png",
+        "images/icons/android-chrome-*.png",
+        "images/icons/mstile-150x150.png",
+        "images/icons/safari-pinned-tab.svg",
+      ],
       workbox: {
         clientsClaim: true,
         skipWaiting: true,
@@ -53,8 +62,10 @@ export default defineConfig({
         icons: [
           { src: "/app/images/icons/favicon-32x32.png", sizes: "32x32", type: "image/png" },
           { src: "/app/images/icons/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+          { src: "/app/images/icons/favicon-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "/app/images/icons/favicon-256x256.png", sizes: "256x256", type: "image/png" },
           { src: "/app/images/icons/favicon-512x512.png", sizes: "512x512", type: "image/png" },
+          { src: "/app/images/icons/favicon.svg", sizes: "any", type: "image/svg+xml" },
         ],
       },
     }),
