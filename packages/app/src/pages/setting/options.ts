@@ -3,60 +3,34 @@
  */
 import type { SelectOption } from "@/components/ui/select";
 
-/** 音质数据(label 为选项文案,tip 为当前音质说明) */
-export const songLevelData: Record<string, { label: string; tip: string; value: string }> = {
-  nac: {
-    label: "NAC",
-    tip: "神经音频编码（有损），本机边解码边播放，首次使用需加载解码模型",
-    value: "nac",
-  },
-  web: {
-    label: "普通 WEB",
-    tip: "在线流媒体音质",
-    value: "web",
-  },
-  hq: {
-    label: "极高 HQ",
-    tip: "近 CD 品质的细节体验，最高 320kbps",
-    value: "hq",
-  },
-  sq: {
-    label: "无损 SQ",
-    tip: "高保真无损音质，最高 48kHz/24bit",
-    value: "sq",
-  },
-  rs: {
-    label: "高分辨率音源 Hi-Res",
-    tip: "索尼高品质音乐标准，高于 44.1kHz/16bit",
-    value: "rs",
-  },
-  dts: {
-    label: "杜比 5.1 声道",
-    tip: "六声道环绕声，使人产生犹如身临音乐厅的感觉",
-    value: "dts",
-  },
-  q360v1: {
-    label: "臻品全景声 V1",
-    tip: "独家自研空间音频，V1 版本，立体声",
-    value: "q360v1",
-  },
-  q360v2: {
-    label: "臻品全景声 V2",
-    tip: "独家自研空间音频，V2 版本，多声道",
-    value: "q360v2",
-  },
-  qai: {
-    label: "臻品母带",
-    tip: "还原声音细节，让声音还原更加极致",
-    value: "qai",
-  },
-};
+/** Only formats supported by this browser or the existing NAC decoder. */
+import { qqPlaybackQualities } from "@met/core";
+import { supportedQQCodecs } from "@/player/qq-codecs";
 
-export const songLevelOptions: SelectOption[] = Object.values(songLevelData).map(
-  ({ label, value }) => ({ label, value }),
+export const songLevelData: Record<
+  string,
+  { label: string; tip: string; value: string }
+> = Object.fromEntries(
+  qqPlaybackQualities(supportedQQCodecs()).map((q) => [
+    q.key.toLowerCase(),
+    {
+      label: q.label,
+      value: q.key.toLowerCase(),
+      tip:
+        q.codec === "nac"
+          ? "使用本机 NAC 解码器播放"
+          : "缺少所选音质时回退到当前浏览器支持的音频；实际规格以音源为准",
+    },
+  ]),
 );
+export const songLevelOptions: SelectOption[] = Object.values(
+  songLevelData,
+).map(({ label, value }) => ({ label, value }));
 
-export const neteaseSongLevelData: Record<string, { label: string; tip: string }> = {
+export const neteaseSongLevelData: Record<
+  string,
+  { label: string; tip: string }
+> = {
   standard: { label: "标准", tip: "标准音质" },
   higher: { label: "较高", tip: "较高音质" },
   exhigh: { label: "极高", tip: "极高音质" },
@@ -68,9 +42,9 @@ export const neteaseSongLevelData: Record<string, { label: string; tip: string }
   jymaster: { label: "超清母带", tip: "超清母带音质" },
   sky: { label: "沉浸环绕声", tip: "沉浸环绕声，默认使用 c51 类型" },
 };
-export const neteaseSongLevelOptions: SelectOption[] = Object.entries(neteaseSongLevelData).map(
-  ([value, { label }]) => ({ label, value }),
-);
+export const neteaseSongLevelOptions: SelectOption[] = Object.entries(
+  neteaseSongLevelData,
+).map(([value, { label }]) => ({ label, value }));
 
 /** 主题数据 */
 export const themeColorOptions: SelectOption[] = [

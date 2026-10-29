@@ -3,7 +3,11 @@
  * 应用启动时调用一次 setupPlayer()。
  */
 import { toast } from "sonner";
-import { configurePlayer, refreshPlayProgress, refreshLyricProfanity } from "@met/core";
+import {
+  configurePlayer,
+  refreshPlayProgress,
+  refreshLyricProfanity,
+} from "@met/core";
 import type {
   MusicState,
   Notifier,
@@ -13,7 +17,12 @@ import type {
 } from "@met/core";
 import { ltBridge } from "@/stores/listenTogether";
 import { asGetter, bindStore } from "./bind";
-import { useMusicStore, getPlaySongData, setPlayHistory, setPersonalFm } from "@/stores/music";
+import {
+  useMusicStore,
+  getPlaySongData,
+  setPlayHistory,
+  setPersonalFm,
+} from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
 import { useSiteDataStore } from "@/stores/siteData";
@@ -21,14 +30,19 @@ import { getCoverGradient } from "@/platform/cover-color";
 import { webMediaSession } from "@/platform/media-session";
 import { getBlobUrlFromUrl, getSessionId } from "@/platform/web";
 import { decodeNacUrl } from "./nac/prepare";
+import { supportedQQCodecs } from "./qq-codecs";
 import { unlockNacAudio } from "./nac/stream-audio";
 import { broadcastHook } from "@/host";
 
 /** UI 反馈(sonner toast;fatal 用原生 confirm 兜底) */
 const notifier: Notifier = {
-  info: (m) => toast(m, m.startsWith("TTML 歌词作者：") || m === "使用 TTML 歌词"
-    ? { closeButton: true, className: "met-ttml-toast" }
-    : undefined),
+  info: (m) =>
+    toast(
+      m,
+      m.startsWith("TTML 歌词作者：") || m === "使用 TTML 歌词"
+        ? { closeButton: true, className: "met-ttml-toast" }
+        : undefined,
+    ),
   success: (m) => toast.success(m),
   warning: (m) => toast.warning(m),
   error: (m) => toast.error(m),
@@ -44,25 +58,28 @@ export const setupPlayer = (): void => {
   if (configured) return;
   configured = true;
 
-  const musicProxy = bindStore<MusicState, ReturnType<typeof useMusicStore.getState>>(
-    useMusicStore,
-    {
-      getPlaySongData: asGetter(getPlaySongData),
-      // 歌词整体不可变替换，读取原始对象，避免动态代理身份变化影响原文映射。
-      playSongLyric: asGetter(() => useMusicStore.getState().playSongLyric),
-      setPlayHistory,
-      setPersonalFm,
-    },
-  );
-  const statusProxy = bindStore<StatusState, ReturnType<typeof useStatusStore.getState>>(
-    useStatusStore,
-  );
-  const settingsProxy = bindStore<PlayerSettings, ReturnType<typeof useSettingsStore.getState>>(
-    useSettingsStore,
-  );
-  const siteProxy = bindStore<SiteState, ReturnType<typeof useSiteDataStore.getState>>(
-    useSiteDataStore,
-  );
+  const musicProxy = bindStore<
+    MusicState,
+    ReturnType<typeof useMusicStore.getState>
+  >(useMusicStore, {
+    getPlaySongData: asGetter(getPlaySongData),
+    // 歌词整体不可变替换，读取原始对象，避免动态代理身份变化影响原文映射。
+    playSongLyric: asGetter(() => useMusicStore.getState().playSongLyric),
+    setPlayHistory,
+    setPersonalFm,
+  });
+  const statusProxy = bindStore<
+    StatusState,
+    ReturnType<typeof useStatusStore.getState>
+  >(useStatusStore);
+  const settingsProxy = bindStore<
+    PlayerSettings,
+    ReturnType<typeof useSettingsStore.getState>
+  >(useSettingsStore);
+  const siteProxy = bindStore<
+    SiteState,
+    ReturnType<typeof useSiteDataStore.getState>
+  >(useSiteDataStore);
 
   configurePlayer({
     music: () => musicProxy,
@@ -73,6 +90,7 @@ export const setupPlayer = (): void => {
     notify: notifier,
     media: webMediaSession,
     env: {
+      supportedQQCodecs,
       setTitle: (title) => {
         document.title = title;
       },
@@ -84,9 +102,10 @@ export const setupPlayer = (): void => {
       // 封面取色:写入 coverBackground(引擎)与 coverTheme(取色实现内部 setState)
       coverGradient: getCoverGradient,
       onTick: broadcastHook,
-      onSeek: () => useStatusStore.setState((state) => ({
-        playSeekRevision: state.playSeekRevision + 1,
-      })),
+      onSeek: () =>
+        useStatusStore.setState((state) => ({
+          playSeekRevision: state.playSeekRevision + 1,
+        })),
     },
   });
 

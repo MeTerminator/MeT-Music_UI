@@ -1,3 +1,4 @@
+import { qqPlaybackQualities } from "../qq-qualities";
 import { playbackLevel, songPlatform } from "../types/platform";
 /**
  * 播放引擎。自旧 src/utils/Player.js(1391 行)逐函数移植,逻辑照抄;
@@ -28,11 +29,22 @@ import { parseLyric } from "../lyrics/parse";
 import { applyProfanityUncensor } from "../lyrics/profanity";
 import { getSongPlayTime } from "../lib/time";
 import { parseDurationToSeconds } from "../lib/format";
-import type { PlayerAudio, PlayerDeps, StatusState } from "./deps";
+import type {
+  PlayerAudio,
+  PlayerDeps,
+  StatusState,
+  PlaybackQualityState,
+} from "./deps";
 
 // 全局播放器
 let player: PlayerAudio | null = null;
 let currentPlayId = 0;
+let qualitySwitchController: AbortController | null = null;
+let currentResource: {
+  songKey: string;
+  url: string;
+  quality: PlaybackQualityState;
+} | null = null;
 let audioPreparation: AbortController | null = null;
 let releasePreparedAudio: (() => void) | null = null;
 // 时长定时器
@@ -46,6 +58,9 @@ let deps: PlayerDeps;
 
 /** 注入引擎依赖;应用层启动时调用一次(必须先于任何播放操作) */
 export const configurePlayer = (d: PlayerDeps): void => {
+  qualitySwitchController?.abort();
+  qualitySwitchController = null;
+  currentResource = null;
   deps = d;
 };
 
@@ -57,14 +72,18 @@ export const getPlayerInstance = (): PlayerAudio | null => player;
 // ---
 
 /** 待恢复的播放位置(秒)与其所属歌曲 id;被 createPlayer 消费一次后清空 */
-let pendingRestore: { seek: number; songId: string | number | null } | null = null;
+let pendingRestore: { seek: number; songId: string | number | null } | null =
+  null;
 
 /**
  * 交付一次「上次播放位置」,供下一次装载播放器时恢复。
  * 应用层在启动引导(读持久化的 playTimeData)时调用;songId 用于防止
  * 首曲取链失败自动跳到下一曲后,把上一首的进度错误地套用到新歌上。
  */
-export const setRestoreSeek = (seconds: number, songId: string | number | null = null): void => {
+export const setRestoreSeek = (
+  seconds: number,
+  songId: string | number | null = null,
+): void => {
   pendingRestore = seconds > 0 ? { seek: seconds, songId } : null;
 };
 
@@ -73,7 +92,8 @@ const takeRestoreSeek = (songId: string | number | null): number => {
   if (!pendingRestore) return 0;
   const { seek, songId: memoId } = pendingRestore;
   pendingRestore = null;
-  if (memoId != null && songId != null && String(memoId) !== String(songId)) return 0;
+  if (memoId != null && songId != null && String(memoId) !== String(songId))
+    return 0;
   return seek;
 };
 
@@ -115,7 +135,9 @@ const reportPlaybackStatus = (eventType: string): void => {
 
     // --- 兼容模拟播放 ---
     const currentSeek = isSimulating ? getSeek() : player?.seek?.() || 0;
-    const isPlaying = isSimulating ? statusStore.playState : player?.playing() || false;
+    const isPlaying = isSimulating
+      ? statusStore.playState
+      : player?.playing() || false;
 
     const data = {
       event: eventType,
@@ -152,6 +174,10 @@ const reportPlaybackStatus = (eventType: string): void => {
  */
 export const initPlayer = async (playNow = false): Promise<boolean | void> => {
   console.log("[engine] initPlayer called with playNow =", playNow);
+  qualitySwitchController?.abort();
+  qualitySwitchController = null;
+  currentResource = null;
+  deps.status().playbackQuality = null;
   const myPlayId = ++currentPlayId;
   try {
     // 停止播放器
@@ -160,9 +186,16 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
     const music = deps.music();
     const status = deps.status();
     const settings = deps.settings();
-    if (settings.songLevel === "nac" && songPlatform(music.getPlaySongData) === "qq") deps.env.unlockNac?.();
+    if (
+      settings.songLevel === "nac" &&
+      songPlatform(music.getPlaySongData) === "qq"
+    )
+      deps.env.unlockNac?.();
     // 在封面、播放地址等任何异步操作前清空，失败时也不能保留上一曲歌词。
-    music.playSongLyricStatus = status.playMode === "dj" || !music.getPlaySongData?.id ? "ready" : "loading";
+    music.playSongLyricStatus =
+      status.playMode === "dj" || !music.getPlaySongData?.id
+        ? "ready"
+        : "loading";
     music.playSongLyric = emptyLyric();
     status.playSongLyricIndex = -1;
     const { playIndex, playMode } = status;
@@ -173,13 +206,17 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
     const isLocalSong = playSongData?.path ? true : false;
     // 获取封面
     if (isLocalSong && deps.env.resolveLocalCover && playSongData?.path) {
-      music.playSongData.localCover = await deps.env.resolveLocalCover(playSongData.path);
+      music.playSongData.localCover = await deps.env.resolveLocalCover(
+        playSongData.path,
+      );
     }
     if (myPlayId !== currentPlayId) {
       console.log("[engine] initPlayer discarded after local cover fetching");
       return;
     }
-    const cover = isLocalSong ? music.playSongData?.localCover : playSongData?.coverSize;
+    const cover = isLocalSong
+      ? music.playSongData?.localCover
+      : playSongData?.coverSize;
     // 歌词归位
     status.playSongLyricIndex = -1;
 
@@ -191,7 +228,9 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       isSimulating = true;
       status.playLoading = false;
       // 必须确保 playSongData.duration (mm:ss) 存在
-      simulationDuration = parseDurationToSeconds(playSongData.duration as string);
+      simulationDuration = parseDurationToSeconds(
+        playSongData.duration as string,
+      );
       // 记忆播放位置(模拟播放同样适用;接近结尾时不恢复)
       const restoreSeek = takeRestoreSeek(playSongData?.id ?? null);
       simulationPausedSeek =
@@ -230,7 +269,8 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       }
 
       // 加载歌词、封面等非音频资源
-      if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData, myPlayId);
+      if (playMode !== "dj")
+        getSongLyricData(isLocalSong, playSongData, myPlayId);
       initMediaSession(playSongData, cover, isLocalSong, playMode === "dj");
       getColorMainColor(isLocalSong, cover);
 
@@ -249,7 +289,7 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       // 开启加载状态
       status.playLoading = true;
       // 获取播放地址
-      const url = await getNormalSongUrl(id, status, playNow);
+      const url = await getNormalSongUrl(id, status, playNow, myPlayId);
 
       if (myPlayId !== currentPlayId) {
         console.log("[engine] initPlayer discarded after getNormalSongUrl");
@@ -284,7 +324,9 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       if (playNow && url) status.playState = true;
       if (url) {
         if (myPlayId !== currentPlayId) {
-          console.log("[engine] initPlayer discarded before local song createPlayer");
+          console.log(
+            "[engine] initPlayer discarded before local song createPlayer",
+          );
           return;
         }
         // 创建播放器
@@ -304,7 +346,8 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
       return;
     }
     // 获取歌词
-    if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData, myPlayId);
+    if (playMode !== "dj")
+      getSongLyricData(isLocalSong, playSongData, myPlayId);
     // 初始化媒体会话控制
     initMediaSession(playSongData, cover, isLocalSong, playMode === "dj");
     // 获取图片主色
@@ -335,15 +378,39 @@ const getNormalSongUrl = async (
   id: number | string,
   status: StatusState,
   playNow: boolean,
+  playId: number,
 ): Promise<string | null> => {
   try {
     const settings = deps.settings();
     const platform = songPlatform(deps.music().getPlaySongData);
-    const res = await getSongUrl(id, playbackLevel(settings, platform), platform);
+    const res = await getSongUrl(
+      id,
+      playbackLevel(settings, platform),
+      platform,
+      platform === "qq" ? deps.env.supportedQQCodecs?.() : undefined,
+    );
     // 检查是否有有效的响应数据
     if (!res.data?.[0] || !res.data?.[0]?.url) return null;
+    if (playId !== currentPlayId) return null;
+    const songKey = songIdentityKey(deps.music().getPlaySongData);
+    const quality: PlaybackQualityState = {
+      songKey,
+      actualLevel: res.data[0].level || null,
+      requestedLevel: playbackLevel(settings, platform),
+      availableLevels: res.data[0].track_info?.available_qualities ?? null,
+      overrideLevel: null,
+      switching: false,
+    };
+    status.playbackQuality = quality;
+    currentResource = {
+      songKey,
+      url: res.data[0].url.replace(/^http:/, "https:"),
+      quality,
+    };
     if (res.data[0].isTrial) {
-      deps.notify.warning("网易云当前返回试听音频，请检查服务器账号登录状态及 VIP 权益");
+      deps.notify.warning(
+        "网易云当前返回试听音频，请检查服务器账号登录状态及 VIP 权益",
+      );
     }
     // 返回歌曲地址，将 http 转换为 https
     const url: string = res.data[0].url.replace(/^http:/, "https:");
@@ -351,14 +418,15 @@ const getNormalSongUrl = async (
     if (playNow && url) status.playState = true;
     return url;
   } catch (error) {
-    status.playLoading = false;
+    if (playId === currentPlayId) status.playLoading = false;
     console.error("获取歌曲地址遇到错误：" + error);
     throw error;
   }
 };
 
 /** Howler 能识别的音频扩展名(用于 blob: 链接的 format 提示) */
-const AUDIO_EXT = /^(mp3|mpeg|m4a|mp4|aac|ogg|oga|opus|wav|wave|flac|webm|weba)$/;
+const AUDIO_EXT =
+  /^(mp3|mpeg|m4a|mp4|aac|ogg|oga|opus|wav|wave|flac|webm|weba)$/;
 
 /**
  * 从原始直链推断音频格式。
@@ -382,12 +450,26 @@ const guessAudioFormat = (url: string): string | undefined => {
  * @param autoPlay - 是否自动播放
  * @param playId - 并发丢弃标记
  */
+interface PlayerLoadOptions {
+  seek: number;
+  onReady(): void;
+  onFailure(error: Error): void;
+}
+
 export const createPlayer = async (
   src: string,
   autoPlay = true,
   playId: number | null = null,
+  qualityReload?: PlayerLoadOptions,
 ): Promise<PlayerAudio | void> => {
-  console.log("[engine] createPlayer called with src =", src, "autoPlay =", autoPlay, "playId =", playId);
+  console.log(
+    "[engine] createPlayer called with src =",
+    src,
+    "autoPlay =",
+    autoPlay,
+    "playId =",
+    playId,
+  );
   try {
     // --- 确保已退出模拟模式 ---
     isSimulating = false;
@@ -400,9 +482,15 @@ export const createPlayer = async (
     const { memorySeek, useMusicCache, html5Player } = settings;
     // 当前播放歌曲数据
     const playSongData = music.getPlaySongData;
-    console.log("[engine] createPlayer - playSongData id:", playSongData?.id, "playState:", status.playState);
+    console.log(
+      "[engine] createPlayer - playSongData id:",
+      playSongData?.id,
+      "playState:",
+      status.playState,
+    );
     // 消费一次「上次播放位置」(须在下方清零 playTimeData 之前取)
-    const restoreSeek = takeRestoreSeek(playSongData?.id ?? null);
+    const restoreSeek =
+      qualityReload?.seek ?? takeRestoreSeek(playSongData?.id ?? null);
     // 本次装载是否仍是最新一次(并发切歌时旧装载不得再写状态)
     const isCurrent = (): boolean => !playId || playId === currentPlayId;
     if (!isCurrent()) return;
@@ -412,10 +500,15 @@ export const createPlayer = async (
     let preparedFormat: string | undefined;
     let preparedPlayer: PlayerAudio | undefined;
     let preparing = true;
-    const needsNac = /\.nac(?:[?#]|$)/i.test(src) || (
-      songPlatform(playSongData) === "qq" && settings.songLevel === "nac" &&
-      !playSongData.path && !playSongData.pc && playMode !== "dj"
-    );
+    const needsNac =
+      /\.nac(?:[?#]|$)/i.test(src) ||
+      (songPlatform(playSongData) === "qq" &&
+        (
+          status.playbackQuality?.overrideLevel ?? settings.songLevel
+        ).toLowerCase() === "nac" &&
+        !playSongData.path &&
+        !playSongData.pc &&
+        playMode !== "dj");
     if (needsNac) {
       if (!deps.env.decodeNac) throw new Error("当前平台未提供 NAC 解码器");
       audioPreparation?.abort();
@@ -423,9 +516,14 @@ export const createPlayer = async (
       audioPreparation = controller;
       status.songCacheProgress = 0;
       try {
-        const prepared = await deps.env.decodeNac(src, controller.signal, (percent) => {
-          if (preparing && isCurrent() && !controller.signal.aborted) status.songCacheProgress = percent;
-        });
+        const prepared = await deps.env.decodeNac(
+          src,
+          controller.signal,
+          (percent) => {
+            if (preparing && isCurrent() && !controller.signal.aborted)
+              status.songCacheProgress = percent;
+          },
+        );
         if (!isCurrent() || controller.signal.aborted) {
           prepared.dispose();
           return;
@@ -444,9 +542,15 @@ export const createPlayer = async (
       } finally {
         preparing = false;
         if (audioPreparation === controller) audioPreparation = null;
-        if (isCurrent() && !controller.signal.aborted) status.songCacheProgress = -1;
+        if (isCurrent() && !controller.signal.aborted)
+          status.songCacheProgress = -1;
       }
-    } else if (useMusicCache && playMode !== "dj" && !playSongData.pc && deps.env.toBlobUrl) {
+    } else if (
+      useMusicCache &&
+      playMode !== "dj" &&
+      !playSongData.pc &&
+      deps.env.toBlobUrl
+    ) {
       // 需先整首下载再播放:进度条此时临时充当下载进度显示器
       status.songCacheProgress = 0;
       try {
@@ -465,7 +569,9 @@ export const createPlayer = async (
 
     // --- Guard check after async blob url fetch ---
     if (playId && playId !== currentPlayId) {
-      console.log("[engine] createPlayer discarded because playId changed during blob fetching");
+      console.log(
+        "[engine] createPlayer discarded because playId changed during blob fetching",
+      );
       return;
     }
 
@@ -485,23 +591,30 @@ export const createPlayer = async (
     const blobFormat = songUrl.startsWith("blob:")
       ? [preparedFormat ?? guessAudioFormat(src) ?? "mp3"]
       : undefined;
-    player = preparedPlayer ?? new Howl({
-      src: [songUrl],
-      ...(blobFormat ? { format: blobFormat } : {}),
-      html5: html5Player,
-      preload: "metadata",
-      volume: status.playVolume,
-      rate: status.playRate,
-    });
+    player =
+      preparedPlayer ??
+      new Howl({
+        src: [songUrl],
+        ...(blobFormat ? { format: blobFormat } : {}),
+        html5: html5Player,
+        preload: "metadata",
+        volume: status.playVolume,
+        rate: status.playRate,
+      });
     preparedPlayer?.volume(status.playVolume);
     preparedPlayer?.rate(status.playRate);
     // 允许跨域(Howler 载入失败时 _sounds 为空,这里不能硬取下标)
-    const audioDom = (player as any)._sounds?.[0]?._node as HTMLAudioElement | undefined;
+    const audioDom = (player as any)._sounds?.[0]?._node as
+      | HTMLAudioElement
+      | undefined;
     if (audioDom) audioDom.crossOrigin = "anonymous";
     // 写入播放历史
     music.setPlayHistory(playSongData);
     // 加载完成
+    const loadedPlayer = player;
+    let qualityReloadReady = false;
     player?.once("load", () => {
+      if (!isCurrent() || player !== loadedPlayer) return;
       console.info("🎵 加载完成", player, status.playState);
       if (status.isInRoom) {
         // Sync with the room's current seek position internally
@@ -510,7 +623,9 @@ export const createPlayer = async (
         const now = Date.now();
         const serverNow = now + lt.serverTimeOffset;
         const serverTimeGen = room.serverTime || serverNow;
-        const elapsed = room.is_playing ? (serverNow - serverTimeGen) / 1000 : 0;
+        const elapsed = room.is_playing
+          ? (serverNow - serverTimeGen) / 1000
+          : 0;
         const targetSeek = (room.seek_position || 0) + elapsed;
         if (room.is_playing) {
           player?.once("play", () => {
@@ -518,8 +633,12 @@ export const createPlayer = async (
             const playServerNow = playNow2 + lt.serverTimeOffset;
             const playServerTimeGen = room.serverTime || playServerNow;
             const currentElapsed = (playServerNow - playServerTimeGen) / 1000;
-            const currentTargetSeek = (room.seek_position || 0) + currentElapsed;
-            console.log("[engine] room is playing, seeking inside play event to", currentTargetSeek);
+            const currentTargetSeek =
+              (room.seek_position || 0) + currentElapsed;
+            console.log(
+              "[engine] room is playing, seeking inside play event to",
+              currentTargetSeek,
+            );
             setSeek(currentTargetSeek, true);
           });
           fadePlayOrPause("play");
@@ -529,18 +648,28 @@ export const createPlayer = async (
       } else {
         // 恢复上次播放位置(记忆播放位置;接近结尾时不恢复,防止刚进来就切歌)
         const duration = player?.duration() || 0;
-        const canRestore =
-          memorySeek && restoreSeek > 1 && (duration <= 0 || duration - restoreSeek > 2);
-        setSeek(canRestore ? restoreSeek : 0);
+        const canRestore = qualityReload
+          ? restoreSeek >= 0
+          : memorySeek &&
+            restoreSeek > 1 &&
+            (duration <= 0 || duration - restoreSeek > 2);
+        setSeek(
+          canRestore
+            ? Math.min(restoreSeek, Math.max(0, duration - 0.05) || restoreSeek)
+            : 0,
+        );
         if (!canRestore) status.playTimeData.bar = "0";
         // 自动播放(先定位再起播,二者可同时开启)
         if (autoPlay && status.playState) fadePlayOrPause("play");
       }
       // 取消加载状态
       status.playLoading = false;
+      qualityReloadReady = true;
+      qualityReload?.onReady();
     });
     // 开始播放
     player?.on("play", () => {
+      if (player !== loadedPlayer) return;
       console.info("🎵 开始播放：", playSongData);
       isPlayEnd = false;
       setAllInterval();
@@ -553,6 +682,7 @@ export const createPlayer = async (
     });
     // 暂停播放
     player?.on("pause", () => {
+      if (player !== loadedPlayer) return;
       console.info("⏸ 暂停播放");
       cleanAllInterval();
       // 更改状态
@@ -568,6 +698,7 @@ export const createPlayer = async (
     });
     // 结束播放
     player?.on("end", () => {
+      if (player !== loadedPlayer) return;
       console.info("🎵 播放结束");
       isPlayEnd = true;
       // 停止定时器
@@ -581,6 +712,16 @@ export const createPlayer = async (
     });
     // 加载失败
     const onLoadError = (_id: unknown, errCode: unknown): void => {
+      if (!isCurrent() || player !== loadedPlayer) return;
+      if (qualityReload && !qualityReloadReady) {
+        status.playLoading = false;
+        status.playState = false;
+        cleanAllInterval();
+        qualityReload.onFailure(
+          new Error(`Audio load failed: ${String(errCode)}`),
+        );
+        return;
+      }
       console.log("播放出现错误：", _id, errCode);
       // 更改状态
       status.playLoading = false;
@@ -615,6 +756,7 @@ export const createPlayer = async (
     };
     player?.on("loaderror", onLoadError);
     player?.on("playerror", () => {
+      if (player !== loadedPlayer) return;
       status.playState = false;
       status.playLoading = false;
       cleanAllInterval();
@@ -637,11 +779,158 @@ export const createPlayer = async (
   }
 };
 
+/** Switch only this play of the current online song; keep seek and global preferences. */
+export const switchPlaybackQuality = async (
+  level: string,
+): Promise<boolean> => {
+  const status = deps.status();
+  const song = deps.music().getPlaySongData;
+  const songKey = songIdentityKey(song);
+  const resource = currentResource;
+  if (
+    !resource ||
+    resource.songKey !== songKey ||
+    song.path ||
+    song.pc ||
+    status.playMode === "dj"
+  )
+    return false;
+  const platform = songPlatform(song);
+  const normalized =
+    platform === "qq" ? level.toUpperCase() : level.toLowerCase();
+  const allowed =
+    platform === "qq"
+      ? qqPlaybackQualities(
+          deps.env.supportedQQCodecs?.() ?? [
+            "mp3",
+            "aac",
+            "flac",
+            "ogg",
+            "nac",
+          ],
+        ).some((q) => q.key === normalized)
+      : ["standard", "higher", "exhigh", "lossless", "hires"].includes(
+          normalized,
+        ) &&
+        (deps.env.supportedQQCodecs?.() ?? ["mp3", "flac"]).includes(
+          ["lossless", "hires"].includes(normalized) ? "flac" : "mp3",
+        );
+  if (!allowed) return false;
+  qualitySwitchController?.abort();
+  const controller = new AbortController();
+  qualitySwitchController = controller;
+  const token = ++currentPlayId;
+  const isCurrent = () =>
+    !controller.signal.aborted &&
+    token === currentPlayId &&
+    songIdentityKey(deps.music().getPlaySongData) === songKey;
+  const previous = { ...resource.quality };
+  status.playbackQuality = { ...previous, switching: true };
+  if (normalized === "NAC") deps.env.unlockNac?.();
+  let replaced = false;
+  let position = 0;
+  let wasPlaying = false;
+  const load = (url: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => finish(new Error("Audio load timed out")),
+        20_000,
+      );
+      const finish = (error?: Error) => {
+        clearTimeout(timeout);
+        controller.signal.removeEventListener("abort", abort);
+        if (error) reject(error);
+        else resolve();
+      };
+      const abort = () => finish(new Error("Quality switch cancelled"));
+      controller.signal.addEventListener("abort", abort, { once: true });
+      if (!isCurrent()) {
+        abort();
+        return;
+      }
+      void createPlayer(url, wasPlaying, token, {
+        seek: position,
+        onReady: () => finish(),
+        onFailure: (error) => finish(error),
+      }).then(
+        (audio) => {
+          if (!audio && isCurrent())
+            finish(new Error("Audio player unavailable"));
+        },
+        (error) => finish(error),
+      );
+    });
+  try {
+    const response = await getSongUrl(
+      song.id,
+      normalized,
+      platform,
+      platform === "qq" ? deps.env.supportedQQCodecs?.() : undefined,
+    );
+    if (!isCurrent()) return false;
+    const item = response.data?.[0];
+    if (!item?.url) throw new Error("No playable audio for this quality");
+    // Capture at the end of the request: the old source may have kept playing meanwhile.
+    position = getSeek();
+    wasPlaying = status.playState;
+    const next: PlaybackQualityState = {
+      songKey,
+      actualLevel: item.level || null,
+      requestedLevel: normalized,
+      availableLevels:
+        item.track_info?.available_qualities ?? previous.availableLevels,
+      overrideLevel: normalized,
+      switching: true,
+    };
+    status.playbackQuality = next;
+    status.playLoading = true;
+    status.playState = wasPlaying;
+    replaced = true;
+    await load(item.url.replace(/^http:/, "https:"));
+    if (!isCurrent()) return false;
+    status.playbackQuality = { ...next, switching: false };
+    currentResource = {
+      songKey,
+      url: item.url.replace(/^http:/, "https:"),
+      quality: { ...next, switching: false },
+    };
+    if (item.isTrial) deps.notify.warning("当前音质返回了试听音频");
+    if (item.level && item.level.toLowerCase() !== normalized.toLowerCase()) {
+      deps.notify.info("所选音质不可用，已使用可播放音质");
+    }
+    return true;
+  } catch {
+    if (!isCurrent()) return false;
+    status.playbackQuality = { ...previous, switching: true };
+    if (replaced) {
+      status.playState = wasPlaying;
+      try {
+        await load(resource.url);
+      } catch {
+        if (isCurrent()) {
+          status.playLoading = false;
+          status.playState = false;
+        }
+      }
+    }
+    if (isCurrent()) {
+      status.playbackQuality = { ...previous, switching: false };
+      deps.notify.error("音质切换失败，已保留原音质");
+    }
+    return false;
+  } finally {
+    if (qualitySwitchController === controller) qualitySwitchController = null;
+  }
+};
+
 /**
  * 播放下一首或上一首歌曲
  * @param type - 更改索引的类型  "next" / "prev"
  */
-export const changePlayIndex = async (type: "next" | "prev" = "next", play = false): Promise<boolean | void> => {
+export const changePlayIndex = async (
+  type: "next" | "prev" = "next",
+  play = false,
+): Promise<boolean | void> => {
   const status = deps.status();
   if (status.isInRoom) {
     deps.lt().sendChangeIndex(type);
@@ -681,6 +970,10 @@ export const changePlayIndex = async (type: "next" | "prev" = "next", play = fal
       // 随机模式
       status.playIndex = Math.floor(Math.random() * listLength);
     } else if (playSongMode === "repeat") {
+      if (status.playbackQuality?.overrideLevel) {
+        await initPlayer(play);
+        return true;
+      }
       // 单曲循环模式
       setSeek();
       fadePlayOrPause("play");
@@ -719,7 +1012,9 @@ export const addSongToNext = (data: Song, play = false): void => {
     // 更改播放模式
     status.hasNextSong = true;
     // 查找是否存在于播放列表
-    const index = music.playList.findIndex((v) => songIdentityKey(v) === songIdentityKey(data));
+    const index = music.playList.findIndex(
+      (v) => songIdentityKey(v) === songIdentityKey(data),
+    );
     // 若存在
     if (index !== -1) {
       console.log("已存在", index);
@@ -729,7 +1024,11 @@ export const addSongToNext = (data: Song, play = false): void => {
       // 如果移动的位置不是当前位置，且不是最后一首歌曲
       if (index !== currentSongIndex && nextSongIndex < music.playList.length) {
         // 移动歌曲
-        music.playList.splice(nextSongIndex, 0, music.playList.splice(index, 1)[0]);
+        music.playList.splice(
+          nextSongIndex,
+          0,
+          music.playList.splice(index, 1)[0],
+        );
       }
       // 更新播放索引
       if (play) status.playIndex = nextSongIndex;
@@ -768,7 +1067,8 @@ export const fadePlayOrPause = (type: "play" | "pause" = "play"): void => {
       deps.media.setPlaybackState(true);
     } else {
       if (!status.playState) return;
-      simulationPausedSeek = (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
+      simulationPausedSeek =
+        (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
       status.playState = false;
       cleanAllInterval();
       setAudioTime(true); // 同上:tick 停了,状态得手动送出去一次
@@ -824,7 +1124,8 @@ export const fadePlayOrPause = (type: "play" | "pause" = "play"): void => {
         deps.media.setPlaybackState(false);
       };
       // 若上一次渐出尚未完成又再次 pause,先摘除旧 handler,避免重复回调
-      if (pendingFadePause && fadePauseHandler) player?.off("fade", fadePauseHandler);
+      if (pendingFadePause && fadePauseHandler)
+        player?.off("fade", fadePauseHandler);
       pendingFadePause = true;
       fadePauseHandler = onFadeOutDone;
       player?.once("fade", onFadeOutDone);
@@ -842,7 +1143,9 @@ export const playOrPause = async (): Promise<void> => {
     return;
   }
   // --- 兼容模拟播放 ---
-  const isPlaying = isSimulating ? status.playState : player?.playing() || status.playState;
+  const isPlaying = isSimulating
+    ? status.playState
+    : player?.playing() || status.playState;
   fadePlayOrPause(isPlaying ? "pause" : "play");
 };
 
@@ -912,6 +1215,12 @@ export const soundStop = (): void => {
  * 仅此路径调用 deps.media.clear(),对应旧版 stop → soundStop 的完整终止语义。
  */
 const stopPlayback = (): void => {
+  qualitySwitchController?.abort();
+  qualitySwitchController = null;
+  currentResource = null;
+  deps.status().playbackQuality = null;
+  deps.status().playLoading = false;
+  deps.status().playState = false;
   soundStop();
   deps.media.clear();
 };
@@ -936,7 +1245,12 @@ export const setVolumeMute = (): void => {
  * @param isInternal - 内部调用(一起听同步),不回发房间
  */
 export const setSeek = (seek = 0, isInternal = false): void => {
-  console.log("[engine] setSeek called with seek =", seek, "isInternal =", isInternal);
+  console.log(
+    "[engine] setSeek called with seek =",
+    seek,
+    "isInternal =",
+    isInternal,
+  );
   const status = deps.status();
   if (status.isInRoom && !isInternal) {
     console.log("[engine] setSeek - sending seek to room");
@@ -971,7 +1285,8 @@ export const getSeek = (): number => {
   if (isSimulating) {
     const status = deps.status();
     if (status.playState) {
-      const currentTime = (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
+      const currentTime =
+        (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
       // 防止超出总时长
       return Math.min(currentTime, simulationDuration);
     } else {
@@ -1008,7 +1323,8 @@ const computeLyricIndex = (currentTime: number): number => {
   const settings = deps.settings();
   const lyrics = hasYrc && settings.showYrc && yrc?.length ? yrc : lrc;
   if (!lyrics?.length) return -1;
-  const offsetTime = currentTime + settings.lyricsOffset - lyricShiftSeconds(settings);
+  const offsetTime =
+    currentTime + settings.lyricsOffset - lyricShiftSeconds(settings);
   const index = lyrics.findIndex((v) => v?.time >= offsetTime);
   return index === -1 ? lyrics.length - 1 : index - 1;
 };
@@ -1042,7 +1358,8 @@ const setAudioTime = (force = false): void => {
       return; // 暂停时退出
     }
 
-    const currentTime = (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
+    const currentTime =
+      (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
     const duration = simulationDuration;
 
     // 模拟播放结束
@@ -1083,7 +1400,13 @@ const setAudioTime = (force = false): void => {
     const played = getSongPlayTime(seekVal);
     const durationTime = getSongPlayTime(duration);
     // 赋值数据
-    status.playTimeData = { currentTime: seekVal, duration, bar, played, durationTime };
+    status.playTimeData = {
+      currentTime: seekVal,
+      duration,
+      bar,
+      played,
+      durationTime,
+    };
     status.playSongLyricIndex = computeLyricIndex(seekVal);
     deps.env.setTitle(getPlaySongName());
     deps.env.onTick?.();
@@ -1105,7 +1428,8 @@ const justSetSeek = (force = false): void => {
 
     let currentTime: number;
     if (status.playState) {
-      currentTime = (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
+      currentTime =
+        (performance.now() - simulationStartTime) / 1000 + simulationPausedSeek;
     } else {
       currentTime = simulationPausedSeek;
     }
@@ -1129,7 +1453,10 @@ const justSetSeek = (force = false): void => {
 /** 从原文重新应用开关，不重新请求歌词，暂停时也立即更新。 */
 export const refreshLyricProfanity = (): void => {
   const music = deps.music();
-  const result = applyProfanityUncensor(music.playSongLyric, !!deps.settings().uncensorMaskedProfanity);
+  const result = applyProfanityUncensor(
+    music.playSongLyric,
+    !!deps.settings().uncensorMaskedProfanity,
+  );
   if (result !== music.playSongLyric) music.playSongLyric = result;
 };
 
@@ -1150,10 +1477,15 @@ export const refreshPlayProgress = (): void => {
  * @param islocal - 是否为本地歌曲
  * @param data - 歌曲的数据
  */
-const getSongLyricData = async (_islocal: boolean, data: Song, playId: number): Promise<boolean | void> => {
+const getSongLyricData = async (
+  _islocal: boolean,
+  data: Song,
+  playId: number,
+): Promise<boolean | void> => {
   if (!data?.id) return false;
-  const isCurrent = () => playId === currentPlayId
-    && songIdentityKey(deps.music().getPlaySongData) === songIdentityKey(data);
+  const isCurrent = () =>
+    playId === currentPlayId &&
+    songIdentityKey(deps.music().getPlaySongData) === songIdentityKey(data);
   if (!isCurrent()) return;
   try {
     const music = deps.music();
@@ -1163,25 +1495,38 @@ const getSongLyricData = async (_islocal: boolean, data: Song, playId: number): 
     };
     const lyricResponse = await getSongLyric(data?.id, songPlatform(data));
     if (!isCurrent()) return;
-    const lyricData = lyricResponse?.lrc || lyricResponse?.yrc || lyricResponse?.qrc;
+    const lyricData =
+      lyricResponse?.lrc || lyricResponse?.yrc || lyricResponse?.qrc;
     if (lyricData) {
       let ttmlLyricResponse = null;
       if (settings.useAMttmlDB) {
         ttmlLyricResponse = await getAMttmlLyric(data?.id, songPlatform(data));
       }
       if (!isCurrent()) return;
-      const result = await parseLyric(lyricResponse, ttmlLyricResponse, {
-        platform: songPlatform(data),
-        name: data.name,
-        title: data.title,
-        artists: Array.isArray(data.artists)
-          ? data.artists.map((artist) => artist.name)
-          : data.artists ? [data.artists] : [],
-        removeInfo: settings.removeInfo,
-        removeAMInfo: settings.removeAMInfo,
-      }, deps.notify);
+      const result = await parseLyric(
+        lyricResponse,
+        ttmlLyricResponse,
+        {
+          platform: songPlatform(data),
+          name: data.name,
+          title: data.title,
+          artists: Array.isArray(data.artists)
+            ? data.artists.map((artist) => artist.name)
+            : data.artists
+              ? [data.artists]
+              : [],
+          removeInfo: settings.removeInfo,
+          removeAMInfo: settings.removeAMInfo,
+        },
+        deps.notify,
+      );
       if (!isCurrent()) return;
-      result ? (music.playSongLyric = applyProfanityUncensor(result, !!settings.uncensorMaskedProfanity)) : setDefaults();
+      result
+        ? (music.playSongLyric = applyProfanityUncensor(
+            result,
+            !!settings.uncensorMaskedProfanity,
+          ))
+        : setDefaults();
     } else {
       console.log("该歌曲暂无歌词");
       setDefaults();
@@ -1248,7 +1593,9 @@ const bindPlayerMediaSession = (): void => {
       setSeek(Math.max(0, getSeek() - (details?.seekOffset || 10)));
     },
     seekforward: (details) => {
-      const duration = isSimulating ? simulationDuration : player?.duration() || 0;
+      const duration = isSimulating
+        ? simulationDuration
+        : player?.duration() || 0;
       setSeek(Math.min(duration || 0, getSeek() + (details?.seekOffset || 10)));
     },
     visibilitychange: () => {
@@ -1297,7 +1644,10 @@ const initMediaSession = (
  * 取色的 DOM 实现由应用层经 env.coverGradient 注入;
  * coverTheme 的写入由该实现自行负责(与旧 calcAccentColor 行为一致)。
  */
-const getColorMainColor = async (islocal: boolean, cover: string | CoverSize | undefined): Promise<void> => {
+const getColorMainColor = async (
+  islocal: boolean,
+  cover: string | CoverSize | undefined,
+): Promise<void> => {
   const status = deps.status();
   try {
     // 获取封面图像的URL
@@ -1342,7 +1692,10 @@ export const getPlaySongName = (): string => {
  * @param playlist - 包含歌曲信息的数组
  * @param mode - 播放模式
  */
-export const playAllSongs = async (playlist: Song[], mode: "normal" | "fm" | "dj" = "normal"): Promise<boolean | void> => {
+export const playAllSongs = async (
+  playlist: Song[],
+  mode: "normal" | "fm" | "dj" = "normal",
+): Promise<boolean | void> => {
   try {
     const music = deps.music();
     const status = deps.status();
@@ -1358,7 +1711,10 @@ export const playAllSongs = async (playlist: Song[], mode: "normal" | "fm" | "dj
     music.playList = playlist.slice();
     // 是否处于歌单内
     const songId = music.getPlaySongData?.id;
-    const existingIndex = playlist.findIndex((song) => songIdentityKey(song) === songIdentityKey(music.getPlaySongData));
+    const existingIndex = playlist.findIndex(
+      (song) =>
+        songIdentityKey(song) === songIdentityKey(music.getPlaySongData),
+    );
     // 若不处于
     if (existingIndex === -1 || !songId) {
       console.log("不在歌单内");
@@ -1376,7 +1732,8 @@ export const playAllSongs = async (playlist: Song[], mode: "normal" | "fm" | "dj
     // 获取封面
     const currentPath = music.getPlaySongData?.path;
     if (currentPath && deps.env.resolveLocalCover) {
-      music.playSongData.localCover = await deps.env.resolveLocalCover(currentPath);
+      music.playSongData.localCover =
+        await deps.env.resolveLocalCover(currentPath);
     }
     deps.notify.info("已开始播放");
   } catch (error) {

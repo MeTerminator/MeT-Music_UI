@@ -19,6 +19,8 @@
     "test": "pnpm --filter @met/core test",
     "e2e": "pnpm --filter @met/app e2e",
     "generate:contracts": "python3 scripts/generate-contracts.py",
-    "check:contracts": "python3 scripts/generate-contracts.py --check"
+    "check:contracts": "python3 scripts/generate-contracts.py --check",
+    "generate:qq-qualities": "python3 scripts/generate-qq-qualities.py",
+    "check:qq-qualities": "python3 scripts/generate-qq-qualities.py --check"
   }
 }

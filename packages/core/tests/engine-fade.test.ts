@@ -15,6 +15,9 @@ const { FakeHowl } = vi.hoisted(() => {
 
   class FakeHowl {
     static instances: FakeHowl[] = [];
+    static autoLoad = false;
+    static failNextLoad = false;
+    private position = 0;
     handlers = new Map<string, Handler[]>();
     onceHandlers = new Map<string, Handler[]>();
     fadeCalls: Array<[number, number, number]> = [];
@@ -23,9 +26,23 @@ const { FakeHowl } = vi.hoisted(() => {
     private _volume: number;
     _sounds = [{ _node: {} }];
 
-    constructor(public opts: { volume?: number; src?: string[]; format?: string[] }) {
+    constructor(
+      public opts: {
+        volume?: number;
+        src?: string[];
+        format?: string[];
+        rate?: number;
+      },
+    ) {
       this._volume = opts.volume ?? 1;
       FakeHowl.instances.push(this);
+      if (FakeHowl.autoLoad) {
+        const fail = FakeHowl.failNextLoad;
+        FakeHowl.failNextLoad = false;
+        queueMicrotask(() =>
+          this.emit(fail ? "loaderror" : "load", ...(fail ? [1, 4] : [])),
+        );
+      }
     }
 
     on(ev: string, fn: Handler): this {
@@ -48,7 +65,10 @@ const { FakeHowl } = vi.hoisted(() => {
         this.onceHandlers.delete(ev);
         return this;
       }
-      this.handlers.set(ev, (this.handlers.get(ev) ?? []).filter((f) => f !== fn));
+      this.handlers.set(
+        ev,
+        (this.handlers.get(ev) ?? []).filter((f) => f !== fn),
+      );
       this.onceHandlers.set(
         ev,
         (this.onceHandlers.get(ev) ?? []).filter((f) => f !== fn),
@@ -97,8 +117,8 @@ const { FakeHowl } = vi.hoisted(() => {
     }
 
     seek(v?: number): number {
-      void v;
-      return 0;
+      if (typeof v === "number") this.position = v;
+      return this.position;
     }
 
     duration(): number {
@@ -128,7 +148,18 @@ vi.mock("howler", () => ({
   Howler: { unload: vi.fn(), ctx: null, masterGain: null },
 }));
 
-import { configurePlayer, createPlayer, fadePlayOrPause, soundStop } from "../src/player/engine";
+import * as songApi from "../src/api/song";
+import {
+  configurePlayer,
+  createPlayer,
+  fadePlayOrPause,
+  soundStop,
+  initPlayer,
+  switchPlaybackQuality,
+  changePlayIndex,
+  setSeek,
+  getSeek,
+} from "../src/player/engine";
 import {
   noopMediaSession,
   type ListenTogetherBridge,
@@ -143,7 +174,12 @@ import { emptyLyric, type Song } from "../src/types/song";
 const makeFixture = () => {
   const musicBase = {
     playList: [] as Song[],
-    playSongData: { id: 1, name: "s", artists: [{ name: "a" }], duration: "03:00" } as Song,
+    playSongData: {
+      id: 1,
+      name: "s",
+      artists: [{ name: "a" }],
+      duration: "03:00",
+    } as Song,
     playSongLyric: emptyLyric(),
     setPlayHistory: vi.fn(),
     setPersonalFm: vi.fn(async () => {}),
@@ -169,7 +205,13 @@ const makeFixture = () => {
     coverTheme: {},
     coverBackground: null,
     playSongLyricIndex: -1,
-    playTimeData: { currentTime: 0, duration: 0, bar: "0", played: "00:00", durationTime: "00:00" },
+    playTimeData: {
+      currentTime: 0,
+      duration: 0,
+      bar: "0",
+      played: "00:00",
+      durationTime: "00:00",
+    },
     playRate: 1,
     playVolume: 0.7,
     playVolumeMute: 0,
@@ -199,7 +241,10 @@ const makeFixture = () => {
   };
 
   const lt: ListenTogetherBridge = {
-    roomState: { seek_position: 0, is_playing: false } as ListenTogetherBridge["roomState"],
+    roomState: {
+      seek_position: 0,
+      is_playing: false,
+    } as ListenTogetherBridge["roomState"],
     serverTimeOffset: 0,
     sendNext: vi.fn(),
     sendChangeIndex: vi.fn(),
@@ -214,7 +259,12 @@ const makeFixture = () => {
     settings: () => settings,
     site: () => site,
     lt: () => lt,
-    notify: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
+    notify: {
+      info: vi.fn(),
+      success: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    },
     media: noopMediaSession,
     env: {
       setTitle: vi.fn(),
@@ -228,12 +278,18 @@ const makeFixture = () => {
 
 beforeEach(() => {
   FakeHowl.instances = [];
-  vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+  FakeHowl.autoLoad = false;
+  FakeHowl.failNextLoad = false;
+  vi.stubGlobal(
+    "requestAnimationFrame",
+    vi.fn(() => 1),
+  );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
 });
 
 afterEach(() => {
   soundStop();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -316,7 +372,10 @@ describe("NAC 在线播放", () => {
     await createPlayer("https://example.com/song", false);
     expect(f.deps.env.decodeNac).toHaveBeenCalledOnce();
     expect(f.deps.env.toBlobUrl).not.toHaveBeenCalled();
-    expect(FakeHowl.instances.at(-1)?.opts).toMatchObject({ src: ["blob:nac-wav"], format: ["wav"] });
+    expect(FakeHowl.instances.at(-1)?.opts).toMatchObject({
+      src: ["blob:nac-wav"],
+      format: ["wav"],
+    });
     expect(f.status.songCacheProgress).toBe(-1);
     soundStop();
     expect(dispose).toHaveBeenCalledOnce();
@@ -327,10 +386,18 @@ describe("NAC 在线播放", () => {
     f.settings.songLevel = "nac";
     const dispose = vi.fn();
     let signal!: AbortSignal;
-    let complete!: (value: { url: string; format: string; dispose(): void }) => void;
+    let complete!: (value: {
+      url: string;
+      format: string;
+      dispose(): void;
+    }) => void;
     f.deps.env.decodeNac = vi.fn((_url, inputSignal) => {
       signal = inputSignal;
-      return new Promise<{ url: string; format: string; dispose(): void }>((resolve) => { complete = resolve; });
+      return new Promise<{ url: string; format: string; dispose(): void }>(
+        (resolve) => {
+          complete = resolve;
+        },
+      );
     });
     const loading = createPlayer("https://example.com/song.nac", false);
     soundStop();
@@ -345,8 +412,12 @@ describe("NAC 在线播放", () => {
     const f = makeFixture();
     f.settings.songLevel = "nac";
     f.status.playLoading = true;
-    f.deps.env.decodeNac = vi.fn(async () => { throw new Error("CRC mismatch"); });
-    await expect(createPlayer("https://example.com/song.nac", false)).rejects.toThrow("CRC mismatch");
+    f.deps.env.decodeNac = vi.fn(async () => {
+      throw new Error("CRC mismatch");
+    });
+    await expect(
+      createPlayer("https://example.com/song.nac", false),
+    ).rejects.toThrow("CRC mismatch");
     expect(FakeHowl.instances).toHaveLength(0);
     expect(f.status.playLoading).toBe(false);
     expect(f.status.songCacheProgress).toBe(-1);
@@ -359,6 +430,179 @@ describe("NAC 在线播放", () => {
     f.deps.env.decodeNac = vi.fn();
     await createPlayer("https://example.com/song.mp3", false);
     expect(f.deps.env.decodeNac).not.toHaveBeenCalled();
-    expect(FakeHowl.instances.at(-1)?.opts.src).toEqual(["https://example.com/song.mp3"]);
+    expect(FakeHowl.instances.at(-1)?.opts.src).toEqual([
+      "https://example.com/song.mp3",
+    ]);
+  });
+});
+
+describe("current-play quality override", () => {
+  const response = (level: string, name = "audio.flac") => ({
+    code: 200 as const,
+    data: [
+      {
+        id: "1",
+        url: `https://media.example/${name}`,
+        size: 100,
+        track_info: {
+          mid: "1",
+          available_qualities: ["HQ", "SQ", "RS", "NAC"],
+        },
+        time: 180000,
+        level,
+        code: 200 as const,
+      },
+    ],
+  });
+  beforeEach(() => {
+    FakeHowl.autoLoad = true;
+    vi.spyOn(songApi, "getSongLyric").mockRejectedValue(
+      new Error("offline lyrics"),
+    );
+    vi.spyOn(songApi, "getAMttmlLyric").mockResolvedValue({
+      status: "no_lyrics",
+    });
+  });
+
+  it("shows the actual fallback and preserves paused seek, volume, rate and global preference", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "rs";
+    f.settings.memorySeek = false;
+    f.status.playRate = 1.25;
+    const request = vi
+      .spyOn(songApi, "getSongUrl")
+      .mockResolvedValueOnce(response("SQ"))
+      .mockResolvedValueOnce(response("HQ", "audio.mp3"));
+    await initPlayer(false);
+    expect(f.status.playbackQuality?.actualLevel).toBe("SQ");
+    setSeek(37.25);
+    expect(await switchPlaybackQuality("HQ")).toBe(true);
+    expect(getSeek()).toBe(37.25);
+    expect(f.status.playState).toBe(false);
+    expect(f.status.playbackQuality).toMatchObject({
+      actualLevel: "HQ",
+      overrideLevel: "HQ",
+      switching: false,
+    });
+    expect(f.settings.songLevel).toBe("rs");
+    expect(FakeHowl.instances.at(-1)?.opts.rate).toBe(1.25);
+    expect(FakeHowl.instances.at(-1)?.volume()).toBe(f.status.playVolume);
+    expect(request.mock.calls[1][1]).toBe("HQ");
+  });
+
+  it("keeps a playing song running at its seek after the quality reload", async () => {
+    const f = makeFixture();
+    vi.spyOn(songApi, "getSongUrl")
+      .mockResolvedValueOnce(response("SQ"))
+      .mockResolvedValueOnce(response("HQ", "audio.mp3"));
+    await initPlayer(true);
+    setSeek(48);
+    expect(await switchPlaybackQuality("HQ")).toBe(true);
+    expect(FakeHowl.instances.at(-1)?.playing()).toBe(true);
+    expect(getSeek()).toBe(48);
+    expect(f.status.playState).toBe(true);
+  });
+
+  it("keeps the existing player if link resolution fails", async () => {
+    const f = makeFixture();
+    vi.spyOn(songApi, "getSongUrl")
+      .mockResolvedValueOnce(response("SQ"))
+      .mockRejectedValueOnce(new Error("no link"));
+    await initPlayer(false);
+    setSeek(22);
+    const old = FakeHowl.instances.at(-1);
+    expect(await switchPlaybackQuality("HQ")).toBe(false);
+    expect(FakeHowl.instances.at(-1)).toBe(old);
+    expect(getSeek()).toBe(22);
+    expect(f.status.playbackQuality?.actualLevel).toBe("SQ");
+    expect(f.status.playbackQuality?.overrideLevel).toBe(null);
+  });
+
+  it("restores the old source on media load failure without skipping the song", async () => {
+    const f = makeFixture();
+    vi.spyOn(songApi, "getSongUrl")
+      .mockResolvedValueOnce(response("SQ", "old.flac"))
+      .mockResolvedValueOnce(response("HQ", "broken.mp3"));
+    await initPlayer(false);
+    setSeek(19);
+    FakeHowl.failNextLoad = true;
+    expect(await switchPlaybackQuality("HQ")).toBe(false);
+    expect(FakeHowl.instances.at(-1)?.opts.src).toEqual([
+      "https://media.example/old.flac",
+    ]);
+    expect(getSeek()).toBe(19);
+    expect(f.music.playSongData.id).toBe(1);
+    expect(f.status.playbackQuality?.actualLevel).toBe("SQ");
+  });
+
+  it("clears the override on the next initialization, even for the same song", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "rs";
+    const request = vi
+      .spyOn(songApi, "getSongUrl")
+      .mockResolvedValue(response("SQ"));
+    await initPlayer(false);
+    await switchPlaybackQuality("HQ");
+    expect(f.status.playbackQuality?.overrideLevel).toBe("HQ");
+    await initPlayer(false);
+    expect(f.status.playbackQuality?.overrideLevel).toBe(null);
+    expect(request.mock.calls.at(-1)?.[1]).toBe("rs");
+  });
+
+  it("does not apply a delayed quality response after a song change", async () => {
+    const f = makeFixture();
+    let finish!: (value: ReturnType<typeof response>) => void;
+    vi.spyOn(songApi, "getSongUrl")
+      .mockResolvedValueOnce(response("SQ"))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(response("RS"));
+    await initPlayer(false);
+    const changing = switchPlaybackQuality("HQ");
+    f.music.playSongData = { ...f.music.playSongData, id: 2 };
+    await initPlayer(false);
+    finish(response("HQ"));
+    expect(await changing).toBe(false);
+    expect(f.status.playbackQuality?.actualLevel).toBe("RS");
+    expect(f.status.playbackQuality?.overrideLevel).toBe(null);
+  });
+});
+
+describe("quality reset on single-song repeat", () => {
+  it("uses the global preference when the current play ends and repeats", async () => {
+    const f = makeFixture();
+    FakeHowl.autoLoad = true;
+    f.settings.songLevel = "rs";
+    const request = vi.spyOn(songApi, "getSongUrl").mockResolvedValue({
+      code: 200,
+      data: [
+        {
+          id: "1",
+          url: "https://media.example/audio.flac",
+          track_info: { mid: "1" },
+          time: 180000,
+          level: "SQ",
+          code: 200,
+        },
+      ],
+    });
+    vi.spyOn(songApi, "getSongLyric").mockRejectedValue(
+      new Error("offline lyrics"),
+    );
+    vi.spyOn(songApi, "getAMttmlLyric").mockResolvedValue({
+      status: "no_lyrics",
+    });
+    await initPlayer(false);
+    await switchPlaybackQuality("HQ");
+    expect(f.status.playbackQuality?.overrideLevel).toBe("HQ");
+    f.status.playSongMode = "repeat";
+    await changePlayIndex("next", false);
+    expect(f.status.playbackQuality?.overrideLevel).toBe(null);
+    expect(request.mock.calls.at(-1)?.[1]).toBe("rs");
+    expect(f.music.playSongData.id).toBe(1);
   });
 });

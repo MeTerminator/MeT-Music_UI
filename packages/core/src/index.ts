@@ -15,7 +15,11 @@ export * from "./lyrics/word-progress";
 export * from "./lyrics/ttml-current-line";
 
 export * as api from "./api/index";
-export { configureLyricCache, normalizeLyricCacheDays, DEFAULT_LYRIC_CACHE_DAYS } from "./api/lyric-cache";
+export {
+  configureLyricCache,
+  normalizeLyricCacheDays,
+  DEFAULT_LYRIC_CACHE_DAYS,
+} from "./api/lyric-cache";
 
 export * from "./listen-together/types";
 export * from "./listen-together/sync";
@@ -24,6 +28,13 @@ export * from "./listen-together/client";
 export * from "./player/deps";
 export * from "./player/engine";
 
-export type { QmcTrackInfo, QmcInfoSection, QmcArtist, QmcComment } from "./api/contracts";
+export type {
+  QmcTrackInfo,
+  QmcInfoSection,
+  QmcArtist,
+  QmcComment,
+} from "./api/contracts";
 
 export * from "./types/platform";
+
+export * from "./qq-qualities";

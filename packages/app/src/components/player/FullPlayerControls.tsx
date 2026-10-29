@@ -22,7 +22,13 @@ import {
   VolumeX,
   type LucideIcon,
 } from "lucide-react";
-import { changePlayIndex, playOrPause, setSeek, setVolume, setVolumeMute } from "@met/core";
+import {
+  changePlayIndex,
+  playOrPause,
+  setSeek,
+  setVolume,
+  setVolumeMute,
+} from "@met/core";
 import { useStatusStore, type StatusStoreState } from "../../stores/status";
 import { useMusicStore } from "../../stores/music";
 import { useSettingsStore } from "../../stores/settings";
@@ -30,6 +36,7 @@ import { DropdownMenu } from "../ui/menu";
 import { Slider } from "../ui/slider";
 import CacheProgressBar from "./CacheProgress";
 import SeekTooltipArea from "./SeekTooltip";
+import QualityMenu from "./QualityMenu";
 import { useSongMoreItems } from "./songMenu";
 
 /** 歌词时间平移的单次步进(ms)与上下限 */
@@ -60,13 +67,21 @@ const SONG_MODE_META: Record<
  * 0 静音 / (0,0.4) 低 / [0.4,0.7) 中 / [0.7,1] 高)。
  */
 const getVolumeIcon = (volume: number): LucideIcon =>
-  volume === 0 ? VolumeX : volume < 0.4 ? Volume : volume < 0.7 ? Volume1 : Volume2;
+  volume === 0
+    ? VolumeX
+    : volume < 0.4
+      ? Volume
+      : volume < 0.7
+        ? Volume1
+        : Volume2;
 
 /** 音量滚轮 ±5%(与 PlayerBar 一致,对照旧 changeVolume:clamp 0-1) */
 const handleVolumeWheel = (e: WheelEvent) => {
   const cur = useStatusStore.getState().playVolume;
   const next =
-    Math.round(Math.min(1, Math.max(0, cur + (e.deltaY > 0 ? -0.05 : 0.05))) * 100) / 100;
+    Math.round(
+      Math.min(1, Math.max(0, cur + (e.deltaY > 0 ? -0.05 : 0.05))) * 100,
+    ) / 100;
   useStatusStore.setState({ playVolume: next });
   setVolume(next);
 };
@@ -79,6 +94,7 @@ export interface FullPlayerControlsProps {
    * 只保留 进度 + 模式/上一曲/播放/下一曲/播放列表(其余去顶部「更多」)。
    */
   mobile?: boolean;
+  onQualityOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -90,6 +106,7 @@ export interface FullPlayerControlsProps {
 export default function FullPlayerControls({
   onKeepVisible,
   mobile = false,
+  onQualityOpenChange,
 }: FullPlayerControlsProps) {
   const playerControlShow = useStatusStore((s) => s.playerControlShow);
   const playState = useStatusStore((s) => s.playState);
@@ -112,18 +129,20 @@ export default function FullPlayerControls({
   const VolumeIcon = getVolumeIcon(playVolume);
 
   // ===== 浏览器全屏(原生 Fullscreen API,对齐旧 screenfullChange 职责) =====
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(
-    () => Boolean(document.fullscreenElement),
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(() =>
+    Boolean(document.fullscreenElement),
   );
 
   // fullscreenchange 同步按钮状态(含 Esc / F11 等浏览器自行退出的场景)
   useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const onFullscreenChange = () =>
+      setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFullscreenChange);
     return () => {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       // 关闭播放器时若仍处于浏览器全屏,一并退出,避免遗留全屏页面
-      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      if (document.fullscreenElement)
+        void document.exitFullscreen().catch(() => undefined);
     };
   }, []);
 
@@ -165,7 +184,10 @@ export default function FullPlayerControls({
   const shiftLyric = (delta: number): void => {
     const next = Math.min(
       LYRIC_SHIFT_LIMIT,
-      Math.max(-LYRIC_SHIFT_LIMIT, useSettingsStore.getState().lyricsShiftMs + delta),
+      Math.max(
+        -LYRIC_SHIFT_LIMIT,
+        useSettingsStore.getState().lyricsShiftMs + delta,
+      ),
     );
     useSettingsStore.setState({ lyricsShiftMs: next });
   };
@@ -184,7 +206,11 @@ export default function FullPlayerControls({
           <CacheProgressBar percent={songCacheProgress} variant="overlay" />
         ) : (
           <>
-            <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="overlay">
+            <SeekTooltipArea
+              className="w-full"
+              dragPercent={dragBar}
+              variant="overlay"
+            >
               <Slider
                 value={barValue}
                 min={0}
@@ -198,6 +224,7 @@ export default function FullPlayerControls({
             {/* 时间读数移到进度条下方两端(横排放不下) */}
             <div className="flex items-center justify-between px-1 text-[11px] tabular-nums text-white/55">
               <span>{playTimeData.played}</span>
+              <QualityMenu overlay onOpenChange={onQualityOpenChange} />
               <span>{playTimeData.durationTime}</span>
             </div>
           </>
@@ -211,7 +238,9 @@ export default function FullPlayerControls({
             title={modeMeta.label}
             aria-label={modeMeta.label}
             onClick={() =>
-              useStatusStore.setState({ playSongMode: NEXT_SONG_MODE[playSongMode] })
+              useStatusStore.setState({
+                playSongMode: NEXT_SONG_MODE[playSongMode],
+              })
             }
           >
             <ModeIcon size={20} aria-hidden="true" />
@@ -256,7 +285,9 @@ export default function FullPlayerControls({
             style={playListShow ? { color: "var(--met-primary)" } : undefined}
             title="播放列表"
             aria-label="播放列表"
-            onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
+            onClick={() =>
+              useStatusStore.setState({ playListShow: !playListShow })
+            }
           >
             <ListMusic size={20} aria-hidden="true" />
           </button>
@@ -278,8 +309,12 @@ export default function FullPlayerControls({
       }}
     >
       <div
-        className="mx-auto mb-6 flex w-[min(880px,94%)] flex-col gap-1 rounded-2xl px-6 py-3"
-        style={{ background: "rgba(0, 0, 0, 0.35)", backdropFilter: "blur(24px)" }}
+        data-testid="full-player-controls"
+        className="mx-auto mb-6 flex w-[min(1080px,96%)] flex-col gap-1 rounded-2xl px-6 py-3"
+        style={{
+          background: "rgba(0, 0, 0, 0.35)",
+          backdropFilter: "blur(24px)",
+        }}
       >
         {/* 进度条(缓存下载中时临时充当下载进度显示器) */}
         {caching ? (
@@ -287,7 +322,11 @@ export default function FullPlayerControls({
         ) : (
           <div className="flex items-center gap-3 text-xs tabular-nums text-white/60">
             <span className="shrink-0">{playTimeData.played}</span>
-            <SeekTooltipArea className="w-full" dragPercent={dragBar} variant="overlay">
+            <SeekTooltipArea
+              className="w-full"
+              dragPercent={dragBar}
+              variant="overlay"
+            >
               <Slider
                 value={barValue}
                 min={0}
@@ -305,13 +344,15 @@ export default function FullPlayerControls({
         {/* 控制按钮行(两侧列自适应,中间播放控制固定宽度居中) */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
           {/* 左区:播放模式 + 音量(与右区功能钮左右配重;窄屏隐藏次要控件,保核心播放控制) */}
-          <div className="flex items-center justify-start gap-1">
+          <div className="flex min-w-0 items-center justify-start gap-1">
             <button
               type="button"
               className={`${iconBtnCls} text-lg max-md:hidden`}
               title={modeMeta.label}
               onClick={() =>
-                useStatusStore.setState({ playSongMode: NEXT_SONG_MODE[playSongMode] })
+                useStatusStore.setState({
+                  playSongMode: NEXT_SONG_MODE[playSongMode],
+                })
               }
             >
               <ModeIcon size={20} aria-hidden="true" />
@@ -319,7 +360,7 @@ export default function FullPlayerControls({
             {/* 查看评论 / 观看 MV(跳转前收起全屏播放器) */}
             <button
               type="button"
-              className={`${iconBtnCls} max-md:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
+              className={`${iconBtnCls} max-lg:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
               title="查看评论"
               disabled={moreDisabled}
               onClick={() => go("/comments", songId)}
@@ -328,7 +369,7 @@ export default function FullPlayerControls({
             </button>
             <button
               type="button"
-              className={`${iconBtnCls} max-md:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
+              className={`${iconBtnCls} max-lg:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
               title={mvId ? "观看 MV" : "该歌曲暂无 MV"}
               disabled={!mvId}
               onClick={() => mvId && go("/videos-player", mvId)}
@@ -344,7 +385,10 @@ export default function FullPlayerControls({
             >
               <VolumeIcon size={20} aria-hidden="true" />
             </button>
-            <div className="w-24 max-md:hidden" onWheel={handleVolumeWheel}>
+            <div
+              className="w-24 max-lg:w-16 max-md:hidden"
+              onWheel={handleVolumeWheel}
+            >
               <Slider
                 value={playVolume}
                 min={0}
@@ -357,9 +401,10 @@ export default function FullPlayerControls({
                 }}
               />
             </div>
-            <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/60 max-md:hidden">
+            <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/60 max-lg:hidden">
               {Math.round(playVolume * 100)}%
             </span>
+            <QualityMenu overlay onOpenChange={onQualityOpenChange} />
           </div>
 
           {/* 中区:上一曲 / 播放暂停 / 下一曲 */}
@@ -380,7 +425,11 @@ export default function FullPlayerControls({
               onClick={() => void playOrPause()}
             >
               {playLoading ? (
-                <Loader2 size={20} className="animate-spin" aria-hidden="true" />
+                <Loader2
+                  size={20}
+                  className="animate-spin"
+                  aria-hidden="true"
+                />
               ) : playState ? (
                 <Pause size={20} aria-hidden="true" />
               ) : (
@@ -401,7 +450,7 @@ export default function FullPlayerControls({
           <div className="flex items-center justify-end gap-1">
             {/* 歌词时间平移:-10ms / +10ms,中间读数点按可归零(窄屏隐藏) */}
             <div
-              className="flex items-center gap-0.5 rounded-lg bg-white/5 px-1 py-0.5 max-md:hidden"
+              className="flex items-center gap-0.5 rounded-lg bg-white/5 px-1 py-0.5 max-lg:hidden"
               aria-label="歌词时间平移"
             >
               <button
@@ -449,7 +498,9 @@ export default function FullPlayerControls({
               type="button"
               className={iconBtnCls}
               title="全局设置"
-              onClick={() => useStatusStore.setState({ showSettingsPanel: true })}
+              onClick={() =>
+                useStatusStore.setState({ showSettingsPanel: true })
+              }
             >
               <Settings size={20} aria-hidden="true" />
             </button>
@@ -459,7 +510,9 @@ export default function FullPlayerControls({
               className={iconBtnCls}
               style={playListShow ? { color: "var(--met-primary)" } : undefined}
               title="播放列表"
-              onClick={() => useStatusStore.setState({ playListShow: !playListShow })}
+              onClick={() =>
+                useStatusStore.setState({ playListShow: !playListShow })
+              }
             >
               <ListMusic size={20} aria-hidden="true" />
             </button>
@@ -481,7 +534,9 @@ export default function FullPlayerControls({
                 type="button"
                 className={iconBtnCls}
                 title="关闭播放器"
-                onClick={() => useStatusStore.setState({ showFullPlayer: false })}
+                onClick={() =>
+                  useStatusStore.setState({ showFullPlayer: false })
+                }
               >
                 <ChevronDown size={20} aria-hidden="true" />
               </button>

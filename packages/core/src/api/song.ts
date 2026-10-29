@@ -10,11 +10,16 @@ import { withLyricCache } from "./lyric-cache";
  */
 export const getSongUrl = async (
   id: number | string,
-  level: string = "standard", platform: Platform = "qq"): Promise<ApiResponseFor<"/song/url/v1">> => {
+  level: string = "standard",
+  platform: Platform = "qq",
+  codecs?: readonly string[],
+): Promise<ApiResponseFor<"/song/url/v1">> => {
   const res = await request("GET", "/song/url/v1", {
     platform,
     id,
     level,
+    audio_api: 2,
+    ...(platform === "qq" && codecs ? { codecs: codecs.join(",") } : {}),
     timestamp: new Date().getTime(),
   });
   return res;
@@ -25,17 +30,25 @@ export const getSongUrl = async (
  * @param id - 要获取歌词的音乐ID
  */
 export const getSongLyric = async (
-  id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/lyric/new">> => {
-  return withLyricCache("/lyric/new", platform, id, () => request("GET", "/lyric/new", {
-    platform,
-    id,
-  }));
+  id: number | string,
+  platform: Platform = "qq",
+): Promise<ApiResponseFor<"/lyric/new">> => {
+  return withLyricCache("/lyric/new", platform, id, () =>
+    request("GET", "/lyric/new", {
+      platform,
+      id,
+    }),
+  );
 };
 
 export const getAMttmlLyric = async (
-  mid: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/lyric/ttml">> => {
-  return withLyricCache("/lyric/ttml", platform, mid, () => request("GET", "/lyric/ttml", {
-    platform,
-    mid,
-  }));
+  mid: number | string,
+  platform: Platform = "qq",
+): Promise<ApiResponseFor<"/lyric/ttml">> => {
+  return withLyricCache("/lyric/ttml", platform, mid, () =>
+    request("GET", "/lyric/ttml", {
+      platform,
+      mid,
+    }),
+  );
 };

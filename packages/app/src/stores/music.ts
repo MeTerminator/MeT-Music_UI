@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { songIdentityKey, emptyLyric, originalLyric, type MusicState, type ParsedLyric, type Song } from "@met/core";
+import {
+  songIdentityKey,
+  emptyLyric,
+  originalLyric,
+  type MusicState,
+  type ParsedLyric,
+  type Song,
+} from "@met/core";
 import { legacyStorage } from "./persist";
 import { useStatusStore } from "./status";
 
@@ -35,7 +42,11 @@ export const useMusicStore = create<MusicStoreState>()(
       name: "musicData",
       storage: legacyStorage(),
       // 请求状态只对当前会话有效。
-      partialize: (state) => ({ ...state, playSongLyric: originalLyric(state.playSongLyric), playSongLyricStatus: "idle" as const }),
+      partialize: (state) => ({
+        ...state,
+        playSongLyric: originalLyric(state.playSongLyric),
+        playSongLyricStatus: "idle" as const,
+      }),
     },
   ),
 );
@@ -43,10 +54,16 @@ export const useMusicStore = create<MusicStoreState>()(
 // 歌曲状态先于引擎初始化更新，立即清除未随歌曲一起更新的歌词。
 // 同时提交歌曲与新歌词的原子更新（例如恢复有效缓存）仍然保留。
 useMusicStore.subscribe((state, previous) => {
-  if (songIdentityKey(state.playSongData) !== songIdentityKey(previous.playSongData)
-    && state.playSongLyric === previous.playSongLyric) {
-    useMusicStore.setState({ playSongLyric: emptyLyric(), playSongLyricStatus: "loading" });
-    useStatusStore.setState({ playSongLyricIndex: -1 });
+  if (
+    songIdentityKey(state.playSongData) !==
+      songIdentityKey(previous.playSongData) &&
+    state.playSongLyric === previous.playSongLyric
+  ) {
+    useMusicStore.setState({
+      playSongLyric: emptyLyric(),
+      playSongLyricStatus: "loading",
+    });
+    useStatusStore.setState({ playSongLyricIndex: -1, playbackQuality: null });
   }
 });
 
@@ -65,7 +82,9 @@ export const setPlayHistory = (data: Song | null, clean = false): void => {
   }
   if (!data || Object.keys(data).length === 0) return;
   const history = useMusicStore.getState().historyPlaylist;
-  const next = history.filter((item) => songIdentityKey(item) !== songIdentityKey(data));
+  const next = history.filter(
+    (item) => songIdentityKey(item) !== songIdentityKey(data),
+  );
   next.unshift(data);
   // 限制历史记录长度为 500
   if (next.length > 500) next.pop();

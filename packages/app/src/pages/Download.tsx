@@ -18,14 +18,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Download as DownloadIcon } from "lucide-react";
-import { api, playbackLevel, type Platform } from "@met/core";
+import {
+  api,
+  playbackLevel,
+  qqQualities,
+  qqDownloadOptions,
+  type Platform,
+} from "@met/core";
 import { Button } from "@/components/ui/button";
-import { Select, type SelectOption } from "@/components/ui/select";
+import { Select } from "@/components/ui/select";
 import { copyText } from "@/lib/clipboard";
 import { deleteFile, listFileKeys } from "@/lib/filesDB";
 import { useMusicStore } from "@/stores/music";
 import { useSettingsStore } from "@/stores/settings";
-import { neteaseSongLevelData, neteaseSongLevelOptions } from "@/pages/setting/options";
+import {
+  neteaseSongLevelData,
+  neteaseSongLevelOptions,
+} from "@/pages/setting/options";
 import { toCoverProxyUrl } from "@/platform/cover-url";
 
 /** 歌词 tab 项(对照旧 Download.vue fetchLyrics 的 lyrics 数组) */
@@ -36,36 +45,42 @@ interface LyricItem {
   ext: "qrc" | "yrc" | "lrc" | "ttml";
 }
 
-/** 音质枚举(与旧 Download.vue SONG_LEVEL_DATA 一致) */
-const SONG_LEVEL_DATA: Record<string, { label: string; tip: string }> = {
-  NAC: { label: "NAC 品质", tip: "最高76kbps 自研AICodec编码" },
-  WEB: { label: "普通 WEB", tip: "在线流媒体音质" },
-  HQ: { label: "极高 HQ", tip: "最高 320kbps" },
-  SQ: { label: "无损 SQ", tip: "高保真无损音质" },
-  RS: { label: "高分辨率音源 Hi-Res", tip: "高于 44.1kHz/16bit" },
-  DTS: { label: "杜比 5.1 声道", tip: "环绕声体验" },
-  Q360V1: { label: "臻品全景声 V1", tip: "独家自研空间音频" },
-  Q360V2: { label: "臻品全景声 V2", tip: "多声道空间音频" },
-  QAI: { label: "臻品母带", tip: "AI 还原极致细节" },
-  DTSX: { label: "DTS:X", tip: "三维感音效" },
-  RA360: { label: "360 Reality Audio", tip: "球形空间音频" },
-  DA: { label: "杜比全景声 Dolby Atmos", tip: "自然真实的环绕音效" },
-};
-
-const QUALITY_OPTIONS: SelectOption[] = Object.entries(SONG_LEVEL_DATA).map(
-  ([value, { label }]) => ({ value, label }),
+/** Download lists all known plain resources; availability is provided by the backend. */
+const SONG_LEVEL_DATA = Object.fromEntries(
+  qqQualities.map((q) => [
+    q.key,
+    {
+      label: q.label,
+      tip: q.codec
+        ? "下载所选音质的原始文件"
+        : "下载原始文件，需要兼容的播放器解码",
+    },
+  ]),
 );
 
 /** 专辑 pmid → 封面地址(与旧页一致) */
 const coverFromPmid = (pmid?: string | null): string | undefined =>
-  pmid ? `/api/web/album/cover/highpic?pic=T002R800x800M000${pmid}.jpg` : undefined;
+  pmid
+    ? `/api/web/album/cover/highpic?pic=T002R800x800M000${pmid}.jpg`
+    : undefined;
 
 /** 初始音质:合法路由参数优先,否则读取对应平台的播放音质设置。 */
-const initialQuality = (musicQuality: string | undefined, platform: Platform): string => {
-  const levels = platform === "netease" ? neteaseSongLevelData : SONG_LEVEL_DATA;
-  const value = platform === "netease" ? musicQuality?.toLowerCase() : musicQuality?.toUpperCase();
+const initialQuality = (
+  musicQuality: string | undefined,
+  platform: Platform,
+): string => {
+  const levels =
+    platform === "netease" ? neteaseSongLevelData : SONG_LEVEL_DATA;
+  const value =
+    platform === "netease"
+      ? musicQuality?.toLowerCase()
+      : musicQuality?.toUpperCase();
   const fallback = playbackLevel(useSettingsStore.getState(), platform);
-  return value && value in levels ? value : platform === "netease" ? fallback : fallback.toUpperCase();
+  return value && value in levels
+    ? value
+    : platform === "netease"
+      ? fallback
+      : fallback.toUpperCase();
 };
 
 /** 保存 Blob 为本地文件(blob URL + a[download],与旧页一致) */
@@ -98,7 +113,11 @@ const Download = () => {
   const routePlatform = useMusicPlatform();
   const navigate = useNavigate();
   const playSongData = useMusicStore((s) => s.playSongData);
-  const platform = search.id ? routePlatform : playSongData?.source === "netease" ? "netease" : "qq";
+  const platform = search.id
+    ? routePlatform
+    : playSongData?.source === "netease"
+      ? "netease"
+      : "qq";
   const musicApi = platformApi(platform);
 
   // 数据源:?id= 参数优先,否则当前播放歌曲
@@ -110,13 +129,21 @@ const Download = () => {
         : "";
 
   const [qualities, setQualities] = useState(() => ({
-    qq: initialQuality(platform === "qq" ? search.music_quality : undefined, "qq"),
-    netease: initialQuality(platform === "netease" ? search.music_quality : undefined, "netease"),
+    qq: initialQuality(
+      platform === "qq" ? search.music_quality : undefined,
+      "qq",
+    ),
+    netease: initialQuality(
+      platform === "netease" ? search.music_quality : undefined,
+      "netease",
+    ),
   }));
   const quality = qualities[platform];
-  const setQuality = (value: string) => setQualities((previous) => ({ ...previous, [platform]: value }));
-  const qualityOptions = platform === "netease" ? neteaseSongLevelOptions : QUALITY_OPTIONS;
-  const qualityData = platform === "netease" ? neteaseSongLevelData : SONG_LEVEL_DATA;
+  const setQuality = (value: string) =>
+    setQualities((previous) => ({ ...previous, [platform]: value }));
+
+  const qualityData =
+    platform === "netease" ? neteaseSongLevelData : SONG_LEVEL_DATA;
   const [downloadPhase, setDownloadPhase] = useState<DownloadPhase>("idle");
   // 进度:Content-Length 可得时为 0-100 百分比,不可得为 null(此时仅展示已下载字节数)
   const [progressPercent, setProgressPercent] = useState<number | null>(null);
@@ -130,19 +157,26 @@ const Download = () => {
     enabled: !!mid,
   });
 
-
   const track = infoQuery.data?.[mid]?.track_info;
   const albumId = getAlbumPageId(track?.album?.mid);
+  const qualityOptions =
+    platform === "netease"
+      ? neteaseSongLevelOptions
+      : qqDownloadOptions(track?.available_qualities);
+  const qualityAvailable = qualityOptions.some((q) => q.value === quality);
   const trackName: string = track?.title || track?.name || "";
 
-  const singers: { mid?: string | null; name?: string | null; title?: string | null }[] = Array.isArray(
-    track?.singer,
-  )
-    ? track.singer
-    : [];
-  const cover = platform === "netease"
-    ? (track?.album?.picUrl ? toCoverProxyUrl(track.album.picUrl, true) : undefined)
-    : coverFromPmid(track?.album?.pmid);
+  const singers: {
+    mid?: string | null;
+    name?: string | null;
+    title?: string | null;
+  }[] = Array.isArray(track?.singer) ? track.singer : [];
+  const cover =
+    platform === "netease"
+      ? track?.album?.picUrl
+        ? toCoverProxyUrl(track.album.picUrl, true)
+        : undefined
+      : coverFromPmid(track?.album?.pmid);
 
   // 歌词数据(对照旧 fetchLyrics:两接口并行,单侧失败不拖垮另一侧)
   const lyricQuery = useQuery({
@@ -162,30 +196,77 @@ const Download = () => {
 
   // 组装 tab 列表(字段与顺序对照旧页:qrc/qrctrans/qrcroma/lrc/lrctrans/ttml)
   const lyricList = useMemo<LyricItem[]>(() => {
-
     const res = lyricQuery.data?.lyric;
 
     const ttml = lyricQuery.data?.ttml;
     const lyrics: LyricItem[] = [];
     if (platform === "netease") {
-      if (res?.yrc) lyrics.push({ label: "YRC 歌词", content: res.yrc, type: "yrc", ext: "yrc" });
-      if (res?.ytlrc) lyrics.push({ label: "YRC 翻译", content: res.ytlrc, type: "ytlrc", ext: "lrc" });
+      if (res?.yrc)
+        lyrics.push({
+          label: "YRC 歌词",
+          content: res.yrc,
+          type: "yrc",
+          ext: "yrc",
+        });
+      if (res?.ytlrc)
+        lyrics.push({
+          label: "YRC 翻译",
+          content: res.ytlrc,
+          type: "ytlrc",
+          ext: "lrc",
+        });
       const romaji = res?.yromalrc || res?.romalrc;
-      if (romaji) lyrics.push({
-        label: "罗马音歌词", content: romaji, type: "roma", ext: "lrc",
-      });
+      if (romaji)
+        lyrics.push({
+          label: "罗马音歌词",
+          content: romaji,
+          type: "roma",
+          ext: "lrc",
+        });
     } else {
-      if (res?.qrc) lyrics.push({ label: "QRC 歌词", content: res.qrc, type: "qrc", ext: "qrc" });
+      if (res?.qrc)
+        lyrics.push({
+          label: "QRC 歌词",
+          content: res.qrc,
+          type: "qrc",
+          ext: "qrc",
+        });
       if (res?.qrctrans)
-        lyrics.push({ label: "QRC 翻译", content: res.qrctrans, type: "qrctrans", ext: "lrc" });
+        lyrics.push({
+          label: "QRC 翻译",
+          content: res.qrctrans,
+          type: "qrctrans",
+          ext: "lrc",
+        });
       if (res?.qrcroma)
-        lyrics.push({ label: "QRC 音译", content: res.qrcroma, type: "roma", ext: "qrc" });
+        lyrics.push({
+          label: "QRC 音译",
+          content: res.qrcroma,
+          type: "roma",
+          ext: "qrc",
+        });
     }
-    if (res?.lrc) lyrics.push({ label: "LRC 歌词", content: res.lrc, type: "lrc", ext: "lrc" });
+    if (res?.lrc)
+      lyrics.push({
+        label: "LRC 歌词",
+        content: res.lrc,
+        type: "lrc",
+        ext: "lrc",
+      });
     if (res?.lrctrans)
-      lyrics.push({ label: "LRC 翻译", content: res.lrctrans, type: "lrctrans", ext: "lrc" });
+      lyrics.push({
+        label: "LRC 翻译",
+        content: res.lrctrans,
+        type: "lrctrans",
+        ext: "lrc",
+      });
     if (ttml?.status === "success" && ttml.content)
-      lyrics.push({ label: "TTML 歌词", content: ttml.content, type: "ttml", ext: "ttml" });
+      lyrics.push({
+        label: "TTML 歌词",
+        content: ttml.content,
+        type: "ttml",
+        ext: "ttml",
+      });
     return lyrics;
   }, [lyricQuery.data, platform]);
 
@@ -195,7 +276,8 @@ const Download = () => {
     lyricTab && lyricList.some((item) => item.type === lyricTab)
       ? lyricTab
       : (lyricList[0]?.type ?? null);
-  const activeLyric = lyricList.find((item) => item.type === activeLyricType) ?? null;
+  const activeLyric =
+    lyricList.find((item) => item.type === activeLyricType) ?? null;
 
   /** 歌词文件名主体(对照旧 downloadLyric:歌名 - 歌手1_歌手2) */
   const lyricBaseName = useMemo(() => {
@@ -210,7 +292,9 @@ const Download = () => {
   /** 下载当前 tab 歌词(Blob + a[download],扩展名按 tab) */
   const handleDownloadLyric = (item: LyricItem) => {
     try {
-      const blob = new Blob([item.content], { type: "text/plain;charset=utf-8" });
+      const blob = new Blob([item.content], {
+        type: "text/plain;charset=utf-8",
+      });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -233,7 +317,9 @@ const Download = () => {
       .map((s) => s.name || s.title)
       .filter(Boolean)
       .join("_");
-    return singerNames ? `${trackName} - ${singerNames}.jpg` : `${trackName}.jpg`;
+    return singerNames
+      ? `${trackName} - ${singerNames}.jpg`
+      : `${trackName}.jpg`;
   }, [trackName, singers]);
 
   /** 点击封面下载(对照旧 downloadCover:fetch → blob → a[download]) */
@@ -269,7 +355,13 @@ const Download = () => {
 
   /** 获取直链 → fetch 流式下载(对照旧 downloadFile);跨域被拦时回退 a[href] 直链 */
   const handleDownload = async () => {
-    if (!mid || downloadPhase === "resolving" || downloadPhase === "downloading") return;
+    if (
+      !mid ||
+      !qualityAvailable ||
+      downloadPhase === "resolving" ||
+      downloadPhase === "downloading"
+    )
+      return;
     setDownloadPhase("resolving");
     setProgressPercent(null);
     setLoadedBytes(0);
@@ -289,10 +381,20 @@ const Download = () => {
         return;
       }
       url = fileUrl.replace(/^http:/, "https:");
-      const extension = new URL(url).pathname.split(".").pop()?.toLowerCase() || "mp3";
+      if (trackInfo?.file_quality && trackInfo.file_quality !== quality) {
+        throw new Error("返回的文件与所选音质不一致");
+      }
+      const extension =
+        (trackInfo?.file_name || new URL(url).pathname)
+          .split(".")
+          .pop()
+          ?.toLowerCase() || "mp3";
       const singerNames = Array.isArray(trackInfo?.singer)
         ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          trackInfo.singer.map((s: any) => s?.name).filter(Boolean).join("_")
+          trackInfo.singer
+            .map((s: any) => s?.name)
+            .filter(Boolean)
+            .join("_")
         : "";
       filename = `${trackInfo?.name || trackName || mid}${
         singerNames ? ` - ${singerNames}` : ""
@@ -310,7 +412,10 @@ const Download = () => {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (!response.body) throw new Error("ReadableStream unavailable");
-      const total = Number.parseInt(response.headers.get("content-length") ?? "", 10);
+      const total = Number.parseInt(
+        response.headers.get("content-length") ?? "",
+        10,
+      );
       const reader = response.body.getReader();
       const chunks: Uint8Array<ArrayBuffer>[] = [];
       let loaded = 0;
@@ -363,7 +468,9 @@ const Download = () => {
   if (!mid) {
     return (
       <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2">
-        <p className="text-lg font-medium text-[var(--met-fg)]">暂无可下载的歌曲</p>
+        <p className="text-lg font-medium text-[var(--met-fg)]">
+          暂无可下载的歌曲
+        </p>
         <p className="text-sm text-[var(--met-fg-dim)]">
           请先播放一首歌曲,或从歌曲详情进入下载页
         </p>
@@ -395,7 +502,11 @@ const Download = () => {
                 onClick={handleDownloadCover}
                 className="group relative h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-[var(--met-border)]"
               >
-                <img src={cover} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={cover}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
                 {/* hover 遮罩 + 下载图标(下载中常显) */}
                 <span
                   className={`absolute inset-0 flex items-center justify-center bg-black/45 transition-opacity ${
@@ -414,17 +525,24 @@ const Download = () => {
             )}
             <div className="min-w-0 flex-1">
               <div className="truncate text-base font-medium text-[var(--met-fg)]">
-                {trackName || (infoQuery.isError ? "歌曲信息获取失败" : "正在解析…")}
+                {trackName ||
+                  (infoQuery.isError ? "歌曲信息获取失败" : "正在解析…")}
               </div>
               {singers.length > 0 ? (
                 <div className="mt-1 flex flex-wrap items-center gap-x-1 text-sm text-[var(--met-fg-dim)]">
                   {singers.map((singer, index) => (
-                    <span key={singer.mid ?? index} className="flex items-center gap-1">
+                    <span
+                      key={singer.mid ?? index}
+                      className="flex items-center gap-1"
+                    >
                       <button
                         type="button"
                         onClick={() =>
                           singer.mid &&
-                          navigate({ to: "/artist", search: { platform,  id: singer.mid } })
+                          navigate({
+                            to: "/artist",
+                            search: { platform, id: singer.mid },
+                          })
                         }
                         className="cursor-pointer transition-opacity hover:opacity-60"
                       >
@@ -441,7 +559,10 @@ const Download = () => {
                   disabled={!albumId}
                   onClick={() =>
                     albumId &&
-                    navigate({ to: "/album", search: { platform,  id: albumId } })
+                    navigate({
+                      to: "/album",
+                      search: { platform, id: albumId },
+                    })
                   }
                   className="mt-0.5 block max-w-full truncate text-xs text-[var(--met-fg-dim)] transition-opacity enabled:cursor-pointer enabled:hover:opacity-60"
                 >
@@ -456,17 +577,25 @@ const Download = () => {
         <div className="mt-5 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-[var(--met-fg-dim)]">解析音质</span>
-            <Select value={quality} options={qualityOptions} onValueChange={setQuality} />
+            <Select
+              value={qualityAvailable ? quality : ""}
+              options={qualityOptions}
+              onValueChange={setQuality}
+              disabled={qualityOptions.length === 0}
+            />
           </div>
           <p className="text-xs text-[var(--met-fg-dim)]">
-            {qualityData[quality]?.tip || "暂无说明"}
+            {!qualityAvailable
+              ? "请选择此歌曲支持的下载音质"
+              : qualityData[quality]?.tip || "暂无说明"}
           </p>
           <Button
             variant="primary"
             disabled={
               downloadPhase === "resolving" ||
               downloadPhase === "downloading" ||
-              infoQuery.isLoading
+              infoQuery.isLoading ||
+              !qualityAvailable
             }
             onClick={handleDownload}
             className="w-full"
@@ -490,7 +619,11 @@ const Download = () => {
                   className={`h-full rounded-full bg-[var(--met-primary)] transition-[width] duration-200 ${
                     progressPercent == null ? "w-1/3 animate-pulse" : ""
                   }`}
-                  style={progressPercent != null ? { width: `${progressPercent}%` } : undefined}
+                  style={
+                    progressPercent != null
+                      ? { width: `${progressPercent}%` }
+                      : undefined
+                  }
                 />
               </div>
               <span className="text-right text-xs text-[var(--met-fg-dim)]">
@@ -502,7 +635,9 @@ const Download = () => {
           ) : null}
           <Button
             variant="outline"
-            onClick={() => navigate({ to: "/song", search: { platform,  id: mid } })}
+            onClick={() =>
+              navigate({ to: "/song", search: { platform, id: mid } })
+            }
             className="w-full"
           >
             查看单曲信息
@@ -552,7 +687,9 @@ const Download = () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => copyText(activeLyric.content, "歌词复制成功")}
+                    onClick={() =>
+                      copyText(activeLyric.content, "歌词复制成功")
+                    }
                   >
                     复制内容
                   </Button>
@@ -595,7 +732,11 @@ const Download = () => {
                 >
                   {key}
                 </span>
-                <Button size="sm" variant="danger" onClick={() => handleDeleteCache(key)}>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => handleDeleteCache(key)}
+                >
                   删除
                 </Button>
               </li>

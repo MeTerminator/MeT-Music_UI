@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { PlayTimeData } from "@met/core";
+import type { PlayTimeData, PlaybackQualityState } from "@met/core";
 import { legacyStorage } from "./persist";
 
 /**
@@ -16,6 +16,7 @@ export type LyricViewMode = "hidden" | "both" | "only";
  * 且仅持久化旧 paths 列出的子集)。
  */
 export interface StatusStoreState {
+  playbackQuality: PlaybackQualityState | null;
   asideMenuCollapsed: boolean;
   /**
    * 桌面左侧栏是否展开为完整菜单(展开后与窄屏抽屉同一形态)。
@@ -77,6 +78,7 @@ const PERSIST_PATHS = [
 export const useStatusStore = create<StatusStoreState>()(
   persist(
     (): StatusStoreState => ({
+      playbackQuality: null,
       asideMenuCollapsed: false,
       asideMenuExpanded: false,
       searchInputFocus: false,
@@ -119,7 +121,9 @@ export const useStatusStore = create<StatusStoreState>()(
       name: "siteStatus",
       storage: legacyStorage(),
       partialize: (state) =>
-        Object.fromEntries(PERSIST_PATHS.map((k) => [k, state[k]])) as unknown as StatusStoreState,
+        Object.fromEntries(
+          PERSIST_PATHS.map((k) => [k, state[k]]),
+        ) as unknown as StatusStoreState,
     },
   ),
 );

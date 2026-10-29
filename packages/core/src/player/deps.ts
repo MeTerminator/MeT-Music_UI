@@ -36,7 +36,18 @@ export interface PlayTimeData {
   durationTime: string;
 }
 
+export interface PlaybackQualityState {
+  songKey: string;
+  actualLevel: string | null;
+  requestedLevel: string;
+  availableLevels: string[] | null;
+  overrideLevel: string | null;
+  switching: boolean;
+}
+
 export interface StatusState {
+  /** Runtime only: actual resource and one-play quality override; never persisted. */
+  playbackQuality?: PlaybackQualityState | null;
   playState: boolean;
   playLoading: boolean;
   playUseOtherSource: boolean;
@@ -101,10 +112,23 @@ export interface ListenTogetherBridge {
 
 /** 对应旧 utils/mediaSession.js 的五个导出;web 与 Electron 均由平台层实现 */
 export interface MediaSessionAdapter {
-  bindActions(handlers: Record<string, (details?: { seekTime?: number; seekOffset?: number }) => void>): void;
-  setMetadata(meta: { title: string; artist: string; album: string; artwork: { src: string; sizes: string; type: string }[] }): void;
+  bindActions(
+    handlers: Record<
+      string,
+      (details?: { seekTime?: number; seekOffset?: number }) => void
+    >,
+  ): void;
+  setMetadata(meta: {
+    title: string;
+    artist: string;
+    album: string;
+    artwork: { src: string; sizes: string; type: string }[];
+  }): void;
   setPlaybackState(playing: boolean): void;
-  updatePosition(state: { duration: number; position: number; playbackRate: number }, force?: boolean): void;
+  updatePosition(
+    state: { duration: number; position: number; playbackRate: number },
+    force?: boolean,
+  ): void;
   clear(): void;
 }
 
@@ -138,6 +162,7 @@ export interface PlayerAudio {
 }
 
 export interface PlayerEnv {
+  supportedQQCodecs?(): string[];
   /** 更新页面标题(旧 document.title 写入点) */
   setTitle(title: string): void;
   /** 播放上报用会话 id(旧 helper.getSessionId) */
@@ -150,15 +175,25 @@ export interface PlayerEnv {
    * 音频缓存:URL → Blob URL(旧 helper.getBlobUrlFromUrl);缺省直接返回原 URL。
    * onProgress 为下载进度回调(0-100),供 UI 把进度条临时用作下载进度显示。
    */
-  toBlobUrl?(url: string, onProgress?: (percent: number) => void): Promise<string>;
+  toBlobUrl?(
+    url: string,
+    onProgress?: (percent: number) => void,
+  ): Promise<string>;
   /** 在取链前的用户手势内解锁 NAC 音频上下文。 */
   unlockNac?(): void;
   /** NAC 首块就绪即返回播放器；后台继续解码，dispose 释放资源。 */
-  decodeNac?(url: string, signal: AbortSignal, onProgress: (percent: number) => void): Promise<{
-    url: string;
-    format: string;
-    dispose(): void;
-  } | { player: PlayerAudio; dispose(): void }>;
+  decodeNac?(
+    url: string,
+    signal: AbortSignal,
+    onProgress: (percent: number) => void,
+  ): Promise<
+    | {
+        url: string;
+        format: string;
+        dispose(): void;
+      }
+    | { player: PlayerAudio; dispose(): void }
+  >;
   /** 封面渐变取色(旧 utils/cover-color.getCoverGradient,DOM 实现留在应用层) */
   coverGradient?(coverUrl: string): Promise<string>;
   /**

@@ -1,15 +1,39 @@
 import { getAlbumPageId } from "@/lib/album";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { prepareAmllLines, songIdentityKey, songPlatform } from "@met/core";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   BackgroundRender,
   LyricPlayer,
   type LyricPlayerRef,
 } from "@applemusic-like-lyrics/react";
-import { IsolationRenderer, LayoutReason, MeshGradientRenderer, PixiRenderer, type BaseRenderer, type LyricLineMouseEvent } from "@applemusic-like-lyrics/core";
+import {
+  IsolationRenderer,
+  LayoutReason,
+  MeshGradientRenderer,
+  PixiRenderer,
+  type BaseRenderer,
+  type LyricLineMouseEvent,
+} from "@applemusic-like-lyrics/core";
 import "@applemusic-like-lyrics/core/style.css";
-import { Captions, CaptionsOff, ChevronDown, Columns2, Ellipsis, Disc3, Mic2, X } from "lucide-react";
+import {
+  Captions,
+  CaptionsOff,
+  ChevronDown,
+  Columns2,
+  Ellipsis,
+  Disc3,
+  Mic2,
+  X,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { fadePlayOrPause, setSeek, type AMLine, type Artist } from "@met/core";
 import { useStatusStore, type LyricViewMode } from "../../stores/status";
@@ -104,7 +128,11 @@ const FULL_PLAYER_CSS = `
 `;
 
 /** 信息淡出淡入，高度连续过渡，让居中布局中的封面和信息同步移动。 */
-function SongInfoTransition({ songKey, className, children }: {
+function SongInfoTransition({
+  songKey,
+  className,
+  children,
+}: {
   songKey: string;
   className: string;
   children: ReactNode;
@@ -131,7 +159,10 @@ function SongInfoTransition({ songKey, className, children }: {
       style={{ flexShrink: 0 }}
       initial={false}
       animate={{ height: height ?? "auto" }}
-      transition={{ duration: reducedMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        duration: reducedMotion ? 0 : 0.42,
+        ease: [0.22, 1, 0.36, 1],
+      }}
     >
       <div ref={contentRef}>
         <AnimatePresence mode="wait" initial={false}>
@@ -142,7 +173,10 @@ function SongInfoTransition({ songKey, className, children }: {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, pointerEvents: "none" }}
-            transition={{ duration: reducedMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: reducedMotion ? 0 : 0.24,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             {children}
           </motion.div>
@@ -199,7 +233,8 @@ function useWakeLock(active: boolean) {
     };
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible" && activeRef.current) void request();
+      if (document.visibilityState === "visible" && activeRef.current)
+        void request();
     };
 
     void request();
@@ -242,7 +277,10 @@ export default function FullPlayer() {
         showFullPlayer ? "" : "translate-y-full"
       }`}
       onTransitionEnd={(e) => {
-        if (e.target === e.currentTarget && !useStatusStore.getState().showFullPlayer) {
+        if (
+          e.target === e.currentTarget &&
+          !useStatusStore.getState().showFullPlayer
+        ) {
           setMounted(false);
         }
       }}
@@ -266,23 +304,38 @@ function FullPlayerInner() {
   const playerBackgroundType = useSettingsStore((s) => s.playerBackgroundType);
   const playCoverType = useSettingsStore((s) => s.playCoverType);
   const themeType = useSettingsStore((s) => s.themeType);
-  const amllPlayerBackgroundFlowSpeed = useSettingsStore((s) => s.amllPlayerBackgroundFlowSpeed);
+  const amllPlayerBackgroundFlowSpeed = useSettingsStore(
+    (s) => s.amllPlayerBackgroundFlowSpeed,
+  );
   const useAMLyrics = useSettingsStore((s) => s.useAMLyrics);
   const showYrc = useSettingsStore((s) => s.showYrc);
   const useAMttmlDB = useSettingsStore((s) => s.useAMttmlDB);
-  const lyricsAMttmlUseOffset = useSettingsStore((s) => s.lyricsAMttmlUseOffset);
+  const lyricsAMttmlUseOffset = useSettingsStore(
+    (s) => s.lyricsAMttmlUseOffset,
+  );
   const lyricsAMOffset = useSettingsStore((s) => s.lyricsAMOffset);
   const lyricsShiftMs = useSettingsStore((s) => s.lyricsShiftMs);
-  const lyricsAMEndTimeOffset = useSettingsStore((s) => s.lyricsAMEndTimeOffset);
+  const lyricsAMEndTimeOffset = useSettingsStore(
+    (s) => s.lyricsAMEndTimeOffset,
+  );
   const useAMSpring = useSettingsStore((s) => s.useAMSpring);
   const useAMScale = useSettingsStore((s) => s.useAMScale);
   const lyricsFontSize = useSettingsStore((s) => s.lyricsFontSize);
   const useAMBlur = useSettingsStore((s) => s.useAMBlur);
   const amll = useSettingsStore();
-  const backgroundRenderer = amll.amllBackgroundRenderer === "isolation" ? IsolationRenderer : amll.amllBackgroundRenderer === "pixi" ? PixiRenderer : MeshGradientRenderer;
-  const configureRenderer = useCallback((renderer: BaseRenderer) => {
-    if (renderer instanceof IsolationRenderer) renderer.setOptions(amll.amllIsolationOptions);
-  }, [amll.amllIsolationOptions]);
+  const backgroundRenderer =
+    amll.amllBackgroundRenderer === "isolation"
+      ? IsolationRenderer
+      : amll.amllBackgroundRenderer === "pixi"
+        ? PixiRenderer
+        : MeshGradientRenderer;
+  const configureRenderer = useCallback(
+    (renderer: BaseRenderer) => {
+      if (renderer instanceof IsolationRenderer)
+        renderer.setOptions(amll.amllIsolationOptions);
+    },
+    [amll.amllIsolationOptions],
+  );
 
   /** 窄屏(<768px)走两页式手机布局,与桌面左右分栏 DOM 结构不同,故用 JS 断点分支 */
   const isMobile = useIsMobile();
@@ -342,9 +395,11 @@ function FullPlayerInner() {
     Boolean(document.fullscreenElement),
   );
   useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const onFullscreenChange = () =>
+      setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
   // Esc 关闭全屏;打开期间锁定 body 滚动
@@ -366,6 +421,7 @@ function FullPlayerInner() {
 
   // ===== 控制条显隐:鼠标移动唤出,静止 2 秒淡出(对齐旧 controlShowChange) =====
   const hideTimerRef = useRef<number | null>(null);
+  const qualityMenuOpenRef = useRef(false);
   const lastMoveRef = useRef(0);
 
   const pokeControls = useCallback(() => {
@@ -373,10 +429,11 @@ function FullPlayerInner() {
     if (now - lastMoveRef.current < 150) return; // 节流
     lastMoveRef.current = now;
     useStatusStore.setState({ playerControlShow: true });
-    if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    if (hideTimerRef.current !== null)
+      window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = null;
     // 触屏没有「鼠标静止」可言,也没有 mousemove 能把控制条唤回来,故常驻
-    if (isTouch || isMobile) return;
+    if (isTouch || isMobile || qualityMenuOpenRef.current) return;
     hideTimerRef.current = window.setTimeout(() => {
       useStatusStore.setState({ playerControlShow: false });
     }, 2000);
@@ -391,7 +448,16 @@ function FullPlayerInner() {
     useStatusStore.setState({ playerControlShow: true });
   }, []);
 
+  const onQualityOpenChange = useCallback(
+    (open: boolean) => {
+      qualityMenuOpenRef.current = open;
+      keepControlsVisible();
+    },
+    [keepControlsVisible],
+  );
+
   const hideControls = useCallback(() => {
+    if (qualityMenuOpenRef.current) return;
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
@@ -404,7 +470,8 @@ function FullPlayerInner() {
     lastMoveRef.current = -1000;
     pokeControls();
     return () => {
-      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      if (hideTimerRef.current !== null)
+        window.clearTimeout(hideTimerRef.current);
       useStatusStore.setState({ playerControlShow: true });
     };
   }, [pokeControls]);
@@ -438,29 +505,45 @@ function FullPlayerInner() {
     if (!raw || raw.length === 0) return [];
     return prepareAmllLines(raw) as AMLine[];
   }, [playSongLyric.ttml]);
-  const useTtml = useAMLyrics && Boolean(playSongLyric.hasTtml) && useAMttmlDB && ttmlLines.length > 0;
+  const useTtml =
+    useAMLyrics &&
+    Boolean(playSongLyric.hasTtml) &&
+    useAMttmlDB &&
+    ttmlLines.length > 0;
   const useYrcAM = !useTtml && useAMLyrics && playSongLyric.hasYrc && showYrc;
   // 非 TTML 的 yrcAM/lrcAM:行 endTime 减去 lyricsAMEndTimeOffset
   // 短句的结束时间不能减到起始时间之前；TTML 不使用此偏移。
   const plainAMLines = useMemo<AMLine[]>(() => {
     const source = (useYrcAM ? playSongLyric.yrcAM : playSongLyric.lrcAM) ?? [];
     return prepareAmllLines(source, lyricsAMEndTimeOffset);
-  }, [useYrcAM, playSongLyric.yrcAM, playSongLyric.lrcAM, lyricsAMEndTimeOffset]);
+  }, [
+    useYrcAM,
+    playSongLyric.yrcAM,
+    playSongLyric.lrcAM,
+    lyricsAMEndTimeOffset,
+  ]);
   const amLines = useTtml ? ttmlLines : plainAMLines;
   const amLyricMode = useTtml ? "ttml" : useYrcAM ? "yrc" : "lrc";
   // 旧 isHasLrc 规则:lrc 首行存在且行数 > 4
-  const hasPlainLyric = Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
+  const hasPlainLyric =
+    Boolean(playSongLyric.lrc?.[0]) && playSongLyric.lrc.length > 4;
   const useAM = useAMLyrics && amLines.length > 0;
   const hasLyric = useAM || hasPlainLyric;
   // 请求中或失败时保留空白歌词栏，只有成功确认无歌词才收拢。
-  const hasLyricArea = hasLyric || lyricStatus === "loading" || lyricStatus === "error";
+  const hasLyricArea =
+    hasLyric || lyricStatus === "loading" || lyricStatus === "error";
   const viewMode: LyricViewMode = hasLyricArea ? lyricViewMode : "hidden";
   const purelyLyric = viewMode === "only";
   /**
    * 封面栏宽度(百分比):歌词栏是 flex-1,宽度由本值反推,
    * 所以只要给封面栏的 width 做过渡,两栏就会一起平滑伸缩。
    */
-  const coverPaneWidth = viewMode === "only" ? "0%" : viewMode === "both" ? `${amll.coverLyricRatio * 100}%` : "100%";
+  const coverPaneWidth =
+    viewMode === "only"
+      ? "0%"
+      : viewMode === "both"
+        ? `${amll.coverLyricRatio * 100}%`
+        : "100%";
 
   // 切到无歌词的歌曲时第二页随之卸载(滚动位置由浏览器夹回 0),页码状态一并复位
   useEffect(() => {
@@ -474,7 +557,10 @@ function FullPlayerInner() {
   // 歌词时间平移(控制条上的 -10ms / +10ms):正值让歌词整体延后,故扣减当前时间
   const amCurrentTime = Math.max(
     0,
-    Math.round((applyAMOffset ? playSeekMs + lyricsAMOffset : playSeekMs) - lyricsShiftMs),
+    Math.round(
+      (applyAMOffset ? playSeekMs + lyricsAMOffset : playSeekMs) -
+        lyricsShiftMs,
+    ),
   );
 
   // 进度条/媒体快捷键/一起听跳转都走显式 seek 通路。普通时间更新在
@@ -484,10 +570,19 @@ function FullPlayerInner() {
     const seekMs = useStatusStore.getState().playSeekMs;
     const time = Math.max(
       0,
-      Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
+      Math.round(
+        (applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs,
+      ),
     );
     lyricPlayerRef.current?.lyricPlayer?.setCurrentTime(time, true);
-  }, [playSeekRevision, lyricReady, useAM, applyAMOffset, lyricsAMOffset, lyricsShiftMs]);
+  }, [
+    playSeekRevision,
+    lyricReady,
+    useAM,
+    applyAMOffset,
+    lyricsAMOffset,
+    lyricsShiftMs,
+  ]);
 
   // 歌词时间平移变更后立即对位:AMLL 暂停时不自行推进时间轴,
   // 不显式 setCurrentTime 就要等下一次播放才看得出平移效果。
@@ -502,7 +597,9 @@ function FullPlayerInner() {
     const seekMs = useStatusStore.getState().playSeekMs;
     const time = Math.max(
       0,
-      Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
+      Math.round(
+        (applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs,
+      ),
     );
     core.setCurrentTime(time, true);
     void core.calcLayout(LayoutReason.Seek);
@@ -518,7 +615,9 @@ function FullPlayerInner() {
       const seekMs = useStatusStore.getState().playSeekMs;
       const time = Math.max(
         0,
-        Math.round((applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs),
+        Math.round(
+          (applyAMOffset ? seekMs + lyricsAMOffset : seekMs) - lyricsShiftMs,
+        ),
       );
       core.setLyricLines(amLines, time);
       core.setCurrentTime(time, true);
@@ -526,31 +625,50 @@ function FullPlayerInner() {
       core.update();
     }, 100);
     return () => window.clearTimeout(timer);
-  }, [lyricReady, useAM, amLines, applyAMOffset, lyricsAMOffset, lyricsShiftMs]);
+  }, [
+    lyricReady,
+    useAM,
+    amLines,
+    applyAMOffset,
+    lyricsAMOffset,
+    lyricsShiftMs,
+  ]);
 
   // ===== 封面与背景 =====
-  const coverSmall = playSongData.coverSize?.s || playSongData.coverSize?.m || playSongData.coverSize?.l
-    || playSongData.localCover || playSongData.cover;
+  const coverSmall =
+    playSongData.coverSize?.s ||
+    playSongData.coverSize?.m ||
+    playSongData.coverSize?.l ||
+    playSongData.localCover ||
+    playSongData.cover;
   const amllAlbum = toAmllAlbumUrl(coverSmall);
   const artistsText = formatArtists(playSongData.artists);
   const artistList: Artist[] | null = Array.isArray(playSongData.artists)
     ? playSongData.artists
     : null;
   const albumData =
-    playSongData.album && typeof playSongData.album !== "string" ? playSongData.album : null;
+    playSongData.album && typeof playSongData.album !== "string"
+      ? playSongData.album
+      : null;
   const albumId = getAlbumPageId(albumData?.id);
   const albumText = playSongData.album
     ? typeof playSongData.album === "string"
       ? playSongData.album
       : playSongData.album.name
     : "";
-  const aliaText = typeof playSongData.alia === "string" ? playSongData.alia : "";
+  const aliaText =
+    typeof playSongData.alia === "string" ? playSongData.alia : "";
 
-  const showAmllBackground = playerBackgroundType === "amllAnimation" && Boolean(amllAlbum);
+  const showAmllBackground =
+    playerBackgroundType === "amllAnimation" && Boolean(amllAlbum);
   const showAnimationBackground =
-    playerBackgroundType === "animation" && Boolean(coverSmall) && !showAmllBackground;
+    playerBackgroundType === "animation" &&
+    Boolean(coverSmall) &&
+    !showAmllBackground;
   const showBlurBackground =
-    playerBackgroundType === "blur" && Boolean(coverSmall) && !showAmllBackground;
+    playerBackgroundType === "blur" &&
+    Boolean(coverSmall) &&
+    !showAmllBackground;
   const gradientBackground = coverBackground || "var(--met-bg)";
 
   // ===== coverTheme 主题色驱动前景(对照旧 --cover-main-color 体系) =====
@@ -558,8 +676,10 @@ function FullPlayerInner() {
   // 旧持久化的 coverTheme 无 onCover 字段,回退 light.shadeTwo(旧
   // --cover-main-color 同源,同为浅色调),再回退白色系
   const theme = coverTheme as CoverThemeShape | undefined;
-  const mainRgb = theme?.onCover?.main || theme?.light?.shadeTwo || "255, 255, 255";
-  const primaryRgb = theme?.onCover?.accent || theme?.light?.primary || "255, 255, 255";
+  const mainRgb =
+    theme?.onCover?.main || theme?.light?.shadeTwo || "255, 255, 255";
+  const primaryRgb =
+    theme?.onCover?.accent || theme?.light?.primary || "255, 255, 255";
   const amLyricColor = `rgba(${mainRgb}, 0.95)`; // 对照旧 AMLyric.vue 109-112
 
   // ===== 全屏歌手/专辑跳转(对照旧 FullPlayer.vue 66-99 行) =====
@@ -567,15 +687,24 @@ function FullPlayerInner() {
   const lyricHeightCls = playCoverType === "record" ? "h-[70vh]" : "h-[86%]";
 
   // 「更多操作」菜单(窄屏顶部条;与控制条同一份定义,跳转前先收起全屏播放器)
-  const { items: moreItems, disabled: moreDisabled } = useSongMoreItems(playSongData, {
-    beforeNavigate: () => useStatusStore.setState({ showFullPlayer: false }),
-  });
+  const { items: moreItems, disabled: moreDisabled } = useSongMoreItems(
+    playSongData,
+    {
+      beforeNavigate: () => useStatusStore.setState({ showFullPlayer: false }),
+    },
+  );
 
   const navigate = useNavigate();
   const gotoArtist = useCallback(
     (id: number | string) => {
       useStatusStore.setState({ showFullPlayer: false });
-      void navigate({ to: "/artist", search: { id: String(id), platform: songPlatform(useMusicStore.getState().playSongData) } });
+      void navigate({
+        to: "/artist",
+        search: {
+          id: String(id),
+          platform: songPlatform(useMusicStore.getState().playSongData),
+        },
+      });
     },
     [navigate],
   );
@@ -583,14 +712,23 @@ function FullPlayerInner() {
     (id: string) => {
       if (!getAlbumPageId(id)) return;
       useStatusStore.setState({ showFullPlayer: false });
-      void navigate({ to: "/album", search: { id: String(id), platform: songPlatform(useMusicStore.getState().playSongData) } });
+      void navigate({
+        to: "/album",
+        search: {
+          id: String(id),
+          platform: songPlatform(useMusicStore.getState().playSongData),
+        },
+      });
     },
     [navigate],
   );
 
   // ===== 背景层(桌面/窄屏共用;按 settings.playerBackgroundType 分支) =====
   const backgroundNode = (
-    <div className="absolute inset-0 z-0 overflow-hidden" data-testid="full-player-background">
+    <div
+      className="absolute inset-0 z-0 overflow-hidden"
+      data-testid="full-player-background"
+    >
       {showAmllBackground ? (
         <div className="absolute inset-0">
           <BackgroundRender
@@ -621,11 +759,14 @@ function FullPlayerInner() {
               style={{
                 ...q.pos,
                 filter: "blur(80px) contrast(1.75)",
-                animation: `met-fp-cover-rotate ${q.duration * 2 / Math.max(0.01, amllPlayerBackgroundFlowSpeed)}s linear infinite${
+                animation: `met-fp-cover-rotate ${(q.duration * 2) / Math.max(0.01, amllPlayerBackgroundFlowSpeed)}s linear infinite${
                   q.reverse ? " reverse" : ""
                 }`,
                 // 暂停冻结
-                animationPlayState: playState && amllPlayerBackgroundFlowSpeed > 0 ? "running" : "paused",
+                animationPlayState:
+                  playState && amllPlayerBackgroundFlowSpeed > 0
+                    ? "running"
+                    : "paused",
               }}
             />
           ))}
@@ -639,10 +780,16 @@ function FullPlayerInner() {
           style={{ filter: "blur(80px) contrast(1.2)" }}
         />
       ) : (
-        <div className="absolute inset-0" style={{ background: gradientBackground }} />
+        <div
+          className="absolute inset-0"
+          style={{ background: gradientBackground }}
+        />
       )}
       {/* 暗化遮罩,保证前景可读性(对齐旧 .overlay::after) */}
-      <div className="absolute inset-0" style={{ background: "rgba(0, 0, 0, 0.4)" }} />
+      <div
+        className="absolute inset-0"
+        style={{ background: "rgba(0, 0, 0, 0.4)" }}
+      />
     </div>
   );
 
@@ -702,7 +849,9 @@ function FullPlayerInner() {
   );
 
   const lyricNode = hasLyric ? (
-    <div className="h-full w-full" {...lyricTouchGuard}>{lyricContent}</div>
+    <div className="h-full w-full" {...lyricTouchGuard}>
+      {lyricContent}
+    </div>
   ) : null;
 
   /**
@@ -744,7 +893,11 @@ function FullPlayerInner() {
         className={`truncate ${artistCls}`}
         style={{ color: "rgba(var(--fp-main-rgb), 0.7)" }}
       >
-        <Mic2 size={14} className="mr-1.5 inline-block align-[-2px]" aria-hidden="true" />
+        <Mic2
+          size={14}
+          className="mr-1.5 inline-block align-[-2px]"
+          aria-hidden="true"
+        />
         {artistList && artistList.length > 0
           ? artistList.map((ar, index) => (
               <span key={`${ar.id ?? "no-id"}-${index}`}>
@@ -759,7 +912,8 @@ function FullPlayerInner() {
                       gotoArtist(ar.id as number | string);
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") gotoArtist(ar.id as number | string);
+                      if (e.key === "Enter")
+                        gotoArtist(ar.id as number | string);
                     }}
                   >
                     {ar.name}
@@ -777,7 +931,11 @@ function FullPlayerInner() {
           className={`truncate ${albumCls}`}
           style={{ color: "rgba(var(--fp-main-rgb), 0.5)" }}
         >
-          <Disc3 size={14} className="mr-1.5 inline-block align-[-2px]" aria-hidden="true" />
+          <Disc3
+            size={14}
+            className="mr-1.5 inline-block align-[-2px]"
+            aria-hidden="true"
+          />
           {albumId ? (
             <span
               role="link"
@@ -866,7 +1024,10 @@ function FullPlayerInner() {
                     : "max-w-[min(76vw,340px)]"
                 }
               />
-              <SongInfoTransition songKey={songIdentityKey(playSongData)} className="w-full">
+              <SongInfoTransition
+                songKey={songIdentityKey(playSongData)}
+                className="w-full"
+              >
                 {renderSongInfo({
                   className: "w-full text-center",
                   titleCls: "text-xl",
@@ -919,13 +1080,20 @@ function FullPlayerInner() {
                 aria-current={page === i}
                 onClick={() => goPage(i)}
               >
-                <span aria-hidden className={`h-1.5 rounded-full transition-all ${page === i ? "w-5 bg-[rgba(var(--fp-main-rgb),0.9)]" : "w-1.5 bg-[rgba(var(--fp-main-rgb),0.35)]"}`} />
+                <span
+                  aria-hidden
+                  className={`h-1.5 rounded-full transition-all ${page === i ? "w-5 bg-[rgba(var(--fp-main-rgb),0.9)]" : "w-1.5 bg-[rgba(var(--fp-main-rgb),0.35)]"}`}
+                />
               </button>
             ))}
           </div>
         )}
 
-        <FullPlayerControls onKeepVisible={keepControlsVisible} mobile />
+        <FullPlayerControls
+          onKeepVisible={keepControlsVisible}
+          onQualityOpenChange={onQualityOpenChange}
+          mobile
+        />
       </div>
     );
   }
@@ -959,7 +1127,9 @@ function FullPlayerInner() {
               })`}
               aria-label={`歌词视图:${LYRIC_VIEW_META[viewMode].label}`}
               onClick={() =>
-                useStatusStore.setState({ lyricViewMode: LYRIC_VIEW_META[viewMode].next })
+                useStatusStore.setState({
+                  lyricViewMode: LYRIC_VIEW_META[viewMode].next,
+                })
               }
             >
               {/* key 让图标随模式重播一次淡入缩放,切换有反馈 */}
@@ -998,25 +1168,52 @@ function FullPlayerInner() {
           aria-hidden={purelyLyric}
         >
           <div className="relative h-full w-full">
-            {amll.coverLayout === "fullscreen" && (playSongData.coverSize?.l || playSongData.localCover || playSongData.cover) && (
-              <div data-testid="full-cover-art" className="met-drag absolute inset-0" style={{ maskImage: "linear-gradient(to right, black 70%, transparent)" }}>
-                <CircularCover src={playSongData.coverSize?.l || playSongData.localCover || playSongData.cover} alt="" className="h-full w-full" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
-              </div>
-            )}
-            <div className={`relative flex h-full w-full flex-col items-center gap-6 px-10 ${amll.coverLayout === "fullscreen" ? "justify-end pb-36" : "justify-center"}`}>
+            {amll.coverLayout === "fullscreen" &&
+              (playSongData.coverSize?.l ||
+                playSongData.localCover ||
+                playSongData.cover) && (
+                <div
+                  data-testid="full-cover-art"
+                  className="met-drag absolute inset-0"
+                  style={{
+                    maskImage:
+                      "linear-gradient(to right, black 70%, transparent)",
+                  }}
+                >
+                  <CircularCover
+                    src={
+                      playSongData.coverSize?.l ||
+                      playSongData.localCover ||
+                      playSongData.cover
+                    }
+                    alt=""
+                    className="h-full w-full"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
+                </div>
+              )}
+            <div
+              className={`relative flex h-full w-full flex-col items-center gap-6 px-10 ${amll.coverLayout === "fullscreen" ? "justify-end pb-36" : "justify-center"}`}
+            >
               {/* 封面(cover/record 两种模式,见 PlayerCover)。
                   met-drag:全屏播放器铺满整个窗口,顶栏那条拖拽区被它盖住,
                   桌面宿主里就没地方拖窗口了,故把封面本身当拖拽区。
                   封面内部没有可点元素,不必再标 no-drag;窄屏那份封面在横向分页里,
                   标成拖拽区会把滑动手势吃掉,所以只给桌面分栏这一份。 */}
-              {amll.coverLayout !== "fullscreen" && <PlayerCover
-                song={playSongData}
-                className={`met-drag ${
-                  playCoverType === "record" ? "max-w-[min(46vh,420px)]" : "max-w-[420px]"
-                }`}
-              />}
-              <SongInfoTransition songKey={songIdentityKey(playSongData)} className="w-full max-w-[420px]">
+              {amll.coverLayout !== "fullscreen" && (
+                <PlayerCover
+                  song={playSongData}
+                  className={`met-drag ${
+                    playCoverType === "record"
+                      ? "max-w-[min(46vh,420px)]"
+                      : "max-w-[420px]"
+                  }`}
+                />
+              )}
+              <SongInfoTransition
+                songKey={songIdentityKey(playSongData)}
+                className="w-full max-w-[420px]"
+              >
                 {renderSongInfo({
                   className: `w-full max-w-[420px] text-center ${amll.coverLayout === "fullscreen" ? "[--fp-main-rgb:255,255,255]" : ""}`,
                   titleCls: "text-2xl",
@@ -1054,7 +1251,10 @@ function FullPlayerInner() {
       </div>
 
       {/* ===== 底部:悬浮控制条 ===== */}
-      <FullPlayerControls onKeepVisible={keepControlsVisible} />
+      <FullPlayerControls
+        onKeepVisible={keepControlsVisible}
+        onQualityOpenChange={onQualityOpenChange}
+      />
     </div>
   );
 }
