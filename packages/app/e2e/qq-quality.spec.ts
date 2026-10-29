@@ -68,12 +68,27 @@ test("QQ download uses song availability, requests exact new quality and keeps t
   await page
     .getByRole("option", { name: "臻品全景声 7.1.4", exact: true })
     .click();
-  const download = page.waitForEvent("download");
+  const appendQuality = page.getByRole("checkbox", {
+    name: "文件名附加音质",
+  });
+  await expect(appendQuality).toBeChecked();
+  const downloadWithQuality = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "立即下载歌曲文件", exact: true })
     .click();
-  expect((await download).suggestedFilename()).toMatch(/\.ogg$/);
-  expect(requests).toEqual(["Q360V3"]);
+  expect((await downloadWithQuality).suggestedFilename()).toBe(
+    "Quality example - Artist [臻品全景声 7.1.4].ogg",
+  );
+
+  await appendQuality.uncheck();
+  const downloadWithoutQuality = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "下载完成,再次下载", exact: true })
+    .click();
+  expect((await downloadWithoutQuality).suggestedFilename()).toBe(
+    "Quality example - Artist.ogg",
+  );
+  expect(requests).toEqual(["Q360V3", "Q360V3"]);
   expect(errors).toEqual([]);
 });
 

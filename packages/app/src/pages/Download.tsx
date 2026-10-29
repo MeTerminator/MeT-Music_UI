@@ -164,7 +164,10 @@ const Download = () => {
       ? neteaseSongLevelOptions
       : qqDownloadOptions(track?.available_qualities);
   const qualityAvailable = qualityOptions.some((q) => q.value === quality);
+  const qualityLabel =
+    qualityOptions.find((option) => option.value === quality)?.label ?? quality;
   const trackName: string = track?.title || track?.name || "";
+  const [appendQualityToFilename, setAppendQualityToFilename] = useState(true);
 
   const singers: {
     mid?: string | null;
@@ -396,9 +399,10 @@ const Download = () => {
             .filter(Boolean)
             .join("_")
         : "";
+      const qualitySuffix = appendQualityToFilename ? ` [${qualityLabel}]` : "";
       filename = `${trackInfo?.name || trackName || mid}${
         singerNames ? ` - ${singerNames}` : ""
-      }.${extension}`;
+      }${qualitySuffix}.${extension}`;
     } catch (error) {
       console.error("获取下载链接失败：", error);
       toast.error("获取下载链接失败,请重试");
@@ -583,6 +587,17 @@ const Download = () => {
               onValueChange={setQuality}
               disabled={qualityOptions.length === 0}
             />
+            <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-[var(--met-fg-dim)]">
+              <input
+                type="checkbox"
+                checked={appendQualityToFilename}
+                onChange={(event) =>
+                  setAppendQualityToFilename(event.currentTarget.checked)
+                }
+                className="h-4 w-4 cursor-pointer accent-[var(--met-primary)]"
+              />
+              文件名附加音质
+            </label>
           </div>
           <p className="text-xs text-[var(--met-fg-dim)]">
             {!qualityAvailable
