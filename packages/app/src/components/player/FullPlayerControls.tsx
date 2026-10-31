@@ -343,8 +343,9 @@ export default function FullPlayerControls({
 
         {/* 控制按钮行(两侧列自适应,中间播放控制固定宽度居中) */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
-          {/* 左区:播放模式 + 音量(与右区功能钮左右配重;窄屏隐藏次要控件,保核心播放控制) */}
+          {/* 左区:音质 + 播放模式 + 评论 / MV + 音量;窄屏隐藏次要控件 */}
           <div className="flex min-w-0 items-center justify-start gap-1">
+            <QualityMenu overlay onOpenChange={onQualityOpenChange} />
             <button
               type="button"
               className={`${iconBtnCls} text-lg max-md:hidden`}
@@ -367,16 +368,16 @@ export default function FullPlayerControls({
             >
               <MessageSquare size={20} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              className={`${iconBtnCls} max-lg:hidden disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-transparent`}
-              title={mvId ? "观看 MV" : "该歌曲暂无 MV"}
-              disabled={!mvId}
-              onClick={() => mvId && go("/videos-player", mvId)}
-            >
-              <Video size={20} aria-hidden="true" />
-            </button>
-            <QualityMenu overlay onOpenChange={onQualityOpenChange} />
+            {mvId ? (
+              <button
+                type="button"
+                className={`${iconBtnCls} max-lg:hidden`}
+                title="观看 MV"
+                onClick={() => go("/videos-player", mvId)}
+              >
+                <Video size={20} aria-hidden="true" />
+              </button>
+            ) : null}
             <button
               type="button"
               className={`${iconBtnCls} max-md:hidden`}
