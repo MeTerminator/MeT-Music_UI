@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu } from "@base-ui-components/react/menu";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronUp, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import {
   api,
   playbackLevel,
@@ -141,7 +141,7 @@ export default function QualityMenu({
           actual ? `当前播放：${qualityLabel(actual, platform)}` : "播放音质"
         }
         disabled={!eligible}
-        className={`flex h-8 max-w-28 shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${
+        className={`flex h-8 min-w-10 max-w-28 shrink-0 items-center justify-center gap-1 rounded-md border px-2 text-center text-[11px] leading-none font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${
           overlay
             ? "border-white/20 bg-white/5 text-white/85 hover:bg-white/10"
             : "border-[var(--met-border)] bg-transparent text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]"
@@ -155,11 +155,6 @@ export default function QualityMenu({
           />
         ) : null}
         <span className="truncate">{display}</span>
-        <ChevronUp
-          size={11}
-          className="shrink-0 opacity-60"
-          aria-hidden="true"
-        />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner
