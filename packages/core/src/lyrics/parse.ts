@@ -64,6 +64,7 @@ const CREDIT_ROLES: string[] = [
   "录音勤务",
   "录音",
   "声乐指导",
+  "说唱指导",
   "配乐",
   "音频编辑",
   "剪辑",
@@ -158,6 +159,17 @@ const CREDIT_ROLES: string[] = [
   "Publisher",
   "Label",
   "Coordinator",
+  // 英文裸词:配合 and 连写与 by 结尾的双语头(如 Mixed and Mastered by、Recorded Studio、A&R)
+  "A&R",
+  "By",
+  "Recorded",
+  "Mixed",
+  "Mastered",
+  "Arranged",
+  "Performed",
+  "Edited",
+  "Direction",
+  "Rap",
 ];
 const CREDIT_ROLE_PREFIXES = [
   "音频",
@@ -232,7 +244,7 @@ const ROLE_TOKENS = lowerSet(CREDIT_ROLES);
 const SUFFIX_TOKENS = lowerSet(CREDIT_ROLE_SUFFIXES);
 const COPYRIGHT_NOTICE_RE = /未[经經].*[许許]可.*(?:不得|禁止)/;
 /**
- * 冒号前的部分能否完整切分为「[前缀]角色[后缀…]」单元序列;单元之间可用 /、／、&、空格分隔或直接连写。
+ * 冒号前的部分能否完整切分为「[前缀]角色[后缀…]」单元序列;单元之间可用 /、／、&、空格、英文 and 分隔或直接连写。
  * 按位置推进状态集合匹配,避免正则在连写角色上回溯爆炸。
  */
 const isCreditHeader = (text: string): boolean => {
@@ -254,6 +266,13 @@ const isCreditHeader = (text: string): boolean => {
       while (j < n && /\s/.test(head[j])) j++;
       if (j < n && "/／&".includes(head[j])) {
         j++;
+        while (j < n && /\s/.test(head[j])) j++;
+      } else if (
+        head.startsWith("and", j) &&
+        (j + 3 === n || /\s/.test(head[j + 3]))
+      ) {
+        // 英文角色连写用 and 连接(如 Mixed and Mastered by),视作单元分隔
+        j += 3;
         while (j < n && /\s/.test(head[j])) j++;
       }
       unitStart.add(i);
