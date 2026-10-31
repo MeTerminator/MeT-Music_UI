@@ -168,6 +168,22 @@ describe("parseAMData 信息行过滤与翻译对齐", () => {
     expect(lines.map((line) => line.translatedLyric)).toEqual(["译一", "译二"]);
   });
 
+  it("过滤 QQ 双语制作头(Recorded Studio/Vocal Direction/Rap Direction/A&R 及 and/by 连写)", () => {
+    const source = [
+      timedQrcLine("录音棚 Recorded Studio：金诺佳音国际文化传媒", 1000),
+      timedQrcLine("声乐指导 Vocal Direction：Simon Yan/崔加油", 2000),
+      timedQrcLine("说唱指导 Rap Direction：ReddB 白吉勒", 3000),
+      timedQrcLine("音乐企划 A&R：薯仔", 4000),
+      timedQrcLine("吉他 Guitar by：向鑫/吴余涛", 5000),
+      timedQrcLine("混音/母带 Mixed and Mastered by：沈会斌", 6000),
+      timedQrcLine("正文第一句", 7000),
+    ].join("\n");
+    const lines = parseAMData(parseQrc(source), [], [], true);
+
+    expect(lines).toHaveLength(1);
+    expect(amText(lines[0])).toBe("正文第一句");
+  });
+
   it("不匹配角色和没有冒号的正文不会被误删", () => {
     const source = [
       timedQrcLine("词穷了", 1000),
