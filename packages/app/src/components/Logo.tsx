@@ -1,4 +1,4 @@
-/** 与 favicon / PWA 共用品牌图标,固定使用品牌色 #000000。 */
+/** 与 favicon / PWA 共用品牌图标,随明暗主题切换黑白。 */
 export const Logo = ({ size = 24 }: { size?: number }) => (
   <img
     src={`${import.meta.env.BASE_URL}images/icons/favicon.svg`}
@@ -6,6 +6,6 @@ export const Logo = ({ size = 24 }: { size?: number }) => (
     height={size}
     alt=""
     aria-hidden
-    className="shrink-0"
+    className="met-logo shrink-0"
   />
 );

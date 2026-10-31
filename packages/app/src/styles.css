@@ -66,6 +66,14 @@
   --met-scrollbar-hover: #a2a2ad;
 }
 
+.met-logo {
+  filter: invert(1);
+}
+
+:root[data-theme="light"] .met-logo {
+  filter: none;
+}
+
 html,
 body,
 #root {
