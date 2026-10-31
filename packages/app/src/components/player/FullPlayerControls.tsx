@@ -376,6 +376,7 @@ export default function FullPlayerControls({
             >
               <Video size={20} aria-hidden="true" />
             </button>
+            <QualityMenu overlay onOpenChange={onQualityOpenChange} />
             <button
               type="button"
               className={`${iconBtnCls} max-md:hidden`}
@@ -404,7 +405,6 @@ export default function FullPlayerControls({
             <span className="w-9 shrink-0 text-right text-xs tabular-nums text-white/60 max-lg:hidden">
               {Math.round(playVolume * 100)}%
             </span>
-            <QualityMenu overlay onOpenChange={onQualityOpenChange} />
           </div>
 
           {/* 中区:上一曲 / 播放暂停 / 下一曲 */}
