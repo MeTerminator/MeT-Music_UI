@@ -141,7 +141,7 @@ export default function QualityMenu({
           actual ? `当前播放：${qualityLabel(actual, platform)}` : "播放音质"
         }
         disabled={!eligible}
-        className={`flex h-8 min-w-10 max-w-28 shrink-0 items-center justify-center gap-1 rounded-md border px-2 text-center text-[11px] leading-none font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${
+        className={`met-no-drag flex h-8 min-w-10 max-w-28 shrink-0 items-center justify-center gap-1 rounded-md border px-2 text-center text-[11px] leading-none font-medium transition-colors disabled:cursor-default disabled:opacity-50 ${
           overlay
             ? "border-white/20 bg-white/5 text-white/85 hover:bg-white/10"
             : "border-[var(--met-border)] bg-transparent text-[var(--met-fg-dim)] hover:bg-[var(--met-bg-hover)] hover:text-[var(--met-fg)]"
@@ -163,8 +163,9 @@ export default function QualityMenu({
           sideOffset={10}
           className="z-[80] outline-none"
         >
+          {/* Electron 封面的窗口拖动区会拦截覆盖在它上方的菜单事件。 */}
           <Menu.Popup
-            className={`${menuPopupClassName} w-72 overflow-hidden`}
+            className={`met-no-drag ${menuPopupClassName} w-72 overflow-hidden`}
             aria-label="当前歌曲音质"
           >
             <div className="border-b border-[var(--met-border)] px-3 py-2.5">

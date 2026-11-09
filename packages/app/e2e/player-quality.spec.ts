@@ -237,7 +237,9 @@ test("two quality entries show actual and preferred levels, preserve seek and cl
   ).toBeVisible();
   await page.waitForTimeout(2400); // exceeds the fullscreen controls' inactivity timeout
   await expect(controls).toBeVisible();
-  await expect(page.getByRole("menu")).toBeVisible();
+  const qualityMenu = page.getByRole("menu");
+  await expect(qualityMenu).toBeVisible();
+  await expect(qualityMenu).toHaveClass(/\bmet-no-drag\b/);
   await page.screenshot({
     path: testInfo.outputPath("quality-fullscreen.png"),
   });
