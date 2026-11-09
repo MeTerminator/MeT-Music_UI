@@ -13,6 +13,7 @@ import type { ApiResponseFor } from "./contracts";
 export const getAlbumDetail = (id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/album">> => {
   return request("GET", "/album", {
     platform,
+    audio_api: 2,
     id,
     timestamp: new Date().getTime(),
   });

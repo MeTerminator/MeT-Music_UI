@@ -29,6 +29,7 @@ interface RawData {
   playCount?: number | null; createTime?: number | null; updateTime?: number | null; trackNumberUpdateTime?: number;
   description?: string | null; tags?: Song["tags"] | null; algTags?: string[]; userId?: string | number | null;
   mv?: string | number | null; alia?: string | string[] | null; alias?: string[] | null; transNames?: string[];
+  available_qualities?: string[] | null;
   fee?: number; pc?: boolean; size?: Song["size"] | null; ttml?: 0 | 1;
   duration?: string | number | null; dt?: number; briefDesc?: string | null;
   musicSize?: number | null; albumSize?: number | null; mvSize?: number | null; fansCount?: number;
@@ -122,6 +123,7 @@ const formatData = (
           mv: v.mv,
           alia: (typeof v.alia === "string" ? v.alia : v.alia?.[0]) || v.alias?.[0] || v.transNames?.[0],
           fee: v.fee,
+          availableQualities: v.available_qualities ?? undefined,
           pc: v.pc,
           size: v.size ?? undefined,
           ttml: v?.ttml,

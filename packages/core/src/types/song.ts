@@ -35,6 +35,7 @@ export interface Song {
   mv?: number | string | null;
   alia?: string;
   fee?: number;
+  availableQualities?: string[];
   size?: number | { music?: number; album?: number; mv?: number; fans?: number };
   ttml?: 0 | 1;
   count?: number;

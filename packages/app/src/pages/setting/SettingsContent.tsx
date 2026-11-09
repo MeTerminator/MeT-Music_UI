@@ -22,6 +22,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { SettingNumber } from "./SettingNumber";
 import { AmllSettings } from "./AmllSettings";
+import { QualityTagSettings } from "./QualityTagSettings";
 import {
   Settings2,
   Play,
@@ -271,6 +272,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
                     className="w-52"
                   />
                 </SettingItem>
+                <QualityTagSettings />
                 <SettingItem
                   name="使用 HTML5 播放器"
                   tip={

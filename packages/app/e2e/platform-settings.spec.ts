@@ -47,13 +47,13 @@ test("旧 QQ 设置保留，网易云音质独立选择并持久化", async ({ p
   await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "播放", exact: true }).click();
   const qq = page.getByText("QQ 音乐音质选择", { exact: true }).locator("../../..");
   const netease = page.getByText("网易云音乐音质选择", { exact: true }).locator("../../..");
-  await expect(qq.getByRole("combobox")).toContainText("无损 SQ");
+  await expect(qq.getByRole("combobox")).toContainText("无损 FLAC");
   await expect(netease.getByRole("combobox")).toContainText("极高");
   await netease.getByRole("combobox").click();
   await expect(page.getByRole("option")).toHaveCount(10);
   await page.getByRole("option", { name: "超清母带", exact: true }).click();
   await expect(netease.getByRole("combobox")).toContainText("超清母带");
-  await expect(qq.getByRole("combobox")).toContainText("无损 SQ");
+  await expect(qq.getByRole("combobox")).toContainText("无损 FLAC");
   await page.reload();
   await page.waitForFunction(() => !!(window as unknown as DebugWindow).__debugStores);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("siteSettings") ?? "{}"));

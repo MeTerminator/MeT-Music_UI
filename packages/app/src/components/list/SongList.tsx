@@ -16,6 +16,7 @@ import {
 } from "@met/core";
 import { copyText } from "@/lib/clipboard";
 import { formatArtists } from "@/lib/format";
+import { selectQualityTag } from "@/lib/qualityTags";
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
@@ -52,6 +53,8 @@ interface SongListProps {
    *   不改动现有播放列表(旧 history 页 / search 页且未开启 playSearch 时的行为)。
    */
   playBehavior?: "replace" | "insert";
+  /** 分页列表可在开始播放时补齐队列。 */
+  loadPlaybackList?: () => Promise<Song[] | undefined>;
 }
 
 /** 播放行为(与 playBehavior prop 同型) */
@@ -122,6 +125,7 @@ const playFromList = async (
   song: Song,
   index: number,
   behavior: PlayBehavior = "replace",
+  loadPlaybackList?: SongListProps["loadPlaybackList"],
 ): Promise<void> => {
   // 若开启了缓存且正在加载(对照旧 playSong 首行):提示缓冲中并中止
   if (useSettingsStore.getState().useMusicCache && useStatusStore.getState().playLoading) {
@@ -146,8 +150,10 @@ const playFromList = async (
     await initPlayer(true);
     return;
   }
+  const playlist = loadPlaybackList ? await loadPlaybackList() : list;
+  if (!playlist) return;
   useStatusStore.setState({ playMode: "normal", playIndex: index });
-  useMusicStore.setState({ playList: list.slice(), playSongData: song });
+  useMusicStore.setState({ playList: playlist.slice(), playSongData: song });
   await initPlayer(true);
 };
 
@@ -173,10 +179,12 @@ export default function SongList({
   filterKeyword,
   onReachEnd,
   playBehavior = "replace",
+  loadPlaybackList,
 }: SongListProps) {
   const playingId = useMusicStore((s) => s.playSongData?.id);
   const playingKey = useMusicStore((s) => songIdentityKey(s.playSongData));
   const isInRoom = useStatusStore((s) => s.isInRoom);
+  const qualityTagPreferences = useSettingsStore((s) => s.qualityTags);
   /** 触屏设备:没有双击与 hover,行改为单击即播、行内操作常显 */
   const isTouch = useIsTouch();
   const [floatingActions, setFloatingActions] = useState<HTMLElement | null>(null);
@@ -245,7 +253,7 @@ export default function SongList({
         key: "play",
         icon: Play,
         label: "立即播放",
-        onSelect: () => void playFromList(displaySongs, song, index, playBehavior),
+        onSelect: () => void playFromList(displaySongs, song, index, playBehavior, loadPlaybackList),
       },
       {
         key: "next-play",
@@ -428,9 +436,10 @@ export default function SongList({
           const menuItems = rowMenuItems(song, index);
           const mvId = getMvId(song);
           const fee = getFee(song);
+          const qualityTag = selectQualityTag(song, qualityTagPreferences);
           /** 本行是否有任何标签(窄屏折行时,没标签就不渲染那一行,免得多出空隙) */
           const hasTags =
-            hasTtml(song) || (fee === 1 && vipType !== 11) || fee === 4 || Boolean(mvId);
+            Boolean(qualityTag) || hasTtml(song) || (fee === 1 && vipType !== 11) || fee === 4 || Boolean(mvId);
           const albumId = getAlbumId(song.album);
           return (
             <BaseContextMenu.Root key={`${song.id}-${index}`}>
@@ -439,7 +448,7 @@ export default function SongList({
                   <li
                     data-playing={isPlaying ? "true" : undefined}
                     onDoubleClick={() =>
-                      void playFromList(displaySongs, song, index, playBehavior)
+                      void playFromList(displaySongs, song, index, playBehavior, loadPlaybackList)
                     }
                     // 触屏没有双击语义(双击手势会被浏览器吃掉),改为单击即播。
                     // 行内的歌手/专辑/MV 等按钮各自 stopPropagation,但下拉菜单
@@ -448,7 +457,7 @@ export default function SongList({
                       isTouch
                         ? (e) => {
                             if ((e.target as HTMLElement).closest("button, a")) return;
-                            void playFromList(displaySongs, song, index, playBehavior);
+                            void playFromList(displaySongs, song, index, playBehavior, loadPlaybackList);
                           }
                         : undefined
                     }
@@ -501,6 +510,11 @@ export default function SongList({
                       className={`${tagBaseClassName} border-[var(--met-fg-dim)] text-[var(--met-fg-dim)]`}
                     >
                       TTML
+                    </span>
+                  ) : null}
+                  {qualityTag ? (
+                    <span className={`${tagBaseClassName} whitespace-nowrap border-[var(--met-primary)] text-[var(--met-primary)]`}>
+                      {qualityTag}
                     </span>
                   ) : null}
                   {/* VIP 标签(对照旧 tags-wrap:fee === 1 且用户非黑胶 VIP(vipType !== 11)时显示) */}
@@ -605,7 +619,7 @@ export default function SongList({
                   type="button"
                   aria-label={isInRoom ? `添加到一起听 ${song.name}` : `播放 ${song.name}`}
                   title={isInRoom ? "添加到一起听" : "立即播放"}
-                  onClick={() => void playFromList(displaySongs, song, index, playBehavior)}
+                  onClick={() => void playFromList(displaySongs, song, index, playBehavior, loadPlaybackList)}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--met-fg-dim)] transition-colors hover:text-[var(--met-primary)]"
                 >
                   <Play size={18} aria-hidden="true" />

@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { legacyStorage } from "./persist";
+import {
+  QUALITY_TAG_DEFAULTS_VERSION,
+  defaultQualityTagPreferences,
+  normalizeQualityTagPreferences,
+  type QualityTagPreferences,
+} from "@/lib/qualityTags";
 import type { IsolationRendererOptions, OptimizeLyricOptions, spring } from "@applemusic-like-lyrics/core";
 import { DEFAULT_DESKTOP_LYRIC_FALLBACK, normalizeDesktopLyricFallback } from "@/platform/desktop-lyric-color";
 import { NETEASE_LEVELS, configureLyricCache, normalizeLyricCacheDays, DEFAULT_LYRIC_CACHE_DAYS } from "@met/core";
@@ -27,6 +33,8 @@ export interface SettingsState {
   playCoverType: string;
   songLevel: string;
   neteaseSongLevel: string;
+  qualityTags: QualityTagPreferences;
+  qualityTagsDefaultsVersion: number;
   autoPlay: boolean;
   songVolumeFade: boolean;
   countDownShow: boolean;
@@ -111,6 +119,8 @@ export const defaultSettings: SettingsState = {
   playCoverType: "cover",
   songLevel: "hq",
   neteaseSongLevel: "exhigh",
+  qualityTags: defaultQualityTagPreferences,
+  qualityTagsDefaultsVersion: QUALITY_TAG_DEFAULTS_VERSION,
   autoPlay: false,
   songVolumeFade: true,
   countDownShow: true,
@@ -193,6 +203,11 @@ export const useSettingsStore = create<SettingsState>()(
         rest.amllAlignPosition = rest.lyricsBlock === "center" ? 0.5 : 0.25;
       }
       const merged = { ...current, ...rest } as SettingsState;
+      merged.qualityTags = normalizeQualityTagPreferences(
+        merged.qualityTags,
+        typeof rest.qualityTagsDefaultsVersion === "number" ? rest.qualityTagsDefaultsVersion : 0,
+      );
+      merged.qualityTagsDefaultsVersion = QUALITY_TAG_DEFAULTS_VERSION;
       merged.lyricCacheDays = normalizeLyricCacheDays(merged.lyricCacheDays);
       merged.desktopLyricFallbackColor = normalizeDesktopLyricFallback(merged.desktopLyricFallbackColor);
       for (const key of ["amllSpringY", "amllSpringScale", "amllIsolationOptions", "amllOptimizeOptions"] as const) {

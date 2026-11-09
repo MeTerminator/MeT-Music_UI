@@ -30,6 +30,7 @@ export const getAllPlayList = (
   offset: number = 0, platform: Platform = "qq"): Promise<ApiResponseFor<"/playlist/track/all">> => {
   return request("GET", "/playlist/track/all", {
     platform,
+    audio_api: 2,
     id,
     limit,
     offset,

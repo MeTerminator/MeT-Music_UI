@@ -45,6 +45,7 @@ export const getSearchRes = (
   type: number = 1, platform: Platform = "qq"): Promise<ApiResponseFor<"/cloudsearch">> => {
   return request("GET", "/cloudsearch", {
     platform,
+    ...(type === 1 && { audio_api: 2 }),
     keywords,
     limit,
     offset,

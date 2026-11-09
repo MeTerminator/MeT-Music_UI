@@ -24,6 +24,7 @@ export const getArtistDetail = (id: number | string, platform: Platform = "qq"):
 export const getArtistSongs = (id: number | string, platform: Platform = "qq"): Promise<ApiResponseFor<"/artists">> => {
   return request("GET", "/artists", {
     platform,
+    audio_api: 2,
     id,
     timestamp: new Date().getTime(),
   });
@@ -43,6 +44,7 @@ export const getArtistAllSongs = (
   order: string = "hot", platform: Platform = "qq"): Promise<ApiResponseFor<"/artist/songs">> => {
   return request("GET", "/artist/songs", {
     platform,
+    audio_api: 2,
     id,
     limit,
     offset,
