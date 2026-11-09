@@ -12,6 +12,8 @@ const LONG_WORD_DURATION = 1.5;
 interface KtvLineProps {
   /** 当前逐字歌词行(字 time/duration 为绝对秒) */
   line: YrcLine;
+  /** 使用调用方提供的播放时钟和偏移(秒)。 */
+  timing?: { currentTime: number; offset: number };
   /** 已唱部分颜色(渐变左半) */
   activeColor: string;
   /** 未唱部分颜色(渐变右半) */
@@ -35,11 +37,11 @@ interface KtvLineProps {
  * 每字一个 span,background-clip:text 双色渐变(左半已唱色 / 右半未唱色,
  * background-size 200%),backgroundPositionX = (1 - percent) * 100% 推进填充。
  *
- * 性能:高频 playSeek(rAF ~60fps)仅由本组件订阅,父级(整份歌词列表 /
- * PlayerBar)不订阅,行切换以外不会因进度刷新而重渲染。
+ * 默认仅当前行订阅高频 playSeek。底栏传入与选行一致的播放时钟。
  */
 export default function KtvLine({
   line,
+  timing,
   activeColor,
   inactiveColor,
   fontSize,
@@ -48,10 +50,8 @@ export default function KtvLine({
   autoScroll = false,
 }: KtvLineProps) {
   // 仅当前行挂载本组件,60fps 重渲染范围被限制在这一行内
-  const playSeek = useStatusStore((s) => s.playSeek);
-  const lyricsOffset = useSettingsStore((s) => s.lyricsOffset);
-
-  // 与引擎 playSongLyricIndex 的偏移语义一致:有效时间 = playSeek + lyricsOffset
+  const playSeek = useStatusStore((s) => timing?.currentTime ?? s.playSeek);
+  const lyricsOffset = useSettingsStore((s) => timing?.offset ?? s.lyricsOffset);
   const progress = computeWordProgress(line, playSeek, lyricsOffset);
 
   // 应居中的字:正在填充的字优先;字与字的间隙期沿用最后一个已开始的字,

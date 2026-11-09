@@ -53,7 +53,7 @@ interface SongListProps {
    *   不改动现有播放列表(旧 history 页 / search 页且未开启 playSearch 时的行为)。
    */
   playBehavior?: "replace" | "insert";
-  /** 分页列表可在开始播放时补齐队列。 */
+  /** 分页列表起播后可在后台补齐队列。 */
   loadPlaybackList?: () => Promise<Song[] | undefined>;
 }
 
@@ -150,11 +150,24 @@ const playFromList = async (
     await initPlayer(true);
     return;
   }
-  const playlist = loadPlaybackList ? await loadPlaybackList() : list;
-  if (!playlist) return;
+  const initialQueue = list.slice();
   useStatusStore.setState({ playMode: "normal", playIndex: index });
-  useMusicStore.setState({ playList: playlist.slice(), playSongData: song });
-  await initPlayer(true);
+  useMusicStore.setState({ playList: initialQueue, playSongData: song });
+  const playback = initPlayer(true);
+
+  if (loadPlaybackList) {
+    void loadPlaybackList().then((fullList) => {
+      const { isInRoom, playMode } = useStatusStore.getState();
+      // 切换歌单或手动编辑队列后，后台结果已不再属于当前队列。
+      if (isInRoom || playMode !== "normal" || useMusicStore.getState().playList !== initialQueue)
+        return;
+      if (!fullList || fullList.length <= initialQueue.length ||
+          !initialQueue.every((item, i) => songIdentityKey(item) === songIdentityKey(fullList[i])))
+        return;
+      useMusicStore.setState({ playList: fullList });
+    });
+  }
+  await playback;
 };
 
 /** 下一首播放(房内改为添加到一起听队列,对齐「房内一切歌曲操作入共享清单」语义) */

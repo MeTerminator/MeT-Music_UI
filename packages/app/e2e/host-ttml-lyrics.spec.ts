@@ -66,3 +66,77 @@ test("宿主 Hook 优先推送 TTML 后触发的主唱/对唱，过滤背景人�
   expect(result.nowPlaying).toMatchObject({ lyricText: "对唱", lyricLineCount: 2, lyricAvailable: true });
   expect(result.fallback).toMatchObject({ lyricText: "普通歌词", lyricData: [] });
 });
+
+test("底栏歌词按桌面规则选择 TTML 和逐字进度，无 TTML 时回退", async ({ page }) => {
+  await seedPlayback(page);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route(/^https?:\/\/[^/]+\/api\//, (route) => route.fulfill({ status: 404, json: {} }));
+  await page.goto("/app/#/");
+  await page.waitForFunction(() => Boolean((window as any).__debugStores));
+  await page.evaluate(() => {
+    const { music, status, settings } = (window as any).__debugStores;
+    const line = (word: string, startTime: number, isBG = false, isDuet = false) => ({
+      startTime, endTime: startTime + 2000, isBG, isDuet,
+      words: [{ word, startTime, endTime: startTime + 2000, romanWord: "", obscene: false }],
+      translatedLyric: "", romanLyric: "",
+    });
+    music.setState({
+      playSongLyric: {
+        ...music.getState().playSongLyric,
+        hasTtml: true,
+        ttml: [line("底栏主唱", 1000), line("底栏对唱", 1500, false, true), line("底栏背景", 1800, true)],
+        hasYrc: true,
+        yrc: [{ time: 0, endTime: 10, content: [{ content: "底栏逐字", time: 0, duration: 10, endsWithSpace: false }] }],
+        lrc: [{ time: 0, content: "底栏普通歌词" }],
+      },
+    });
+    settings.setState({
+      bottomLyricShow: true, showYrc: false, showYrcAnimation: true,
+      lyricsOffset: 5, lyricsHookOffset: 5, lyricsShiftMs: 0, lyricsAMttmlUseOffset: false,
+    });
+    status.setState({
+      playState: true, playSongLyricIndex: -1,
+      playTimeData: { ...status.getState().playTimeData, currentTime: 2 },
+    });
+  });
+
+  const duet = page.getByText("底栏对唱", { exact: true });
+  await expect(duet).toBeVisible();
+  await expect(duet).toHaveCSS("background-position-x", "75%");
+  await expect(page.getByText("底栏背景", { exact: true })).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const { status, settings } = (window as any).__debugStores;
+    settings.setState({ lyricsShiftMs: 1000, lyricsAMttmlUseOffset: true, lyricsAMOffset: 200 });
+    status.setState({ playTimeData: { ...status.getState().playTimeData, currentTime: 2 } });
+  });
+  const main = page.getByText("底栏主唱", { exact: true });
+  await expect(main).toBeVisible();
+  await expect(main).toHaveCSS("background-position-x", "90%");
+
+  await page.evaluate(() => {
+    const { status } = (window as any).__debugStores;
+    status.setState({
+      playTimeData: { ...status.getState().playTimeData, currentTime: 0.5 },
+      playSongLyricIndex: 0,
+    });
+  });
+  await expect(main).toHaveCount(0);
+  await expect(page.getByText("底栏普通歌词", { exact: true })).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const { music } = (window as any).__debugStores;
+    music.setState({ playSongLyric: { ...music.getState().playSongLyric, hasTtml: false, ttml: [] } });
+  });
+  await expect(page.getByText("底栏普通歌词", { exact: true })).toBeVisible();
+
+  await page.evaluate(() => {
+    const { status, settings } = (window as any).__debugStores;
+    settings.setState({ showYrc: true });
+    status.setState({
+      playTimeData: { ...status.getState().playTimeData, currentTime: 2 },
+      playSongLyricIndex: 0,
+    });
+  });
+  await expect(page.getByText("底栏逐字", { exact: true })).toHaveCSS("background-position-x", "30%");
+});

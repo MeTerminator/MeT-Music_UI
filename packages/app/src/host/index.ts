@@ -16,6 +16,8 @@ import {
   computeWordProgress,
   getSeek,
   getTtmlCurrentLyric,
+  getTtmlPlaybackOffset,
+  getTtmlPlaybackTime,
   playOrPause,
   refreshPlayProgress,
   setSeek,
@@ -58,11 +60,7 @@ export const useHostStore = create<HostState>()(() => ({
 const getHostTtmlLyric = (currentTime: number) => {
   const lyric = useMusicStore.getState().playSongLyric;
   if (!lyric.hasTtml || !lyric.ttml?.length) return null;
-  const settings = useSettingsStore.getState();
-  const timeMs = Math.max(0, Math.round(
-    currentTime * 1000 + (settings.lyricsAMttmlUseOffset ? settings.lyricsAMOffset : 0)
-    - settings.lyricsShiftMs,
-  ));
+  const timeMs = getTtmlPlaybackTime(currentTime, useSettingsStore.getState());
   return getTtmlCurrentLyric(lyric.ttml, timeMs);
 };
 
@@ -199,8 +197,7 @@ const broadcastPlaybackSync = (force = false): void => {
       if (!payload) return;
       const lyric = music.playSongLyric;
       const ttml = lyric.hasTtml && lyric.ttml?.length ? lyric.ttml : null;
-      const ttmlOffset = (settings.lyricsAMttmlUseOffset ? settings.lyricsAMOffset : 0)
-        - settings.lyricsShiftMs;
+      const ttmlOffset = getTtmlPlaybackOffset(settings);
       const data: SongSync = {
         ...payload, ...progress, kind: "song", revision: syncRevision + 1,
         songAlbum: typeof song.album === "string" ? song.album : song.album?.name,

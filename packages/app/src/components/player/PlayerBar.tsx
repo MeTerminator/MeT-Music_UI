@@ -1,4 +1,4 @@
-import { useRef, useState, type WheelEvent } from "react";
+import { useMemo, useRef, useState, type WheelEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Ellipsis,
@@ -21,11 +21,14 @@ import {
 import { toast } from "sonner";
 import {
   changePlayIndex,
+  findTtmlCurrentLine,
+  getTtmlPlaybackTime,
   playOrPause,
   setRate,
   setSeek,
   setVolume,
   setVolumeMute,
+  ttmlLineToYrc,
 } from "@met/core";
 import { DropdownMenu } from "@/components/ui/menu";
 import { Slider } from "@/components/ui/slider";
@@ -117,6 +120,10 @@ export default function PlayerBar() {
   const bottomLyricShow = useSettingsStore((s) => s.bottomLyricShow);
   const showYrc = useSettingsStore((s) => s.showYrc);
   const showYrcAnimation = useSettingsStore((s) => s.showYrcAnimation);
+  const lyricsAMttmlUseOffset = useSettingsStore((s) => s.lyricsAMttmlUseOffset);
+  const lyricsAMOffset = useSettingsStore((s) => s.lyricsAMOffset);
+  const lyricsShiftMs = useSettingsStore((s) => s.lyricsShiftMs);
+  const lyricsHookOffset = useSettingsStore((s) => s.lyricsHookOffset);
   const showPlaylistCount = useSettingsStore((s) => s.showPlaylistCount);
 
   const showPlayBar = useStatusStore((s) => s.showPlayBar);
@@ -136,22 +143,32 @@ export default function PlayerBar() {
   /** 正在为「音乐资源自动缓存」下载整首歌(-1 表示没有在下载) */
   const caching = songCacheProgress >= 0;
 
-  // 底栏歌词:当前逐字行(showYrc 时优先)与整行文本回退
-  const yrcLine =
-    playSongLyric.hasYrc && showYrc
-      ? playSongLyric.yrc[playSongLyricIndex]
-      : undefined;
-  const lyricLine = yrcLine
-    ? yrcLine.content
+  // 与桌面歌词共用 TTML 选行与时间平移，TTML 前奏仍使用底栏的歌手占位。
+  const { currentTime } = playTimeData;
+  const ttml = playSongLyric.hasTtml && playSongLyric.ttml?.length
+    ? playSongLyric.ttml
+    : null;
+  const ttmlTime = getTtmlPlaybackTime(currentTime, {
+    lyricsAMttmlUseOffset,
+    lyricsAMOffset,
+    lyricsShiftMs,
+  });
+  const currentTtml = ttml ? findTtmlCurrentLine(ttml, ttmlTime) : undefined;
+  const ttmlWordLine = useMemo(
+    () => currentTtml ? ttmlLineToYrc(currentTtml) : undefined,
+    [currentTtml],
+  );
+  const useYrc = showYrc && playSongLyric.hasYrc && playSongLyric.yrc.length > 0;
+  const wordLine = ttml
+    ? ttmlWordLine
+    : useYrc ? playSongLyric.yrc[playSongLyricIndex] : undefined;
+  const lyricLine = wordLine
+    ? wordLine.content
         .map((word) => word.content + (word.endsWithSpace ? " " : ""))
         .join("")
-    : (playSongLyric.lrc[playSongLyricIndex]?.content ?? "");
-  // 对齐旧逻辑:开启底栏歌词 && 播放中 && 有当前行 时展示歌词,否则展示歌手(暂停回退歌手)
-  const showBottomLyric =
-    bottomLyricShow &&
-    playState &&
-    playSongLyricIndex >= 0 &&
-    lyricLine.length > 0;
+    : ttml || useYrc ? "" : (playSongLyric.lrc[playSongLyricIndex]?.content ?? "");
+  const lyricKey = ttml ? `ttml-${currentTtml?.startTime}` : playSongLyricIndex;
+  const showBottomLyric = bottomLyricShow && playState && lyricLine.trim().length > 0;
 
   const commitSeek = (percent: number) => {
     const { duration } = useStatusStore.getState().playTimeData;
@@ -251,7 +268,7 @@ export default function PlayerBar() {
                   {/* 两行占据同一格,同步上移一行高度;窗口裁掉进出部分。 */}
                   <AnimatePresence key={playSongData.id} initial={false}>
                     <motion.div
-                      key={`${playSongLyricIndex}:${lyricLine}`}
+                      key={`${lyricKey}:${lyricLine}`}
                       className="col-start-1 row-start-1 h-4 min-w-0 leading-4"
                       initial={{ y: reducedMotion ? 0 : "100%" }}
                       animate={{ y: 0 }}
@@ -264,9 +281,12 @@ export default function PlayerBar() {
                       {/* 逐字动画开启时 KTV 染色(已唱主题色 / 未唱暗色),否则整行文本。
                       逐字行走 autoScroll:整行超宽时横向滚动,当前字保持居中
                       (故此处不能再套 truncate,由 KtvLine 自己 overflow-hidden) */}
-                      {yrcLine && showYrcAnimation ? (
+                      {wordLine && showYrcAnimation ? (
                         <KtvLine
-                          line={yrcLine}
+                          line={wordLine}
+                          timing={ttml
+                            ? { currentTime: ttmlTime / 1000, offset: 0 }
+                            : { currentTime, offset: lyricsHookOffset }}
                           activeColor="var(--met-primary)"
                           inactiveColor="var(--met-fg-dim)"
                           autoScroll

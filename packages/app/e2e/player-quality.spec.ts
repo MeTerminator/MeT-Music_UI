@@ -353,10 +353,32 @@ test("NetEase uses the same per-play selector without changing its global prefer
   ).toBe("hires");
 
   await page.getByTestId("quality-trigger-bar").click();
-  const sky = page.getByRole("menuitem", { name: "沉浸环绕声", exact: true });
-  await expect(sky).toContainText("取链确认");
+  const sky = page.getByRole("menuitem", { name: "沉浸环绕声，音质待确认", exact: true });
+  await expect(sky).toContainText("音质待确认");
   await sky.click();
   await expect.poll(async () => (await state(page)).quality?.switching).toBe(false);
   expect((await state(page)).quality?.actualLevel).toBe("sky");
   expect((await state(page)).seek).toBeCloseTo(12.5, 1);
+});
+
+
+test("网易云待确认音质不可播放时提示无音源或回退", async ({ page }) => {
+  await setup(page, false, true, true);
+  await seek(page, 12.5);
+  await page.route(
+    (url) => url.pathname.endsWith("/song/url/v1") && url.searchParams.get("level") === "jymaster",
+    (route) => route.fulfill({ json: { code: 200, data: [] } }),
+  );
+
+  const trigger = page.getByTestId("quality-trigger-bar");
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "超清母带，音质待确认", exact: true }).click();
+  await expect(page.getByText("音质切换失败，已保留原音质")).toBeVisible();
+  expect((await state(page)).quality).toMatchObject({ actualLevel: "lossless", overrideLevel: null });
+  expect((await state(page)).seek).toBeCloseTo(12.5, 1);
+
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "高清臻音，音质待确认", exact: true }).click();
+  await expect(page.getByText("所选音质不可用，已使用可播放音质")).toBeVisible();
+  await expect(trigger).toContainText("无损");
 });

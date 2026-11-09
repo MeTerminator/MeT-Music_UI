@@ -1,8 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function mockPlaylist(page: Page, trackCount: number, platform = "qq") {
+async function mockPlaylist(
+  page: Page,
+  trackCount: number,
+  platform = "qq",
+  beforePage?: (offset: number) => Promise<void>,
+) {
   const requests: { limit: number; offset: number }[] = [];
-  await page.route("**/api/web/**", (route) => {
+  await page.route("**/api/web/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("/playlist/detail")) {
       return route.fulfill({ json: { code: 200, playlist: {
@@ -14,6 +19,7 @@ async function mockPlaylist(page: Page, trackCount: number, platform = "qq") {
       const limit = Number(url.searchParams.get("limit"));
       const offset = Number(url.searchParams.get("offset"));
       requests.push({ limit, offset });
+      await beforePage?.(offset);
       return route.fulfill({ json: {
         code: 200,
         songs: Array.from({ length: Math.max(0, Math.min(limit, trackCount - offset)) }, (_, index) => {
@@ -83,18 +89,42 @@ test("分页歌单搜索可以找到尚未浏览的歌曲", async ({ page }) => 
   await expect(rows).toHaveCount(firstLimit);
 });
 
-test("点播时建立完整队列，浏览区继续分页显示", async ({ page }) => {
-  const requests = await mockPlaylist(page, 900);
+test("点播先播放所选歌曲，后台补齐队列并保留浏览分页", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("siteSettings", JSON.stringify({ simulationPlaying: true }));
+  });
+  let releaseRemaining!: () => void;
+  const remaining = new Promise<void>((resolve) => { releaseRemaining = resolve; });
+  const requests = await mockPlaylist(page, 900, "qq", async (offset) => {
+    if (offset > 0) await remaining;
+  });
   const rows = page.locator("main ul > li");
   await expect(rows.first()).toBeVisible();
   const firstLimit = requests[0].limit;
-  await rows.nth(1).getByRole("button", { name: "播放 歌曲 2", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => {
-    const stores = (window as unknown as {
-      __debugStores: { music: { getState: () => { playList: { name: string }[] } } };
-    }).__debugStores;
-    return stores.music.getState().playList.at(-1)?.name;
-  })).toBe("歌单最后一首");
+  const playback = () => page.evaluate(() => {
+    const { music, status } = (window as any).__debugStores;
+    return {
+      song: music.getState().playSongData.name,
+      playing: status.getState().playState,
+      index: status.getState().playIndex,
+      queueLength: music.getState().playList.length,
+      last: music.getState().playList.at(-1)?.name,
+    };
+  });
+
+  try {
+    await rows.nth(1).getByRole("button", { name: "播放 歌曲 2", exact: true }).click();
+    await expect.poll(playback).toMatchObject({
+      song: "歌曲 2", playing: true, index: 1, queueLength: firstLimit,
+    });
+    await expect.poll(() => requests.length).toBe(2);
+  } finally {
+    releaseRemaining();
+  }
+
+  await expect.poll(playback).toMatchObject({
+    song: "歌曲 2", playing: true, index: 1, queueLength: 900, last: "歌单最后一首",
+  });
   await expect(rows).toHaveCount(firstLimit);
   expect(requests.slice(1).map(({ offset }) => offset)).toEqual([firstLimit, firstLimit + 800]);
 });
