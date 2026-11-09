@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 export interface SelectOption<V extends string = string> {
   value: V;
   label: string;
+  disabledReason?: string;
 }
 
 export interface SelectProps<V extends string = string> {
@@ -11,6 +12,7 @@ export interface SelectProps<V extends string = string> {
   options: readonly SelectOption<V>[];
   onValueChange: (value: V) => void;
   disabled?: boolean;
+  ariaLabel?: string;
   className?: string;
 }
 
@@ -20,6 +22,7 @@ export const Select = <V extends string = string>({
   options,
   onValueChange,
   disabled,
+  ariaLabel,
   className = "",
 }: SelectProps<V>) => (
   <BaseSelect.Root
@@ -29,6 +32,7 @@ export const Select = <V extends string = string>({
     disabled={disabled}
   >
     <BaseSelect.Trigger
+      aria-label={ariaLabel}
       className={`flex h-9 min-w-36 cursor-pointer items-center justify-between gap-2 rounded-lg border border-[var(--met-border)] bg-[var(--met-bg-elevated)] px-3 text-sm text-[var(--met-fg)] hover:border-[var(--met-primary)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40 ${className}`}
     >
       <BaseSelect.Value />
@@ -44,9 +48,13 @@ export const Select = <V extends string = string>({
             <BaseSelect.Item
               key={opt.value}
               value={opt.value}
-              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-[var(--met-fg)] outline-none data-[highlighted]:bg-[var(--met-bg-hover)] data-[selected]:text-[var(--met-primary)]"
+              disabled={!!opt.disabledReason}
+              className="flex flex-wrap cursor-pointer items-center gap-x-2 px-3 py-1.5 text-sm text-[var(--met-fg)] outline-none data-[highlighted]:bg-[var(--met-bg-hover)] data-[selected]:text-[var(--met-primary)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
             >
               <BaseSelect.ItemText>{opt.label}</BaseSelect.ItemText>
+              {opt.disabledReason ? (
+                <span className="text-xs text-[var(--met-fg-dim)]">{opt.disabledReason}</span>
+              ) : null}
             </BaseSelect.Item>
           ))}
         </BaseSelect.Popup>

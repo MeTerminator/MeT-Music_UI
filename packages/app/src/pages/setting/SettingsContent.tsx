@@ -9,7 +9,7 @@
  */
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { soundStop } from "@met/core";
+import { normalizeQQPlaybackLevel, soundStop } from "@met/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { cleanAll, getSessionId } from "@/platform/web";
@@ -42,7 +42,7 @@ import {
   songLevelData,
   songLevelOptions,
   neteaseSongLevelData,
-  neteaseSongLevelOptions,
+  neteasePlaybackOptionsFor,
   themeAutoCoverTypeOptions,
   themeColorOptions,
   themeTypeOptions,
@@ -70,6 +70,10 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const [resetOpen, setResetOpen] = useState(false);
   const [lyricCacheDraft, setLyricCacheDraft] = useState<string | null>(null);
   const sessionId = getSessionId();
+  const qqLevel = normalizeQQPlaybackLevel(settings.songLevel);
+  const qqOption = songLevelData[qqLevel];
+  const neteaseOptions = neteasePlaybackOptionsFor(settings.neteaseSongLevel);
+  const neteaseOption = neteaseOptions.find(({ value }) => value === settings.neteaseSongLevel);
 
   // 明暗模式切换(对齐旧 setThemeType:setState + toast + 关闭跟随系统)
   const changeThemeType = (value: "light" | "dark") => {
@@ -245,17 +249,11 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
               <SettingSection title="播放">
                 <SettingItem
                   name="QQ 音乐音质选择"
-                  tip={songLevelData[settings.songLevel]?.tip ?? ""}
+                  tip={qqOption?.disabledReason ?? qqOption?.tip}
                 >
                   <Select
-                    value={
-                      songLevelData[settings.songLevel]
-                        ? settings.songLevel
-                        : (songLevelOptions.find((o) => o.value === "hq")
-                            ?.value ??
-                          songLevelOptions[0]?.value ??
-                          "")
-                    }
+                    ariaLabel="QQ 音乐音质选择"
+                    value={qqLevel}
                     options={songLevelOptions}
                     onValueChange={(v) => set({ songLevel: v })}
                     className="w-52"
@@ -263,11 +261,12 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
                 </SettingItem>
                 <SettingItem
                   name="网易云音乐音质选择"
-                  tip={`${neteaseSongLevelData[settings.neteaseSongLevel]?.tip ?? ""}。实际音质取决于歌曲、账号权益和设备，缺少所选音质时由网易云回退。`}
+                  tip={`${neteaseOption?.disabledReason ?? neteaseSongLevelData[settings.neteaseSongLevel]?.tip ?? ""}。实际音质取决于歌曲、账号权益和设备，缺少所选音质时由网易云回退。`}
                 >
                   <Select
+                    ariaLabel="网易云音乐音质选择"
                     value={settings.neteaseSongLevel}
-                    options={neteaseSongLevelOptions}
+                    options={neteaseOptions}
                     onValueChange={(v) => set({ neteaseSongLevel: v })}
                     className="w-52"
                   />

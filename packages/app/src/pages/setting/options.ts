@@ -3,31 +3,43 @@
  */
 import type { SelectOption } from "@/components/ui/select";
 
-import { qqPlaybackQualities, qqSpatialCodec } from "@met/core";
+import {
+  NETEASE_LEVELS,
+  neteasePlaybackQualities,
+  qqPlaybackQualities,
+  qqQualities,
+  qqSpatialCodec,
+} from "@met/core";
 import { supportedSpatialCodecs } from "@/player/spatial/prepare";
 import { supportedQQCodecs } from "@/player/qq-codecs";
 
-export const songLevelData: Record<
-  string,
-  { label: string; tip: string; value: string }
-> = Object.fromEntries(
-  qqPlaybackQualities(supportedQQCodecs(), supportedSpatialCodecs()).map((q) => [
-    q.key.toLowerCase(),
-    {
-      label: q.label,
-      value: q.key.toLowerCase(),
-      tip:
-        qqSpatialCodec(q.key)
-          ? "使用前端解码器输出双声道"
-          : q.codec === "nac"
-            ? "使用本机 NAC 解码器播放"
-            : "缺少所选音质时回退到当前浏览器支持的音频；实际规格以音源为准",
-    },
-  ]),
-);
-export const songLevelOptions: SelectOption[] = Object.values(
-  songLevelData,
-).map(({ label, value }) => ({ label, value }));
+const codecs = supportedQQCodecs();
+const spatial = supportedSpatialCodecs();
+const playableQQ = qqPlaybackQualities(codecs, spatial);
+const playableNetease = neteasePlaybackQualities(codecs, spatial);
+
+export const songLevelData: Record<string, SelectOption & { tip: string }> =
+  Object.fromEntries(
+    qqQualities.flatMap((quality) => {
+      const softwareCodec = qqSpatialCodec(quality.key);
+      if (!quality.codec && !softwareCodec) return [];
+
+      const value = quality.key.toLowerCase();
+      const decoder = softwareCodec === "mpegh" ? "MPEG-H"
+        : softwareCodec === "vorbis" ? "多声道 Vorbis"
+        : quality.codec === "nac" ? "NAC" : undefined;
+      const disabledReason = playableQQ.some((q) => q.key === quality.key)
+        ? undefined
+        : decoder ? `当前环境未启用 ${decoder} 解码器` : "当前浏览器不支持此编码";
+      const tip = softwareCodec
+        ? "使用前端解码器输出双声道"
+        : quality.codec === "nac"
+          ? "使用本机 NAC 解码器播放"
+          : "缺少所选音质时回退到当前浏览器支持的音质，实际规格以音源为准";
+      return [[value, { label: quality.label, value, tip, disabledReason }]];
+    }),
+  );
+export const songLevelOptions: SelectOption[] = Object.values(songLevelData);
 
 export const neteaseSongLevelData: Record<
   string,
@@ -47,8 +59,27 @@ export const neteaseSongLevelData: Record<
 export const neteaseSongLevelOptions: SelectOption[] = Object.entries(
   neteaseSongLevelData,
 )
-  .filter(([level]) => level !== "vivid" || supportedSpatialCodecs().includes("av3a"))
+  .filter(([level]) => level !== "vivid" || spatial.includes("av3a"))
   .map(([value, { label }]) => ({ label, value }));
+
+export const neteasePlaybackOptions: SelectOption[] = NETEASE_LEVELS
+  .filter((level) => level !== "dolby")
+  .map((value) => ({
+    value,
+    label: neteaseSongLevelData[value].label,
+    disabledReason: playableNetease.includes(value)
+      ? undefined
+      : value === "vivid" ? "当前环境未启用 AVS3 解码器" : "当前浏览器不支持此编码",
+  }));
+
+// 已保存的杜比偏好仍可识别，重新选择时按当前前端解码能力提供档位。
+const savedDolbyOption: SelectOption = {
+  value: "dolby",
+  label: neteaseSongLevelData.dolby.label,
+  disabledReason: "当前前端尚未适配杜比",
+};
+export const neteasePlaybackOptionsFor = (savedLevel: string): SelectOption[] =>
+  savedLevel === "dolby" ? [...neteasePlaybackOptions, savedDolbyOption] : neteasePlaybackOptions;
 
 /** 主题数据 */
 export const themeColorOptions: SelectOption[] = [
