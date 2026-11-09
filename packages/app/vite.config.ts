@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
@@ -9,6 +10,14 @@ import { VitePWA } from "vite-plugin-pwa";
 // 与旧 Vue 应用部署参数保持一致:base=/app/、dev 代理 /api、端口 3000
 export default defineConfig({
   base: "/app/",
+
+  define: {
+    __SPATIAL_DECODERS__: JSON.stringify(["mpegh", "av3a"].filter((codec) =>
+      ["js", "wasm"].every((ext) =>
+        existsSync(resolve(import.meta.dirname, `public/spatial/${codec}.${ext}`)),
+      ),
+    )),
+  },
 
   resolve: {
     alias: {
@@ -36,7 +45,7 @@ export default defineConfig({
       ],
       workbox: {
         // NAC 模型/运行时按需加载，避免每次安装 PWA 都下载解码资源。
-        globIgnores: ["**/nac/**"],
+        globIgnores: ["**/nac/**", "**/spatial/**"],
         clientsClaim: true,
         skipWaiting: true,
         cleanupOutdatedCaches: true,

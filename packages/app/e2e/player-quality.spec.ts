@@ -79,7 +79,9 @@ async function setup(
       const actual = netease
         ? level === "EXHIGH"
           ? "exhigh"
-          : "lossless"
+          : level === "SKY"
+            ? "sky"
+            : "lossless"
         : level === "HQ"
           ? "HQ"
           : "SQ";
@@ -347,4 +349,12 @@ test("NetEase uses the same per-play selector without changing its global prefer
       () => (window as any).__debugStores.settings.getState().neteaseSongLevel,
     ),
   ).toBe("hires");
+
+  await page.getByTestId("quality-trigger-bar").click();
+  const sky = page.getByRole("menuitem", { name: "沉浸环绕声", exact: true });
+  await expect(sky).toContainText("取链确认");
+  await sky.click();
+  await expect.poll(async () => (await state(page)).quality?.switching).toBe(false);
+  expect((await state(page)).quality?.actualLevel).toBe("sky");
+  expect((await state(page)).seek).toBeCloseTo(12.5, 1);
 });

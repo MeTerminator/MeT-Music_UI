@@ -149,6 +149,7 @@ vi.mock("howler", () => ({
 }));
 
 import * as songApi from "../src/api/song";
+import * as extraApi from "../src/api/extra";
 import {
   configurePlayer,
   createPlayer,
@@ -488,6 +489,31 @@ describe("current-play quality override", () => {
     expect(FakeHowl.instances.at(-1)?.opts.rate).toBe(1.25);
     expect(FakeHowl.instances.at(-1)?.volume()).toBe(f.status.playVolume);
     expect(request.mock.calls[1][1]).toBe("HQ");
+  });
+
+  it("requests the exact QQ spatial resource and hands it to the matching decoder", async () => {
+    const f = makeFixture();
+    f.deps.env.supportedSpatialCodecs = () => ["vorbis"];
+    const native = vi.spyOn(songApi, "getSongUrl").mockResolvedValue(response("SQ"));
+    const url = "https://media.example/spatial.ogg";
+    const exact = vi.spyOn(extraApi, "getMusicUrl").mockResolvedValue([{
+      track_info: { mid: "1", file_url: url, file_quality: "Q360V3" },
+    }]);
+    const stream = new FakeHowl({});
+    const decode = vi.fn(async () => {
+      setTimeout(() => stream.emit("load"), 0);
+      return { player: stream, dispose: () => {} };
+    });
+    f.deps.env.decodeSpatial = decode;
+
+    await initPlayer(false);
+    setSeek(22);
+    expect(await switchPlaybackQuality("Q360V3")).toBe(true);
+    expect(native).toHaveBeenCalledOnce();
+    expect(exact).toHaveBeenCalledWith(1, "Q360V3", "qq");
+    expect(decode).toHaveBeenCalledWith("vorbis", url, expect.any(AbortSignal), expect.any(Function));
+    expect(getSeek()).toBe(22);
+    expect(f.status.playbackQuality?.actualLevel).toBe("Q360V3");
   });
 
   it("keeps a playing song running at its seek after the quality reload", async () => {

@@ -31,7 +31,8 @@ import { webMediaSession } from "@/platform/media-session";
 import { getBlobUrlFromUrl, getSessionId } from "@/platform/web";
 import { decodeNacUrl } from "./nac/prepare";
 import { supportedQQCodecs } from "./qq-codecs";
-import { unlockNacAudio } from "./nac/stream-audio";
+import { decodeSpatialUrl, supportedSpatialCodecs } from "./spatial/prepare";
+import { unlockPcmAudio } from "./nac/stream-audio";
 import { broadcastHook } from "@/host";
 
 /** UI 反馈(sonner toast;fatal 用原生 confirm 兜底) */
@@ -98,7 +99,9 @@ export const setupPlayer = (): void => {
       reload: () => location.reload(),
       toBlobUrl: getBlobUrlFromUrl,
       decodeNac: decodeNacUrl,
-      unlockNac: unlockNacAudio,
+      unlockNac: unlockPcmAudio,
+      supportedSpatialCodecs,
+      decodeSpatial: decodeSpatialUrl,
       // 封面取色:写入 coverBackground(引擎)与 coverTheme(取色实现内部 setState)
       coverGradient: getCoverGradient,
       onTick: broadcastHook,

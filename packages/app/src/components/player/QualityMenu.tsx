@@ -5,6 +5,7 @@ import { Check, Loader2 } from "lucide-react";
 import {
   api,
   playbackLevel,
+  neteasePlaybackQualities,
   qqQualities,
   qqPlaybackQualities,
   songIdentityKey,
@@ -14,6 +15,7 @@ import {
 import { useMusicStore } from "@/stores/music";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
+import { supportedSpatialCodecs } from "@/player/spatial/prepare";
 import { supportedQQCodecs } from "@/player/qq-codecs";
 import { menuPopupClassName } from "@/components/ui/menu";
 
@@ -29,6 +31,9 @@ const neteaseLabels: Record<string, string> = {
   jymaster: "超清母带",
   sky: "沉浸环绕声",
 };
+// NetEase's playback metadata lists the base qualities. The URL API still accepts these levels.
+const neteaseLevelsToTry = ["jyeffect", "sky", "jymaster", "vivid"];
+
 const shortLabels: Record<string, string> = {
   WEB: "标准",
   HQ: "HQ",
@@ -89,20 +94,15 @@ export default function QualityMenu({
     info.data?.[String(song.id)]?.track_info.available_qualities ??
     null;
   const codecs = supportedQQCodecs();
-  const playable =
+  const spatial = supportedSpatialCodecs();
+  const playable = new Set<string>(
     platform === "qq"
-      ? new Set<string>(qqPlaybackQualities(codecs).map((q) => q.key))
-      : new Set(
-          ["standard", "higher", "exhigh", "lossless", "hires"].filter(
-            (level) =>
-              codecs.includes(
-                ["lossless", "hires"].includes(level) ? "flac" : "mp3",
-              ),
-          ),
-        );
-  const choices = (available ?? [])
-    .map(normalize)
-    .filter((level) => playable.has(level));
+      ? qqPlaybackQualities(codecs, spatial).map((q) => q.key)
+      : neteasePlaybackQualities(codecs, spatial),
+  );
+  const advertised = (available ?? []).map(normalize);
+  const extraLevels = platform === "netease" ? neteaseLevelsToTry : [];
+  const choices = [...advertised, ...extraLevels].filter((level) => playable.has(level));
   const levels = [
     ...new Set([...choices, ...(actual ? [actual] : []), desired]),
   ];
@@ -180,6 +180,8 @@ export default function QualityMenu({
                 const current = level === actual;
                 const preferred = level === desired;
                 const supported = choices.includes(level);
+                const needsConfirmation =
+                  !current && supported && extraLevels.includes(level) && !advertised.includes(level);
                 return (
                   <Menu.Item
                     key={level}
@@ -204,6 +206,11 @@ export default function QualityMenu({
                       {!supported && !current ? (
                         <span className="py-0.5 text-[var(--met-fg-dim)]">
                           不可选
+                        </span>
+                      ) : null}
+                      {needsConfirmation ? (
+                        <span className="py-0.5 text-[var(--met-fg-dim)]">
+                          取链确认
                         </span>
                       ) : null}
                       {current ? (

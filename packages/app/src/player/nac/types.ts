@@ -1,3 +1,5 @@
+export const PCM_BLOCK_SAMPLES = 8192;
+
 /** 双声道 PCM；每个声道独立连续存储。 */
 export type StereoChannels = [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>];
 

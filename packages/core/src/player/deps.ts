@@ -1,3 +1,4 @@
+import type { SpatialCodec } from "../qq-qualities";
 /**
  * 播放引擎的依赖注入边界。
  *
@@ -179,7 +180,14 @@ export interface PlayerEnv {
     url: string,
     onProgress?: (percent: number) => void,
   ): Promise<string>;
-  /** 在取链前的用户手势内解锁 NAC 音频上下文。 */
+  supportedSpatialCodecs?(): readonly SpatialCodec[];
+  decodeSpatial?(
+    codec: SpatialCodec,
+    url: string,
+    signal: AbortSignal,
+    onProgress: (percent: number) => void,
+  ): Promise<{ player: PlayerAudio; dispose(): void }>;
+  /** 在取链前的用户手势内解锁 PCM 音频上下文。 */
   unlockNac?(): void;
   /** NAC 首块就绪即返回播放器；后台继续解码，dispose 释放资源。 */
   decodeNac?(

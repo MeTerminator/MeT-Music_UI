@@ -1,5 +1,11 @@
-import { qqPlaybackQualities } from "../qq-qualities";
-import { playbackLevel, songPlatform } from "../types/platform";
+import { qqPlaybackQualities, qqQualities } from "../qq-qualities";
+import {
+  neteasePlaybackQualities,
+  playbackLevel,
+  songPlatform,
+  spatialPlaybackCodec,
+  type Platform,
+} from "../types/platform";
 /**
  * 播放引擎。自旧 src/utils/Player.js(1391 行)逐函数移植,逻辑照抄;
  * 全部隐式依赖(Pinia / $message / mediaSession / DOM)改经 PlayerDeps 注入,
@@ -25,6 +31,7 @@ import { Howl, Howler } from "howler";
 import type { CoverSize, Song } from "../types/song";
 import { emptyLyric, songIdentityKey } from "../types/song";
 import { getSongUrl, getSongLyric, getAMttmlLyric } from "../api/song";
+import { getMusicUrl } from "../api/extra";
 import { parseLyric } from "../lyrics/parse";
 import { applyProfanityUncensor } from "../lyrics/profanity";
 import { getSongPlayTime } from "../lib/time";
@@ -186,11 +193,8 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
     const music = deps.music();
     const status = deps.status();
     const settings = deps.settings();
-    if (
-      settings.songLevel === "nac" &&
-      songPlatform(music.getPlaySongData) === "qq"
-    )
-      deps.env.unlockNac?.();
+    const platform = songPlatform(music.getPlaySongData);
+    unlockDecodedAudio(platform, playbackLevel(settings, platform));
     // 在封面、播放地址等任何异步操作前清空，失败时也不能保留上一曲歌词。
     music.playSongLyricStatus =
       status.playMode === "dj" || !music.getPlaySongData?.id
@@ -369,6 +373,47 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
   }
 };
 
+const supportsSpatial = (platform: Platform, level?: string | null) => {
+  const codec = spatialPlaybackCodec(platform, level);
+  return codec && deps.env.supportedSpatialCodecs?.().includes(codec) ? codec : undefined;
+};
+
+const unlockDecodedAudio = (platform: Platform, level: string) => {
+  if ((platform === "qq" && level.toLowerCase() === "nac") || supportsSpatial(platform, level))
+    deps.env.unlockNac?.();
+};
+
+const getPlaybackItem = async (id: Song["id"], level: string, platform: Platform) => {
+  const spatial = spatialPlaybackCodec(platform, level);
+  const hasDecoder = supportsSpatial(platform, level);
+  if (platform === "qq" && hasDecoder) {
+    // The backend's playback negotiation only lists native formats and NAC.
+    // Its exact-quality endpoint exposes the unencrypted spatial resources.
+    try {
+      const [detail] = await getMusicUrl(id, level, platform);
+      const track = detail?.track_info;
+      if (track?.file_url && track.file_quality?.toUpperCase() === level.toUpperCase()) {
+        return {
+          url: track.file_url,
+          level: track.file_quality,
+          track_info: track,
+          isTrial: false,
+        };
+      }
+    } catch (error) {
+      console.warn("QQ 全景声音质取链失败，尝试常规音质", error);
+    }
+  }
+  const requested = spatial === "av3a" && !hasDecoder ? "exhigh" : level;
+  const response = await getSongUrl(
+    id,
+    requested,
+    platform,
+    platform === "qq" ? deps.env.supportedQQCodecs?.() : undefined,
+  );
+  return response.data?.[0];
+};
+
 /**
  * 获取普通模式下的音乐播放地址
  * @param id - 歌曲 id
@@ -383,37 +428,32 @@ const getNormalSongUrl = async (
   try {
     const settings = deps.settings();
     const platform = songPlatform(deps.music().getPlaySongData);
-    const res = await getSongUrl(
-      id,
-      playbackLevel(settings, platform),
-      platform,
-      platform === "qq" ? deps.env.supportedQQCodecs?.() : undefined,
-    );
-    // 检查是否有有效的响应数据
-    if (!res.data?.[0] || !res.data?.[0]?.url) return null;
+    const requestedLevel = playbackLevel(settings, platform);
+    const item = await getPlaybackItem(id, requestedLevel, platform);
+    if (!item?.url) return null;
     if (playId !== currentPlayId) return null;
     const songKey = songIdentityKey(deps.music().getPlaySongData);
     const quality: PlaybackQualityState = {
       songKey,
-      actualLevel: res.data[0].level || null,
-      requestedLevel: playbackLevel(settings, platform),
-      availableLevels: res.data[0].track_info?.available_qualities ?? null,
+      actualLevel: item.level || null,
+      requestedLevel,
+      availableLevels: item.track_info?.available_qualities ?? null,
       overrideLevel: null,
       switching: false,
     };
     status.playbackQuality = quality;
     currentResource = {
       songKey,
-      url: res.data[0].url.replace(/^http:/, "https:"),
+      url: item.url.replace(/^http:/, "https:"),
       quality,
     };
-    if (res.data[0].isTrial) {
+    if (item.isTrial) {
       deps.notify.warning(
         "网易云当前返回试听音频，请检查服务器账号登录状态及 VIP 权益",
       );
     }
     // 返回歌曲地址，将 http 转换为 https
-    const url: string = res.data[0].url.replace(/^http:/, "https:");
+    const url: string = item.url.replace(/^http:/, "https:");
     // 更改状态
     if (playNow && url) status.playState = true;
     return url;
@@ -500,30 +540,30 @@ export const createPlayer = async (
     let preparedFormat: string | undefined;
     let preparedPlayer: PlayerAudio | undefined;
     let preparing = true;
-    const needsNac =
-      /\.nac(?:[?#]|$)/i.test(src) ||
-      (songPlatform(playSongData) === "qq" &&
-        (
-          status.playbackQuality?.overrideLevel ?? settings.songLevel
-        ).toLowerCase() === "nac" &&
-        !playSongData.path &&
-        !playSongData.pc &&
-        playMode !== "dj");
-    if (needsNac) {
-      if (!deps.env.decodeNac) throw new Error("当前平台未提供 NAC 解码器");
+    const platform = songPlatform(playSongData);
+    const online = !playSongData.path && !playSongData.pc && playMode !== "dj";
+    const quality = online ? status.playbackQuality : null;
+    const actualLevel = quality?.actualLevel;
+    const level =
+      actualLevel ?? quality?.requestedLevel ??
+      (online ? playbackLevel(settings, platform) : null);
+    const spatial = supportsSpatial(platform, level);
+    const needsNac = /\.nac(?:[?#]|$)/i.test(src) ||
+      (platform === "qq" && level?.toLowerCase() === "nac");
+    if (spatial || needsNac) {
       audioPreparation?.abort();
       const controller = new AbortController();
       audioPreparation = controller;
       status.songCacheProgress = 0;
       try {
-        const prepared = await deps.env.decodeNac(
-          src,
-          controller.signal,
-          (percent) => {
-            if (preparing && isCurrent() && !controller.signal.aborted)
-              status.songCacheProgress = percent;
-          },
-        );
+        const onProgress = (percent: number) => {
+          if (preparing && isCurrent() && !controller.signal.aborted)
+            status.songCacheProgress = percent;
+        };
+        const prepared = spatial
+          ? await deps.env.decodeSpatial?.(spatial, src, controller.signal, onProgress)
+          : await deps.env.decodeNac?.(src, controller.signal, onProgress);
+        if (!prepared) throw new Error("当前平台未提供此音频解码器");
         if (!isCurrent() || controller.signal.aborted) {
           prepared.dispose();
           return;
@@ -588,14 +628,17 @@ export const createPlayer = async (
     status.playSeekMs = 0;
     status.playSongLyricIndex = -1;
     // blob: 链接没有扩展名,必须显式给 format,否则 Howler 认不出编码直接失败
-    const blobFormat = songUrl.startsWith("blob:")
-      ? [preparedFormat ?? guessAudioFormat(src) ?? "mp3"]
+    const extension = guessAudioFormat(src);
+    const qualityFormat = !extension && actualLevel && platform === "qq"
+      ? qqQualities.find((q) => q.key === actualLevel.toUpperCase())?.extension
       : undefined;
+    const format = preparedFormat ?? extension ?? qualityFormat ??
+      (songUrl.startsWith("blob:") ? "mp3" : undefined);
     player =
       preparedPlayer ??
       new Howl({
         src: [songUrl],
-        ...(blobFormat ? { format: blobFormat } : {}),
+        ...(format ? { format: [format] } : {}),
         html5: html5Player,
         preload: "metadata",
         volume: status.playVolume,
@@ -798,23 +841,11 @@ export const switchPlaybackQuality = async (
   const platform = songPlatform(song);
   const normalized =
     platform === "qq" ? level.toUpperCase() : level.toLowerCase();
-  const allowed =
-    platform === "qq"
-      ? qqPlaybackQualities(
-          deps.env.supportedQQCodecs?.() ?? [
-            "mp3",
-            "aac",
-            "flac",
-            "ogg",
-            "nac",
-          ],
-        ).some((q) => q.key === normalized)
-      : ["standard", "higher", "exhigh", "lossless", "hires"].includes(
-          normalized,
-        ) &&
-        (deps.env.supportedQQCodecs?.() ?? ["mp3", "flac"]).includes(
-          ["lossless", "hires"].includes(normalized) ? "flac" : "mp3",
-        );
+  const spatial = deps.env.supportedSpatialCodecs?.();
+  const codecs = deps.env.supportedQQCodecs?.() ?? ["mp3", "aac", "flac", "ogg", "nac"];
+  const allowed = platform === "qq"
+    ? qqPlaybackQualities(codecs, spatial).some((q) => q.key === normalized)
+    : neteasePlaybackQualities(codecs, spatial).some((level) => level === normalized);
   if (!allowed) return false;
   qualitySwitchController?.abort();
   const controller = new AbortController();
@@ -826,7 +857,7 @@ export const switchPlaybackQuality = async (
     songIdentityKey(deps.music().getPlaySongData) === songKey;
   const previous = { ...resource.quality };
   status.playbackQuality = { ...previous, switching: true };
-  if (normalized === "NAC") deps.env.unlockNac?.();
+  unlockDecodedAudio(platform, normalized);
   let replaced = false;
   let position = 0;
   let wasPlaying = false;
@@ -834,7 +865,7 @@ export const switchPlaybackQuality = async (
     new Promise((resolve, reject) => {
       const timeout = setTimeout(
         () => finish(new Error("Audio load timed out")),
-        20_000,
+        supportsSpatial(platform, status.playbackQuality?.actualLevel) ? 120_000 : 20_000,
       );
       const finish = (error?: Error) => {
         clearTimeout(timeout);
@@ -861,14 +892,8 @@ export const switchPlaybackQuality = async (
       );
     });
   try {
-    const response = await getSongUrl(
-      song.id,
-      normalized,
-      platform,
-      platform === "qq" ? deps.env.supportedQQCodecs?.() : undefined,
-    );
+    const item = await getPlaybackItem(song.id, normalized, platform);
     if (!isCurrent()) return false;
-    const item = response.data?.[0];
     if (!item?.url) throw new Error("No playable audio for this quality");
     // Capture at the end of the request: the old source may have kept playing meanwhile.
     position = getSeek();

@@ -1,5 +1,5 @@
 import { getAssetUrl } from '../../platform/web';
-import { NacStreamAudio } from './stream-audio';
+import { PcmStreamAudio } from './stream-audio';
 import type { PlayerAudio } from '@met/core';
 
 interface PreparedAudio {
@@ -25,7 +25,8 @@ export async function decodeNacUrl(
   let format = 'wav';
   if (magic === 'NAC_') {
     onProgress(0);
-    const player = await NacStreamAudio.open(buffer, new URL(getAssetUrl('nac/'), location.href).href, signal, onProgress);
+    const player = await PcmStreamAudio.open(buffer, new URL(getAssetUrl('nac/'), location.href).href, signal, onProgress,
+      () => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }));
     return { player, dispose: () => player.unload() };
   } else {
     const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase();

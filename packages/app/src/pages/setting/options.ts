@@ -3,23 +3,25 @@
  */
 import type { SelectOption } from "@/components/ui/select";
 
-/** Only formats supported by this browser or the existing NAC decoder. */
-import { qqPlaybackQualities } from "@met/core";
+import { qqPlaybackQualities, qqSpatialCodec } from "@met/core";
+import { supportedSpatialCodecs } from "@/player/spatial/prepare";
 import { supportedQQCodecs } from "@/player/qq-codecs";
 
 export const songLevelData: Record<
   string,
   { label: string; tip: string; value: string }
 > = Object.fromEntries(
-  qqPlaybackQualities(supportedQQCodecs()).map((q) => [
+  qqPlaybackQualities(supportedQQCodecs(), supportedSpatialCodecs()).map((q) => [
     q.key.toLowerCase(),
     {
       label: q.label,
       value: q.key.toLowerCase(),
       tip:
-        q.codec === "nac"
-          ? "使用本机 NAC 解码器播放"
-          : "缺少所选音质时回退到当前浏览器支持的音频；实际规格以音源为准",
+        qqSpatialCodec(q.key)
+          ? "使用前端解码器输出双声道"
+          : q.codec === "nac"
+            ? "使用本机 NAC 解码器播放"
+            : "缺少所选音质时回退到当前浏览器支持的音频；实际规格以音源为准",
     },
   ]),
 );
@@ -38,13 +40,15 @@ export const neteaseSongLevelData: Record<
   hires: { label: "Hi-Res", tip: "高解析度音质" },
   jyeffect: { label: "高清臻音", tip: "高清臻音" },
   dolby: { label: "杜比全景声", tip: "需要设备支持杜比全景声" },
-  vivid: { label: "臻音全景声", tip: "臻音全景声" },
+  vivid: { label: "臻音全景声", tip: "使用前端 AVS3 解码器混合为双声道" },
   jymaster: { label: "超清母带", tip: "超清母带音质" },
   sky: { label: "沉浸环绕声", tip: "沉浸环绕声，默认使用 c51 类型" },
 };
 export const neteaseSongLevelOptions: SelectOption[] = Object.entries(
   neteaseSongLevelData,
-).map(([value, { label }]) => ({ label, value }));
+)
+  .filter(([level]) => level !== "vivid" || supportedSpatialCodecs().includes("av3a"))
+  .map(([value, { label }]) => ({ label, value }));
 
 /** 主题数据 */
 export const themeColorOptions: SelectOption[] = [

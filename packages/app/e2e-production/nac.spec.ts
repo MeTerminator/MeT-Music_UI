@@ -20,6 +20,14 @@ test('生产构建：QQ NAC 首块装载后可播放、暂停并保留真实进�
     if (response.ok()) resources.push(new URL(response.url()).pathname);
   });
   await page.addInitScript(() => {
+    // Chromium does not always expose Worklet fetches as Playwright response events.
+    const loadedWorklets: string[] = [];
+    Object.assign(window, { loadedWorklets });
+    const addModule = AudioWorklet.prototype.addModule;
+    AudioWorklet.prototype.addModule = async function (url, options) {
+      await addModule.call(this, url, options);
+      loadedWorklets.push(new URL(url, location.href).pathname);
+    };
     const song = { id: 'nac-production', name: 'NAC 流式测试', artists: [{ name: '测试' }], duration: '00:24', coverSize: {} };
     localStorage.setItem('siteSettings', JSON.stringify({ songLevel: 'nac', useMusicCache: false, simulationPlaying: false, autoPlay: false, songVolumeFade: false }));
     localStorage.setItem('musicData', JSON.stringify({ playList: [song], playSongData: song, playListOld: [], historyPlaylist: [], playSongSource: 0, localSongPath: [] }));
@@ -43,7 +51,10 @@ test('生产构建：QQ NAC 首块装载后可播放、暂停并保留真实进�
   await expect(page.getByRole('button', { name: '播放', exact: true })).toBeVisible();
   const paused = await page.evaluate(() => JSON.parse(localStorage.getItem('siteStatus') ?? '{}').playTimeData.currentTime);
   expect(paused).toBeGreaterThan(0);
-  expect(resources.some((url) => /\/assets\/audio-worklet-.*\.js$/.test(url))).toBe(true);
+  const loadedWorklets = await page.evaluate(
+    () => (window as Window & { loadedWorklets?: string[] }).loadedWorklets ?? [],
+  );
+  expect(loadedWorklets.some((url) => /\/assets\/audio-worklet-.*\.js$/.test(url))).toBe(true);
   expect(resources.some((url) => /\/assets\/worker-.*\.js$/.test(url))).toBe(true);
   expect(resources).toContain('/app/nac/models/nac.onnx');
   expect(resources).toContain('/app/nac/vendor/ort.wasm.min.js');

@@ -6,20 +6,20 @@ let context: AudioContext | null = null;
 let workletReady: Promise<void> | null = null;
 function audioContext(): AudioContext {
   if (!context || context.state === 'closed') {
-    context = new AudioContext({ sampleRate: 44100 });
+    context = new AudioContext();
     workletReady = null;
   }
   return context;
 }
 /** 在取链前的用户手势内调用，不等待被浏览器挂起的 resume。 */
-export function unlockNacAudio(): void {
+export function unlockPcmAudio(): void {
   void audioContext().resume().catch(() => {});
 }
 
 type Handler = (...args: any[]) => void;
 
-/** Howler 控制接口的 NAC 实现：PCM 缓存和采样时钟位于 AudioWorklet。 */
-export class NacStreamAudio implements PlayerAudio {
+/** Howler 控制接口的 PCM 实现：PCM 缓存和采样时钟位于 AudioWorklet。 */
+export class PcmStreamAudio implements PlayerAudio {
   private readonly context = audioContext();
   private readonly gain = this.context.createGain();
   private node: AudioWorkletNode | null = null;
@@ -45,16 +45,16 @@ export class NacStreamAudio implements PlayerAudio {
     signal.addEventListener('abort', this.abort, { once: true });
   }
 
-  static async open(buffer: ArrayBuffer, base: string, signal: AbortSignal, progress: (percent: number) => void): Promise<NacStreamAudio> {
+  static async open(buffer: ArrayBuffer, base: string, signal: AbortSignal, progress: (percent: number) => void, createWorker: () => Worker): Promise<PcmStreamAudio> {
     signal.throwIfAborted();
-    const audio = new NacStreamAudio(signal, progress);
+    const audio = new PcmStreamAudio(signal, progress);
     // 初始化和推理可在 suspended 上下文中执行；无需播放权限即可预缓存。
-    void audio.initialize(buffer, base).catch((error) => audio.fail(error));
+    void audio.initialize(buffer, base, createWorker).catch((error) => audio.fail(error));
     await audio.ready;
     return audio;
   }
 
-  private async initialize(buffer: ArrayBuffer, base: string): Promise<void> {
+  private async initialize(buffer: ArrayBuffer, base: string, createWorker: () => Worker): Promise<void> {
     workletReady ??= this.context.audioWorklet.addModule(workletURL).catch((error) => { workletReady = null; throw error; });
     await workletReady;
     if (this.disposed) return;
@@ -62,7 +62,7 @@ export class NacStreamAudio implements PlayerAudio {
       numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
     });
     this.node.connect(this.gain);
-    this.node.onprocessorerror = () => this.fail(new Error('NAC 音频线程发生错误'));
+    this.node.onprocessorerror = () => this.fail(new Error('PCM 音频线程发生错误'));
     this.node.port.onmessage = ({ data }: MessageEvent<PlaybackState>) => {
       if (this.disposed || data.revision < this.revision || !this.info) return;
       this.position = data.position / this.info.rate;
@@ -71,9 +71,9 @@ export class NacStreamAudio implements PlayerAudio {
         this.emit('end');
       }
     };
-    this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onerror = (event) => this.fail(new Error(event.message || 'NAC 解码器加载失败'));
-    this.worker.onmessageerror = () => this.fail(new Error('NAC 解码器返回了无法读取的数据'));
+    this.worker = createWorker();
+    this.worker.onerror = (event) => this.fail(new Error(event.message || '音频解码器加载失败'));
+    this.worker.onmessageerror = () => this.fail(new Error('音频解码器返回了无法读取的数据'));
     this.worker.onmessage = ({ data }: MessageEvent<DecodeResponse>) => {
       if (this.disposed || ('fileId' in data && data.fileId !== 1)) return;
       switch (data.type) {
@@ -94,11 +94,15 @@ export class NacStreamAudio implements PlayerAudio {
         }
         case 'progress': this.progress(Math.floor(data.progress * 100)); break;
         case 'complete':
+          if (this.loadState === 'loading') {
+            this.fail(new Error('音频解码器未返回采样'));
+            break;
+          }
           this.worker?.terminate();
           this.worker = null;
           this.progress(100);
           break;
-        case 'error': this.fail(new Error(`NAC 解码失败：${data.message}`)); break;
+        case 'error': this.fail(new Error(`音频解码失败：${data.message}`)); break;
       }
     };
     this.worker.postMessage({ type: 'open', fileId: 1, buffer, base } satisfies DecodeRequest & { base: string }, [buffer]);

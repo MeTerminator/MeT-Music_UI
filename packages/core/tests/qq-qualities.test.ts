@@ -25,6 +25,13 @@ describe("QQ browser playback and exact download choices", () => {
     expect(qqPlaybackQualities([])).toEqual([]);
   });
 
+  it("enables QQ spatial formats only with their software decoder", () => {
+    const keys = qqPlaybackQualities([], ["mpegh", "vorbis"]).map((q) => q.key);
+    expect(keys).toEqual(["Q360V3", "Q360V4", "RA360"]);
+    expect(normalizeQQPlaybackLevel("ra360")).toBe("ra360");
+    expect(normalizeQQPlaybackLevel("Q360V4")).toBe("q360v4");
+  });
+
   it("keeps supported existing settings and migrates download-only/unknown settings", () => {
     expect(normalizeQQPlaybackLevel("q360v2")).toBe("q360v2");
     expect(normalizeQQPlaybackLevel("nac")).toBe("nac");

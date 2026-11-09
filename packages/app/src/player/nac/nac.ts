@@ -1,3 +1,4 @@
+import { PCM_BLOCK_SAMPLES } from './types';
 import type { AudioInfo, NACFile, NACMetadata, PCMChunk, StereoChannels } from './types';
 
 /** NAC 1.0 容器与逆 STFT。神经网络推理由 inference.ts 调用 WASM 执行。 */
@@ -220,7 +221,7 @@ export class Synthesizer {
 
 /** 把有效采样坐标映射到编码块，最后一个块还包含额外的合成尾部。 */
 export function blockForSample(info: AudioInfo, sample: number): number {
-  return Math.min(info.blocks - 1, Math.max(0, Math.floor((sample + info.delay) / 8192)));
+  return Math.min(info.blocks - 1, Math.max(0, Math.floor((sample + info.delay) / PCM_BLOCK_SAMPLES)));
 }
 
 /** 将平面双声道 PCM 交错写入 IEEE float32 WAV（格式码 3）。 */
