@@ -1,10 +1,13 @@
 import type { DecodeRequest, DecodeResponse } from "../nac/types";
 import { nativeWaveLayout } from "./wave";
 
-export async function supportsNativeSpatialAudio(): Promise<boolean> {
-  const ua = navigator.userAgent;
-  if (!/Macintosh.*Version\/[\d.]+.*Safari\//.test(ua) || !new Audio().canPlayType("audio/wav"))
+export async function supportsNativeSpatialAudio(appleMobile: boolean): Promise<boolean> {
+  const macSafari = /Macintosh.*Version\/[\d.]+.*Safari\//.test(navigator.userAgent);
+  if ((!appleMobile && !macSafari) || !new Audio().canPlayType("audio/wav"))
     return false;
+  // On iOS the native player can accept multichannel media independently of
+  // whether the current route reports spatial rendering in MediaCapabilities.
+  if (appleMobile) return true;
   try {
     // WebKit checks the current spatial audio route for this native multichannel codec.
     // WAV can play natively even when WebKit's codec probe does not advertise it.

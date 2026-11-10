@@ -17,7 +17,7 @@
 
 软件解码在起播时根据 `AudioDestinationNode.maxChannelCount` 和实际可建立的 AudioWorklet 输出选择布局。优先使用完整声道，支持较少声道时优先保留 7.1 或 5.1，再退到立体声。缩减布局时将额外声道按左右方向混入，立体声混音省略 LFE。
 
-macOS 上的 Safari 报告当前设备支持系统空间音频时，播放器优先将解码后的 PCM 按带扬声器布局的 24-bit WAV 封装，交由原生音频元素播放。AirPods 可以由 macOS 空间化，尽管 Web Audio 只报告两路。该路径需要完成整首解码才能起播。WAV 的 PCM 数据上限为 384 MiB，超过上限时尝试较小布局。原生播放不可用时回退到 AudioWorklet。音质菜单仍显示所选音源的档位。 [Apple 空间音频播放说明](https://developer.apple.com/videos/play/wwdc2021/10265/)
+当 macOS Safari 报告当前设备支持系统空间音频，或 iPhone、iPad 的浏览器支持 WAV 时，播放器优先将解码后的多声道 PCM 封装成带扬声器布局的 24-bit WAV，交由原生音频元素播放。系统可以根据当前设备渲染空间音频，即使 Web Audio 只报告两路。该路径需要完成整首解码才能起播。WAV 的 PCM 数据上限为 384 MiB，超过上限时尝试较小布局。原生播放不可用时尝试 AudioWorklet。iPhone 和 iPad 上，AudioWorklet 必须支持多声道才能继续播放同一多声道音轨，旧版双声道解码器也不会参与选档。音质菜单仍显示所选音源的档位。 [Apple 空间音频播放说明](https://developer.apple.com/videos/play/wwdc2021/10265/)
 
 超过六路时使用离散输出。包含后置和侧置扬声器的布局按左、右、中置、LFE、后左、后右、侧左、侧右的顺序输出声床，其后的声道按源布局顺序输出。设备需要按相同顺序布线。Vorbis 规范将超过八声道的排列交由应用定义，QQ 的映射适用于实测样本。实际扬声器输出取决于浏览器、系统和硬件提供的声道。 [Web Audio 声道布局](https://www.w3.org/TR/webaudio/#ChannelLayouts) [Vorbis 声道规范](https://xiph.org/vorbis/doc/Vorbis_I_spec.html) [DTS-UHD 规范](https://www.etsi.org/deliver/etsi_ts/103400_103499/103491/01.01.01_60/ts_103491v010101p.pdf)
 

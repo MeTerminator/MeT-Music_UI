@@ -40,14 +40,25 @@ export class PcmStreamAudio implements PlayerAudio {
   private resolveReady: (() => void) | null = null;
   private readonly ready: Promise<void>;
 
-  private constructor(private readonly signal: AbortSignal, private readonly progress: (percent: number) => void) {
+  private constructor(
+    private readonly signal: AbortSignal,
+    private readonly progress: (percent: number) => void,
+    private readonly preserveMultichannel: boolean,
+  ) {
     this.ready = new Promise((resolve, reject) => { this.resolveReady = resolve; this.rejectReady = reject; });
     signal.addEventListener('abort', this.abort, { once: true });
   }
 
-  static async open(buffer: ArrayBuffer, base: string, signal: AbortSignal, progress: (percent: number) => void, createWorker: () => Worker): Promise<PcmStreamAudio> {
+  static async open(
+    buffer: ArrayBuffer,
+    base: string,
+    signal: AbortSignal,
+    progress: (percent: number) => void,
+    createWorker: () => Worker,
+    preserveMultichannel = false,
+  ): Promise<PcmStreamAudio> {
     signal.throwIfAborted();
-    const audio = new PcmStreamAudio(signal, progress);
+    const audio = new PcmStreamAudio(signal, progress, preserveMultichannel);
     // 初始化和推理可在 suspended 上下文中执行；无需播放权限即可预缓存。
     void audio.initialize(buffer, base, createWorker).catch((error) => audio.fail(error));
     await audio.ready;
@@ -76,7 +87,11 @@ export class PcmStreamAudio implements PlayerAudio {
     switch (data.type) {
       case 'output': {
         if (this.info) throw new Error('音轨中途变更输出布局');
-        const channels = this.configureOutput(data.layouts);
+        // A decoder retry may offer only stereo after a multichannel attempt.
+        const multichannel = this.outputChannels > 2 || data.layouts.some((count) => count > 2);
+        const layouts = this.preserveMultichannel && multichannel
+          ? data.layouts.filter((count) => count > 2) : data.layouts;
+        const channels = this.configureOutput(layouts);
         this.worker?.postMessage({ type: 'output', fileId: 1, channels } satisfies DecodeRequest);
         break;
       }
