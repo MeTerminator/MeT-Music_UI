@@ -6,6 +6,7 @@ import type { SelectOption } from "@/components/ui/select";
 import {
   NETEASE_LEVELS,
   neteasePlaybackQualities,
+  qqDolbyCodec,
   qqPlaybackQualities,
   qqQualities,
   qqSpatialCodec,
@@ -22,17 +23,21 @@ export const songLevelData: Record<string, SelectOption & { tip: string }> =
   Object.fromEntries(
     qqQualities.flatMap((quality) => {
       const softwareCodec = qqSpatialCodec(quality.key);
-      if (!quality.codec && !softwareCodec) return [];
+      const nativeDolby = qqDolbyCodec(quality.key);
+      const playable = playableQQ.some((q) => q.key === quality.key);
+      if (nativeDolby ? !playable : !quality.codec && !softwareCodec) return [];
 
       const value = quality.key.toLowerCase();
       const decoder = softwareCodec === "mpegh" ? "MPEG-H"
         : softwareCodec === "vorbis" ? "多声道 Vorbis"
         : softwareCodec === "dtsx" ? "DTS-UHD Profile 2"
         : quality.codec === "nac" ? "NAC" : undefined;
-      const disabledReason = playableQQ.some((q) => q.key === quality.key)
+      const disabledReason = playable
         ? undefined
         : decoder ? `当前环境未启用 ${decoder} 解码器` : "当前浏览器不支持此编码";
-      const tip = softwareCodec
+      const tip = nativeDolby
+        ? "由 Safari 原生播放，空间音频取决于音源和输出设备"
+        : softwareCodec
         ? "根据输出设备播放多声道或立体声"
         : quality.codec === "nac"
           ? "使用本机 NAC 解码器播放"
@@ -64,7 +69,7 @@ export const neteaseSongLevelOptions: SelectOption[] = Object.entries(
   .map(([value, { label }]) => ({ label, value }));
 
 export const neteasePlaybackOptions: SelectOption[] = NETEASE_LEVELS
-  .filter((level) => level !== "dolby")
+  .filter((level) => level !== "dolby" || playableNetease.includes(level))
   .map((value) => ({
     value,
     label: neteaseSongLevelData[value].label,
@@ -72,15 +77,6 @@ export const neteasePlaybackOptions: SelectOption[] = NETEASE_LEVELS
       ? undefined
       : value === "vivid" ? "当前环境未启用 AVS3 解码器" : "当前浏览器不支持此编码",
   }));
-
-// 已保存的杜比偏好仍可识别，重新选择时按当前前端解码能力提供档位。
-const savedDolbyOption: SelectOption = {
-  value: "dolby",
-  label: neteaseSongLevelData.dolby.label,
-  disabledReason: "当前前端尚未适配杜比",
-};
-export const neteasePlaybackOptionsFor = (savedLevel: string): SelectOption[] =>
-  savedLevel === "dolby" ? [...neteasePlaybackOptions, savedDolbyOption] : neteasePlaybackOptions;
 
 /** 主题数据 */
 export const themeColorOptions: SelectOption[] = [

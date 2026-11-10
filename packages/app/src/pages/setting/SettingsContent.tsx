@@ -9,7 +9,8 @@
  */
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { normalizeQQPlaybackLevel, soundStop } from "@met/core";
+import { playbackLevel, soundStop } from "@met/core";
+import { supportedQQCodecs } from "@/player/qq-codecs";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { cleanAll, getSessionId } from "@/platform/web";
@@ -42,7 +43,7 @@ import {
   songLevelData,
   songLevelOptions,
   neteaseSongLevelData,
-  neteasePlaybackOptionsFor,
+  neteasePlaybackOptions,
   themeAutoCoverTypeOptions,
   themeColorOptions,
   themeTypeOptions,
@@ -70,10 +71,11 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const [resetOpen, setResetOpen] = useState(false);
   const [lyricCacheDraft, setLyricCacheDraft] = useState<string | null>(null);
   const sessionId = getSessionId();
-  const qqLevel = normalizeQQPlaybackLevel(settings.songLevel);
+  const codecs = supportedQQCodecs();
+  const qqLevel = playbackLevel(settings, "qq", codecs);
   const qqOption = songLevelData[qqLevel];
-  const neteaseOptions = neteasePlaybackOptionsFor(settings.neteaseSongLevel);
-  const neteaseOption = neteaseOptions.find(({ value }) => value === settings.neteaseSongLevel);
+  const neteaseLevel = playbackLevel(settings, "netease", codecs);
+  const neteaseOption = neteasePlaybackOptions.find(({ value }) => value === neteaseLevel);
 
   // 明暗模式切换(对齐旧 setThemeType:setState + toast + 关闭跟随系统)
   const changeThemeType = (value: "light" | "dark") => {
@@ -261,12 +263,12 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
                 </SettingItem>
                 <SettingItem
                   name="网易云音乐音质选择"
-                  tip={`${neteaseOption?.disabledReason ?? neteaseSongLevelData[settings.neteaseSongLevel]?.tip ?? ""}。实际音质取决于歌曲、账号权益和设备，缺少所选音质时由网易云回退。`}
+                  tip={`${neteaseOption?.disabledReason ?? neteaseSongLevelData[neteaseLevel]?.tip ?? ""}。实际音质取决于歌曲、账号权益和设备，缺少所选音质时由网易云回退。`}
                 >
                   <Select
                     ariaLabel="网易云音乐音质选择"
-                    value={settings.neteaseSongLevel}
-                    options={neteaseOptions}
+                    value={neteaseLevel}
+                    options={neteasePlaybackOptions}
                     onValueChange={(v) => set({ neteaseSongLevel: v })}
                     className="w-52"
                   />

@@ -2,7 +2,26 @@ import { qqQualities } from "./qq-qualities.generated";
 export { qqQualities };
 export type SpatialCodec = "mpegh" | "av3a" | "vorbis" | "dtsx" | "flac";
 
-export type QQCodec = "aac" | "mp3" | "flac" | "ogg" | "nac";
+export type NativeDolbyCodec = "ac4" | "eac3";
+export type QQCodec = "aac" | "mp3" | "flac" | "ogg" | "nac" | NativeDolbyCodec;
+
+export const qqDolbyCodec = (level?: string | null): NativeDolbyCodec | undefined => {
+  switch (level?.toUpperCase()) {
+    case "DA": return "ac4";
+    case "DAEAC3": return "eac3";
+  }
+};
+
+export const qqDolbyLevels = (level: string, codecs: readonly string[]): string[] => {
+  switch (qqDolbyCodec(level)) {
+    case "ac4":
+      return [...(codecs.includes("ac4") ? ["DA"] : []), ...(codecs.includes("eac3") ? ["DAEAC3"] : [])];
+    case "eac3":
+      return codecs.includes("eac3") ? ["DAEAC3"] : [];
+    default:
+      return [];
+  }
+};
 
 export const qqSpatialCodec = (level?: string | null): SpatialCodec | undefined => {
   switch (level?.toUpperCase()) {
@@ -21,13 +40,14 @@ export const qqPlaybackQualities = (
   spatial: readonly SpatialCodec[] = [],
 ) =>
   qqQualities.filter((q) => {
+    if (qqDolbyCodec(q.key)) return qqDolbyLevels(q.key, codecs).length > 0;
     const codec = qqSpatialCodec(q.key);
     return codec ? spatial.includes(codec) : q.codec !== null && codecs.includes(q.codec);
   });
 
-export const normalizeQQPlaybackLevel = (level: string): string => {
+export const normalizeQQPlaybackLevel = (level: string, codecs: readonly string[] = []): string => {
   const quality = qqQualities.find((q) => q.key === level.toUpperCase());
-  return quality && (quality.codec || qqSpatialCodec(quality.key))
+  return quality && (quality.codec || qqSpatialCodec(quality.key) || qqDolbyLevels(quality.key, codecs).length)
     ? quality.key.toLowerCase()
     : "hq";
 };

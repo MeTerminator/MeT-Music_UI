@@ -1,5 +1,5 @@
-import type { SpatialCodec } from "../qq-qualities";
-import { normalizeQQPlaybackLevel, qqSpatialCodec } from "../qq-qualities";
+import type { NativeDolbyCodec, SpatialCodec } from "../qq-qualities";
+import { normalizeQQPlaybackLevel, qqDolbyCodec, qqSpatialCodec } from "../qq-qualities";
 import type { Song } from "./song";
 export type Platform = "qq" | "netease";
 export const songPlatform = (song?: Pick<Song, "source">): Platform =>
@@ -22,10 +22,12 @@ export const NETEASE_LEVELS = [
 export const playbackLevel = (
   settings: { songLevel: string; neteaseSongLevel?: string },
   platform: Platform,
+  codecs?: readonly string[],
 ): string =>
   platform === "netease"
-    ? (settings.neteaseSongLevel ?? "exhigh")
-    : normalizeQQPlaybackLevel(settings.songLevel);
+    ? (settings.neteaseSongLevel === "dolby" && codecs && !codecs.includes("ac4")
+      ? "exhigh" : settings.neteaseSongLevel ?? "exhigh")
+    : normalizeQQPlaybackLevel(settings.songLevel, codecs);
 
 export const neteasePlaybackQualities = (
   codecs: readonly string[],
@@ -34,7 +36,7 @@ export const neteasePlaybackQualities = (
   NETEASE_LEVELS.filter((level) => {
     switch (level) {
       case "dolby":
-        return false;
+        return codecs.includes("ac4");
       case "vivid":
         return spatial.includes("av3a");
       case "sky":
@@ -47,6 +49,12 @@ export const neteasePlaybackQualities = (
         return codecs.includes("flac");
     }
   });
+
+export const dolbyPlaybackCodec = (
+  platform: Platform,
+  level?: string | null,
+): NativeDolbyCodec | undefined =>
+  platform === "qq" ? qqDolbyCodec(level) : level?.toLowerCase() === "dolby" ? "ac4" : undefined;
 
 export const spatialPlaybackCodec = (
   platform: Platform,

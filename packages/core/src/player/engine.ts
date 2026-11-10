@@ -1,5 +1,6 @@
-import { qqPlaybackQualities, qqQualities } from "../qq-qualities";
+import { qqDolbyLevels, qqPlaybackQualities, qqQualities } from "../qq-qualities";
 import {
+  dolbyPlaybackCodec,
   neteasePlaybackQualities,
   playbackLevel,
   songPlatform,
@@ -194,7 +195,7 @@ export const initPlayer = async (playNow = false): Promise<boolean | void> => {
     const status = deps.status();
     const settings = deps.settings();
     const platform = songPlatform(music.getPlaySongData);
-    unlockDecodedAudio(platform, playbackLevel(settings, platform));
+    unlockDecodedAudio(platform, playbackLevel(settings, platform, deps.env.supportedQQCodecs?.() ?? []));
     // 在封面、播放地址等任何异步操作前清空，失败时也不能保留上一曲歌词。
     music.playSongLyricStatus =
       status.playMode === "dj" || !music.getPlaySongData?.id
@@ -386,13 +387,17 @@ const unlockDecodedAudio = (platform: Platform, level: string) => {
 const getPlaybackItem = async (id: Song["id"], level: string, platform: Platform) => {
   const spatial = spatialPlaybackCodec(platform, level);
   const hasDecoder = supportsSpatial(platform, level);
-  if (platform === "qq" && hasDecoder) {
-    // The backend's playback negotiation only lists native formats and NAC.
-    // Its exact-quality endpoint exposes the unencrypted spatial resources.
+  const dolby = dolbyPlaybackCodec(platform, level);
+  const codecs = deps.env.supportedQQCodecs?.();
+  const exactLevels = platform === "qq"
+    ? hasDecoder ? [level] : qqDolbyLevels(level, codecs ?? [])
+    : [];
+  // The exact-quality endpoint exposes unencrypted spatial and Dolby resources.
+  for (const exactLevel of exactLevels) {
     try {
-      const [detail] = await getMusicUrl(id, level, platform);
+      const [detail] = await getMusicUrl(id, exactLevel, platform);
       const track = detail?.track_info;
-      if (track?.file_url && track.file_quality?.toUpperCase() === level.toUpperCase()) {
+      if (track?.file_url && track.file_quality?.toUpperCase() === exactLevel.toUpperCase()) {
         return {
           url: track.file_url,
           level: track.file_quality,
@@ -401,15 +406,17 @@ const getPlaybackItem = async (id: Song["id"], level: string, platform: Platform
         };
       }
     } catch (error) {
-      console.warn("QQ 全景声音质取链失败，尝试常规音质", error);
+      console.warn("QQ 空间音质取链失败", error);
     }
   }
-  const requested = spatial === "av3a" && !hasDecoder ? "exhigh" : level;
+  const requested = dolby && platform === "qq" ? "hq"
+    : (dolby && !codecs?.includes(dolby)) || (spatial === "av3a" && !hasDecoder) ? "exhigh"
+    : level;
   const response = await getSongUrl(
     id,
     requested,
     platform,
-    platform === "qq" ? deps.env.supportedQQCodecs?.() : undefined,
+    platform === "qq" ? codecs?.filter((codec) => codec !== "ac4" && codec !== "eac3") : undefined,
   );
   return response.data?.[0];
 };
@@ -429,7 +436,7 @@ const getNormalSongUrl = async (
   try {
     const settings = deps.settings();
     const platform = songPlatform(deps.music().getPlaySongData);
-    const requestedLevel = playbackLevel(settings, platform);
+    const requestedLevel = playbackLevel(settings, platform, deps.env.supportedQQCodecs?.() ?? []);
     const item = await getPlaybackItem(id, fallbackLevel ?? requestedLevel, platform);
     if (!item?.url) return null;
     if (playId !== currentPlayId) return null;
@@ -548,7 +555,8 @@ export const createPlayer = async (
     const actualLevel = quality?.actualLevel;
     const level =
       actualLevel ?? quality?.requestedLevel ??
-      (online ? playbackLevel(settings, platform) : null);
+      (online ? playbackLevel(settings, platform, deps.env.supportedQQCodecs?.() ?? []) : null);
+    const dolby = dolbyPlaybackCodec(platform, actualLevel);
     const spatial = supportsSpatial(platform, level);
     const needsNac = /\.nac(?:[?#]|$)/i.test(src) ||
       (platform === "qq" && level?.toLowerCase() === "nac");
@@ -603,7 +611,7 @@ export const createPlayer = async (
           status.songCacheProgress = -1;
       }
     } else if (
-      useMusicCache &&
+      useMusicCache && !dolby &&
       playMode !== "dj" &&
       !playSongData.pc &&
       deps.env.toBlobUrl
@@ -650,7 +658,8 @@ export const createPlayer = async (
     const qualityFormat = !extension && loadedLevel && platform === "qq"
       ? qqQualities.find((q) => q.key === loadedLevel.toUpperCase())?.extension
       : undefined;
-    const format = preparedFormat ?? extension ?? qualityFormat ??
+    const dolbyFormat = dolby === "eac3" ? "dolby" : dolby === "ac4" ? "mp4" : undefined;
+    const format = dolbyFormat ?? preparedFormat ?? extension ?? qualityFormat ??
       (songUrl.startsWith("blob:") ? "mp3" : undefined);
     const nativeFlacFallback = spatial === "flac" && !preparedPlayer && !preparedNative;
     player =
@@ -658,7 +667,7 @@ export const createPlayer = async (
       new Howl({
         src: [songUrl],
         ...(format ? { format: [format] } : {}),
-        html5: html5Player || preparedNative || nativeFlacFallback,
+        html5: html5Player || !!dolby || preparedNative || nativeFlacFallback,
         preload: "metadata",
         volume: status.playVolume,
         rate: status.playRate,
@@ -669,7 +678,7 @@ export const createPlayer = async (
     const audioDom = (player as any)._sounds?.[0]?._node as
       | HTMLAudioElement
       | undefined;
-    if (audioDom && !nativeFlacFallback) audioDom.crossOrigin = "anonymous";
+    if (audioDom) audioDom.crossOrigin = dolby || nativeFlacFallback ? null : "anonymous";
     // 写入播放历史
     music.setPlayHistory(playSongData);
     // 加载完成
@@ -939,7 +948,9 @@ export const switchPlaybackQuality = async (
       quality: { ...next, switching: false },
     };
     if (item.isTrial) deps.notify.warning("当前音质返回了试听音频");
-    if (item.level && item.level.toLowerCase() !== normalized.toLowerCase()) {
+    if (platform === "qq" && normalized === "DA" && item.level?.toUpperCase() === "DAEAC3") {
+      deps.notify.info("已使用 Safari 支持的杜比 EAC3 音源");
+    } else if (item.level && item.level.toLowerCase() !== normalized.toLowerCase()) {
       deps.notify.info("所选音质不可用，已使用可播放音质");
     }
     return true;

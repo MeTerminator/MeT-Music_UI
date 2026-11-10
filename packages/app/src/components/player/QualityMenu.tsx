@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2 } from "lucide-react";
 import {
   api,
+  dolbyPlaybackCodec,
   playbackLevel,
   neteasePlaybackQualities,
   qqQualities,
@@ -32,7 +33,7 @@ const neteaseLabels: Record<string, string> = {
   sky: "沉浸环绕声",
 };
 // NetEase's playback metadata lists the base qualities. The URL API still accepts these levels.
-const neteaseLevelsToTry = ["jyeffect", "sky", "jymaster", "vivid"];
+const neteaseLevelsToTry = ["jyeffect", "sky", "jymaster", "vivid", "dolby"];
 const pendingQualityLabel = "音质待确认";
 
 const shortLabels: Record<string, string> = {
@@ -76,13 +77,17 @@ export default function QualityMenu({
     !song.pc &&
     song.source !== "local" &&
     mode !== "dj";
+  const codecs = supportedQQCodecs();
   const expected = playbackLevel(
     { songLevel: expectedQQ, neteaseSongLevel: expectedNetease },
     platform,
+    codecs,
   );
   const normalize = (level: string) =>
     platform === "qq" ? level.toUpperCase() : level.toLowerCase();
-  const actual = quality?.actualLevel ? normalize(quality.actualLevel) : null;
+  const actualCodec = dolbyPlaybackCodec(platform, quality?.actualLevel);
+  const actual = quality?.actualLevel && (!actualCodec || codecs.includes(actualCodec))
+    ? normalize(quality.actualLevel) : null;
   const desired = normalize(expected);
   const info = useQuery({
     queryKey: ["playback-quality", platform, key],
@@ -94,7 +99,6 @@ export default function QualityMenu({
     quality?.availableLevels ??
     info.data?.[String(song.id)]?.track_info.available_qualities ??
     null;
-  const codecs = supportedQQCodecs();
   const spatial = supportedSpatialCodecs();
   const playable = new Set<string>(
     platform === "qq"

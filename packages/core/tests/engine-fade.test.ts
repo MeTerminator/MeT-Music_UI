@@ -32,6 +32,7 @@ const { FakeHowl } = vi.hoisted(() => {
         src?: string[];
         format?: string[];
         rate?: number;
+        html5?: boolean;
       },
     ) {
       this._volume = opts.volume ?? 1;
@@ -533,6 +534,43 @@ describe("current-play quality override", () => {
     expect(f.status.playbackQuality).toMatchObject({ requestedLevel: "dtsx", actualLevel: "HQ" });
     expect(FakeHowl.instances.at(-1)?.opts.src).toEqual(["https://media.example/audio.mp3"]);
     expect(f.status.playState).toBe(true);
+  });
+
+  it("hands the QQ Atmos E-AC-3 rendition directly to Safari's media player", async () => {
+    const f = makeFixture();
+    f.settings.html5Player = false;
+    f.settings.useMusicCache = true;
+    f.deps.env.supportedQQCodecs = () => ["mp3", "eac3"];
+    f.deps.env.toBlobUrl = vi.fn(async (url) => url);
+    const native = vi.spyOn(songApi, "getSongUrl").mockResolvedValue(response("HQ"));
+    const url = "https://media.example/D005.mp4";
+    const exact = vi.spyOn(extraApi, "getMusicUrl").mockResolvedValue([{
+      track_info: { mid: "1", file_url: url, file_quality: "DAEAC3" },
+    }]);
+    await initPlayer(false);
+    setSeek(34);
+    expect(await switchPlaybackQuality("DA")).toBe(true);
+    expect(exact).toHaveBeenCalledExactlyOnceWith(1, "DAEAC3", "qq");
+    expect(native).toHaveBeenCalledOnce();
+    expect(f.deps.env.toBlobUrl).toHaveBeenCalledOnce();
+    expect(FakeHowl.instances.at(-1)?.opts).toMatchObject({
+      src: [url], html5: true, format: ["dolby"],
+    });
+    expect(f.status.playbackQuality).toMatchObject({ overrideLevel: "DA", actualLevel: "DAEAC3" });
+    expect(getSeek()).toBe(34);
+  });
+
+  it("falls back from a saved Dolby preference on browsers without Dolby support", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "da";
+    const native = vi.spyOn(songApi, "getSongUrl").mockResolvedValue(response("HQ"));
+    const exact = vi.spyOn(extraApi, "getMusicUrl");
+    await initPlayer(false);
+    expect(native).toHaveBeenCalledExactlyOnceWith(1, "hq", "qq", undefined);
+    expect(await switchPlaybackQuality("DA")).toBe(false);
+    expect(await switchPlaybackQuality("DAEAC3")).toBe(false);
+    expect(exact).not.toHaveBeenCalled();
+    expect(f.settings.songLevel).toBe("da");
   });
 
   it("keeps a playing song running at its seek after the quality reload", async () => {
