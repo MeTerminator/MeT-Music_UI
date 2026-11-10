@@ -20,6 +20,8 @@ export interface AudioInfo {
   blocks: number;
   duration: number;
   delay: number;
+  /** Number of decoded PCM channels. NAC always uses stereo. */
+  channels?: number;
 }
 
 export interface NACFile extends AudioInfo {
@@ -34,10 +36,10 @@ export interface NACFile extends AudioInfo {
 export interface PCMChunk {
   block: number;
   offset: number;
-  channels: StereoChannels;
+  channels: Float32Array<ArrayBuffer>[];
 }
 
-export interface DecodedAudio extends Omit<AudioInfo, 'delay'> {
+export interface DecodedAudio extends Omit<AudioInfo, 'delay' | 'channels'> {
   channels: StereoChannels;
 }
 
@@ -45,12 +47,14 @@ export interface DecodedAudio extends Omit<AudioInfo, 'delay'> {
 export type DecodeRequest =
   | { type: 'prepare' }
   | { type: 'open'; fileId: number; buffer: ArrayBuffer; base: string }
+  | { type: 'output'; fileId: number; channels: number }
   | { type: 'seek'; fileId: number; sample: number }
   | { type: 'cancel'; fileId: number };
 
 export type DecodeResponse =
   | { type: 'ready' }
   | { type: 'info'; fileId: number; info: AudioInfo }
+  | { type: 'output'; fileId: number; layouts: readonly number[] }
   | { type: 'status'; fileId: number; message: string }
   | { type: 'chunk'; fileId: number; chunk: PCMChunk }
   | { type: 'progress'; fileId: number; progress: number }

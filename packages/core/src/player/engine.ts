@@ -583,13 +583,17 @@ export const createPlayer = async (
             ? await getNormalSongUrl(playSongData.id, status, autoPlay, playId, "hq").catch(() => null)
             : null;
         if (controller.signal.aborted || !isCurrent()) return;
-        if (!fallbackUrl) {
+        // Keep native FLAC playback available when a CDN denies the worker's fetch.
+        if (spatial === "flac") {
+          preparedFormat = guessAudioFormat(src) ?? "flac";
+        } else if (!fallbackUrl) {
           status.playLoading = false;
           status.playState = false;
           throw error;
+        } else {
+          songUrl = fallbackUrl;
+          deps.notify.warning("此 DTS:X 音源无法解码，已改用可播放音质");
         }
-        songUrl = fallbackUrl;
-        deps.notify.warning("此 DTS:X 音源无法解码，已改用可播放音质");
       } finally {
         preparing = false;
         if (audioPreparation === controller) audioPreparation = null;
@@ -646,12 +650,13 @@ export const createPlayer = async (
       : undefined;
     const format = preparedFormat ?? extension ?? qualityFormat ??
       (songUrl.startsWith("blob:") ? "mp3" : undefined);
+    const nativeFlacFallback = spatial === "flac" && !preparedPlayer;
     player =
       preparedPlayer ??
       new Howl({
         src: [songUrl],
         ...(format ? { format: [format] } : {}),
-        html5: html5Player,
+        html5: html5Player || nativeFlacFallback,
         preload: "metadata",
         volume: status.playVolume,
         rate: status.playRate,
@@ -662,7 +667,7 @@ export const createPlayer = async (
     const audioDom = (player as any)._sounds?.[0]?._node as
       | HTMLAudioElement
       | undefined;
-    if (audioDom) audioDom.crossOrigin = "anonymous";
+    if (audioDom && !nativeFlacFallback) audioDom.crossOrigin = "anonymous";
     // 写入播放历史
     music.setPlayHistory(playSongData);
     // 加载完成

@@ -3,18 +3,17 @@
 namespace {
 constexpr int sampleRate = 48000;
 constexpr int frameSamples = 1024;
-constexpr float surroundGain = 0.70710678f;
-constexpr float downmixGain = 1.0f / (1.0f + 2.0f * surroundGain);
+constexpr int channelCount = 6;
 
 std::unique_ptr<AceDecoder> decoder;
 AcePacket packet;
-float stereo[frameSamples * 2];
+float samples[frameSamples * channelCount];
 double position;
 bool ready;
 }
 
 extern "C" {
-int spatial_init() {
+int spatial_init(int) {
     decoder = std::make_unique<AceDecoder>();
     return 0;
 }
@@ -48,13 +47,18 @@ int spatial_feed(const std::uint8_t* data, std::uint32_t size, double timestamp,
             || decoder->last_internal_lfe_pcm_.size() != 1
             || decoder->last_internal_lfe_pcm_[0].size() != frameSamples) return -1;
 
+        // Standard 5.1 PCM order: L, R, C, LFE, Ls, Rs.
         const auto [center, left, right, surroundLeft, surroundRight] = channels;
+        const std::array<const float*, channelCount> bed{
+            left, right, center, decoder->last_internal_lfe_pcm_[0].data(),
+            surroundLeft, surroundRight,
+        };
         for (int i = 0; i < frameSamples; ++i) {
-            const float l = (left[i] + surroundGain * (center[i] + surroundLeft[i])) * downmixGain;
-            const float r = (right[i] + surroundGain * (center[i] + surroundRight[i])) * downmixGain;
-            if (!std::isfinite(l) || !std::isfinite(r)) return -1;
-            stereo[2 * i] = std::clamp(l, -1.0f, 1.0f);
-            stereo[2 * i + 1] = std::clamp(r, -1.0f, 1.0f);
+            for (int channel = 0; channel < channelCount; ++channel) {
+                const float sample = bed[channel][i];
+                if (!std::isfinite(sample)) return -1;
+                samples[i * channelCount + channel] = sample;
+            }
         }
     } catch (const std::exception&) {
         return -1;
@@ -70,8 +74,9 @@ int spatial_read() {
     ready = false;
     return frameSamples;
 }
+int spatial_channels() { return channelCount; }
 int spatial_rate() { return sampleRate; }
 double spatial_position() { return position; }
-const float* spatial_pcm() { return stereo; }
+const float* spatial_pcm() { return samples; }
 void spatial_close() { decoder.reset(); }
 }

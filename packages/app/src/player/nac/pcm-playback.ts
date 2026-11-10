@@ -82,16 +82,9 @@ export class PCMPlayback {
     };
   }
 
-  private sample(index: number, channel: number): number | undefined {
-    if (!this.info) return undefined;
-    const chunk = this.chunks.get(blockForSample(this.info, index));
-    if (!chunk) return undefined;
-    return chunk.channels[channel][index - chunk.offset];
-  }
-
   render(output: Float32Array[], outputRate: number): void {
     for (const channel of output) channel.fill(0);
-    if (!this.info || !this.playing || output.length < 2) return;
+    if (!this.info || !this.playing || output.length !== (this.info.channels ?? 2)) return;
     this.waiting = false;
     // 在音频线程中保持连续的小数相位，适配 44.1 kHz 文件与 48 kHz 声卡。
     // 不把每块作为独立音源重采样，避免块边界丢失相位或重复采样。
@@ -104,21 +97,20 @@ export class PCMPlayback {
       const index = Math.floor(this.position);
       const fraction = this.position - index;
       const next = Math.min(index + 1, this.info.samples - 1);
-      const left = this.sample(index, 0);
-      const right = this.sample(index, 1);
-      const nextLeft = fraction === 0 ? left : this.sample(next, 0);
-      const nextRight = fraction === 0 ? right : this.sample(next, 1);
-      if (
-        left === undefined ||
-        right === undefined ||
-        nextLeft === undefined ||
-        nextRight === undefined
-      ) {
+      const chunk = this.chunks.get(blockForSample(this.info, index));
+      const nextChunk = fraction === 0 ? chunk : this.chunks.get(blockForSample(this.info, next));
+      const offset = index - (chunk?.offset ?? 0);
+      const nextOffset = next - (nextChunk?.offset ?? 0);
+      if (!chunk || !nextChunk || offset < 0 || offset >= chunk.channels[0].length ||
+          (fraction !== 0 && (nextOffset < 0 || nextOffset >= nextChunk.channels[0].length))) {
         this.waiting = true;
         break;
       }
-      output[0][frame] = (left + (nextLeft - left) * fraction) * this.volume;
-      output[1][frame] = (right + (nextRight - right) * fraction) * this.volume;
+      for (let channel = 0; channel < output.length; channel++) {
+        const sample = chunk.channels[channel][offset];
+        const nextSample = fraction === 0 ? sample : nextChunk.channels[channel][nextOffset];
+        output[channel][frame] = (sample + (nextSample - sample) * fraction) * this.volume;
+      }
       this.position = Math.min(this.info.samples, this.position + step);
     }
     if (this.position >= this.info.samples) {

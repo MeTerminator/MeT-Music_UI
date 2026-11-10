@@ -1,6 +1,6 @@
 import { qqQualities } from "./qq-qualities.generated";
 export { qqQualities };
-export type SpatialCodec = "mpegh" | "av3a" | "vorbis" | "dtsx";
+export type SpatialCodec = "mpegh" | "av3a" | "vorbis" | "dtsx" | "flac";
 
 export type QQCodec = "aac" | "mp3" | "flac" | "ogg" | "nac";
 

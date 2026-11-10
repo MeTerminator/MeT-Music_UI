@@ -6,19 +6,21 @@ import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
 import { VitePWA } from "vite-plugin-pwa";
-import { DTSX_DECODER_ASSET } from "./src/player/spatial/dtsx-config.ts";
+import { spatialAssets } from "./src/player/spatial/assets";
 
 // 与旧 Vue 应用部署参数保持一致:base=/app/、dev 代理 /api、端口 3000
 export default defineConfig({
   base: "/app/",
 
   define: {
-    __SPATIAL_DECODERS__: JSON.stringify(["mpegh", "av3a", "dtsx"].filter((codec) => {
-      const assetName = codec === "dtsx" ? DTSX_DECODER_ASSET : codec;
-      return ["js", "wasm"].every((ext) =>
-        existsSync(resolve(import.meta.dirname, `public/spatial/${assetName}.${ext}`)),
-      );
-    })),
+    __SPATIAL_DECODERS__: JSON.stringify(Object.fromEntries(
+      Object.entries(spatialAssets).flatMap(([codec, names]) => {
+        const asset = names.find((name) => ["js", "wasm"].every((ext) =>
+          existsSync(resolve(import.meta.dirname, `public/spatial/${name}.${ext}`)),
+        ));
+        return asset ? [[codec, asset]] : [];
+      }),
+    )),
   },
 
   resolve: {

@@ -49,6 +49,7 @@ scope.onmessage = ({ data }) => {
     }
     return;
   }
+  if (data.type !== 'open') return;
   assetBase = data.base;
   const current = ++generation;
   const id = data.fileId;

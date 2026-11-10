@@ -7,14 +7,14 @@ if [[ $# != 2 || ( "$1" != mpegh && "$1" != av3a && "$1" != dtsx ) ]]; then
 fi
 
 codec=$1
-asset_name=$codec
+asset_name="${codec}-v2"
 source_dir=$(cd "$2" && pwd)
 script_dir=$(cd "$(dirname "$0")" && pwd)
 asset_dir="$script_dir/../../public/spatial"
 build_dir=$(mktemp -d)
 trap 'rm -rf "$build_dir"' EXIT
 if [[ "$codec" == dtsx ]]; then
-  asset_name=dtsx-v2
+  asset_name=dtsx-v3
   python3 "$script_dir/prepare-dtsx.py" "$source_dir" "$build_dir"
   compiler=em++
   inputs=(-std=c++20 -I "$source_dir/src" -I "$build_dir" "$script_dir/dtsx.cpp")
@@ -48,7 +48,7 @@ fi
 "$compiler" -O3 "${inputs[@]}" \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=worker -sFILESYSTEM=0 \
   -sALLOW_MEMORY_GROWTH=1 -sDISABLE_EXCEPTION_CATCHING=0 -sSTACK_SIZE=1048576 \
-  -sEXPORTED_FUNCTIONS=_malloc,_free,_spatial_init,_spatial_feed,_spatial_flush,_spatial_read,_spatial_rate,_spatial_position,_spatial_pcm,_spatial_close \
+  -sEXPORTED_FUNCTIONS=_malloc,_free,_spatial_init,_spatial_feed,_spatial_flush,_spatial_read,_spatial_rate,_spatial_channels,_spatial_position,_spatial_pcm,_spatial_close \
   -o "$build_dir/$asset_name.mjs"
 
 mkdir -p "$asset_dir"

@@ -23,6 +23,7 @@ export class PcmStreamAudio implements PlayerAudio {
   private readonly context = audioContext();
   private readonly gain = this.context.createGain();
   private node: AudioWorkletNode | null = null;
+  private outputChannels = 2;
   private worker: Worker | null = null;
   private handlers = new Map<string, Set<Handler>>();
   private loadState = 'loading';
@@ -41,7 +42,6 @@ export class PcmStreamAudio implements PlayerAudio {
 
   private constructor(private readonly signal: AbortSignal, private readonly progress: (percent: number) => void) {
     this.ready = new Promise((resolve, reject) => { this.resolveReady = resolve; this.rejectReady = reject; });
-    this.gain.connect(this.context.destination);
     signal.addEventListener('abort', this.abort, { once: true });
   }
 
@@ -58,54 +58,110 @@ export class PcmStreamAudio implements PlayerAudio {
     workletReady ??= this.context.audioWorklet.addModule(workletURL).catch((error) => { workletReady = null; throw error; });
     await workletReady;
     if (this.disposed) return;
-    this.node = new AudioWorkletNode(this.context, 'nac-audio', {
-      numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
-    });
-    this.node.connect(this.gain);
-    this.node.onprocessorerror = () => this.fail(new Error('PCM 音频线程发生错误'));
-    this.node.port.onmessage = ({ data }: MessageEvent<PlaybackState>) => {
-      if (this.disposed || data.revision < this.revision || !this.info) return;
-      this.position = data.position / this.info.rate;
-      if (data.ended && this.desiredPlaying) {
-        this.desiredPlaying = false;
-        this.emit('end');
-      }
-    };
     this.worker = createWorker();
     this.worker.onerror = (event) => this.fail(new Error(event.message || '音频解码器加载失败'));
     this.worker.onmessageerror = () => this.fail(new Error('音频解码器返回了无法读取的数据'));
     this.worker.onmessage = ({ data }: MessageEvent<DecodeResponse>) => {
       if (this.disposed || ('fileId' in data && data.fileId !== 1)) return;
-      switch (data.type) {
-        case 'info':
-          this.info = data.info;
-          this.send({ type: 'configure', fileId: 1, info: data.info });
-          break;
-        case 'chunk': {
-          const hasSamples = data.chunk.channels[0].length > 0;
-          this.addChunk(data.chunk);
-          if (this.loadState === 'loading' && hasSamples) {
-            this.loadState = 'loaded';
-            this.resolveReady?.();
-            this.resolveReady = null;
-            this.rejectReady = null;
-          }
-          break;
-        }
-        case 'progress': this.progress(Math.floor(data.progress * 100)); break;
-        case 'complete':
-          if (this.loadState === 'loading') {
-            this.fail(new Error('音频解码器未返回采样'));
-            break;
-          }
-          this.worker?.terminate();
-          this.worker = null;
-          this.progress(100);
-          break;
-        case 'error': this.fail(new Error(`音频解码失败：${data.message}`)); break;
+      try {
+        this.onDecodeResponse(data);
+      } catch (error) {
+        this.fail(error);
       }
     };
-    this.worker.postMessage({ type: 'open', fileId: 1, buffer, base } satisfies DecodeRequest & { base: string }, [buffer]);
+    this.worker.postMessage({ type: 'open', fileId: 1, buffer, base } satisfies DecodeRequest, [buffer]);
+  }
+
+  private onDecodeResponse(data: DecodeResponse): void {
+    switch (data.type) {
+      case 'output': {
+        if (this.info) throw new Error('音轨中途变更输出布局');
+        const channels = this.configureOutput(data.layouts);
+        this.worker?.postMessage({ type: 'output', fileId: 1, channels } satisfies DecodeRequest);
+        break;
+      }
+      case 'info':
+        if (!this.node) this.configureOutput([2]);
+        if ((data.info.channels ?? 2) !== this.outputChannels)
+          throw new Error('音频解码器的声道数与输出布局不一致');
+        this.info = data.info;
+        this.send({ type: 'configure', fileId: 1, info: data.info });
+        break;
+      case 'chunk': {
+        if (!this.info || data.chunk.channels.length !== this.outputChannels ||
+            data.chunk.channels.some((channel) => channel.length !== data.chunk.channels[0].length))
+          throw new Error('PCM 音频块的声道数或长度不一致');
+        const hasSamples = data.chunk.channels[0].length > 0;
+        this.addChunk(data.chunk);
+        if (this.loadState === 'loading' && hasSamples) {
+          this.loadState = 'loaded';
+          this.resolveReady?.();
+          this.resolveReady = null;
+          this.rejectReady = null;
+        }
+        break;
+      }
+      case 'progress': this.progress(Math.floor(data.progress * 100)); break;
+      case 'complete':
+        if (this.loadState === 'loading') {
+          this.fail(new Error('音频解码器未返回采样'));
+          break;
+        }
+        this.worker?.terminate();
+        this.worker = null;
+        this.progress(100);
+        break;
+      case 'error': this.fail(new Error(`音频解码失败：${data.message}`)); break;
+    }
+  }
+
+  private configureOutput(layouts: readonly number[]): number {
+    const destination = this.context.destination;
+    this.disconnectOutput();
+    for (const channels of layouts) {
+      if (channels > 2 && channels > destination.maxChannelCount) continue;
+      let node: AudioWorkletNode | undefined;
+      try {
+        // Stereo also works on mono hardware through Web Audio's normal downmix.
+        const count = channels === 2 && destination.maxChannelCount === 1 ? 1 : channels;
+        if (destination.channelCount !== count) destination.channelCount = count;
+        if (destination.channelCount !== count) continue;
+        destination.channelInterpretation = count > 6 ? 'discrete' : 'speakers';
+        node = new AudioWorkletNode(this.context, 'nac-audio', {
+          numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [channels],
+        });
+        node.connect(this.gain);
+        this.gain.connect(destination);
+      } catch (error) {
+        node?.port.close();
+        node?.disconnect();
+        if (channels === 2) throw error;
+        continue;
+      }
+      this.node = node;
+      this.outputChannels = channels;
+      node.onprocessorerror = () => this.fail(new Error('PCM 音频线程发生错误'));
+      node.port.onmessage = ({ data }: MessageEvent<PlaybackState>) => {
+        if (this.disposed || data.revision < this.revision || !this.info) return;
+        this.position = data.position / this.info.rate;
+        if (data.ended && this.desiredPlaying) {
+          this.desiredPlaying = false;
+          this.emit('end');
+        }
+      };
+      return channels;
+    }
+    throw new Error('浏览器无法建立 PCM 音频输出');
+  }
+
+  private disconnectOutput(): void {
+    if (this.node) {
+      this.node.port.postMessage({ type: 'dispose' } satisfies PlaybackCommand);
+      this.node.port.onmessage = null;
+      this.node.disconnect();
+      this.node = null;
+    }
+    this.gain.disconnect();
   }
 
   private addChunk(chunk: PCMChunk): void {
@@ -188,11 +244,7 @@ export class PcmStreamAudio implements PlayerAudio {
     clearTimeout(this.fadeTimer);
     this.worker?.terminate();
     this.worker = null;
-    this.node?.port.postMessage({ type: 'dispose' } satisfies PlaybackCommand);
-    this.node?.disconnect();
-    if (this.node) this.node.port.onmessage = null;
-    this.node = null;
-    this.gain.disconnect();
+    this.disconnectOutput();
     this.handlers.clear();
   }
   playing(): boolean { return !this.disposed && this.desiredPlaying && this.context.state === 'running'; }

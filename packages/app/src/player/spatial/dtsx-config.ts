@@ -1,5 +1,3 @@
-export const DTSX_DECODER_ASSET = "dtsx-v2";
-
 /** mp4box exposes the unregistered dtsx sample entry as a generic payload. */
 export function requireDtsx51(entry: { data?: unknown }): void {
   const bytes = entry.data;

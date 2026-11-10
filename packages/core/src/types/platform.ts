@@ -37,6 +37,8 @@ export const neteasePlaybackQualities = (
         return false;
       case "vivid":
         return spatial.includes("av3a");
+      case "sky":
+        return spatial.includes("flac") || codecs.includes("flac");
       case "standard":
       case "higher":
       case "exhigh":
@@ -51,5 +53,8 @@ export const spatialPlaybackCodec = (
   level?: string | null,
 ): SpatialCodec | undefined => {
   if (platform === "qq") return qqSpatialCodec(level);
-  return level?.toLowerCase() === "vivid" ? "av3a" : undefined;
+  switch (level?.toLowerCase()) {
+    case "vivid": return "av3a";
+    case "sky": return "flac";
+  }
 };

@@ -1,16 +1,15 @@
 import type { SpatialCodec } from "@met/core";
 import { getAssetUrl } from "../../platform/web";
 import { PcmStreamAudio } from "../nac/stream-audio";
-import { DTSX_DECODER_ASSET } from "./dtsx-config";
 
-declare const __SPATIAL_DECODERS__: SpatialCodec[];
+declare const __SPATIAL_DECODERS__: Partial<Record<SpatialCodec, string>>;
 
 export const supportedSpatialCodecs = (): SpatialCodec[] =>
   globalThis.isSecureContext &&
   typeof AudioWorkletNode !== "undefined" &&
   typeof Worker !== "undefined" &&
   typeof WebAssembly !== "undefined"
-    ? [...__SPATIAL_DECODERS__, "vorbis"]
+    ? [...Object.keys(__SPATIAL_DECODERS__) as SpatialCodec[], "vorbis", "flac"]
     : [];
 
 export async function decodeSpatialUrl(
@@ -22,14 +21,17 @@ export async function decodeSpatialUrl(
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`获取音频失败：HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
-  const isVorbis = codec === "vorbis";
-  const assetName = codec === "dtsx" ? DTSX_DECODER_ASSET : codec;
-  const moduleUrl = isVorbis
-    ? ""
-    : new URL(getAssetUrl(`spatial/${assetName}.js`), location.href).href;
-  const createWorker = isVorbis
-    ? () => new Worker(new URL("./vorbis-worker.ts", import.meta.url), { type: "module" })
-    : () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  const assetName = __SPATIAL_DECODERS__[codec];
+  if (!assetName && codec !== "vorbis" && codec !== "flac")
+    throw new Error("空间音频解码器未安装");
+  const moduleUrl = assetName
+    ? new URL(getAssetUrl(`spatial/${assetName}.js`), location.href).href
+    : "";
+  const createWorker = codec === "flac"
+    ? () => new Worker(new URL("./flac-worker.ts", import.meta.url), { type: "module" })
+    : codec === "vorbis"
+      ? () => new Worker(new URL("./vorbis-worker.ts", import.meta.url), { type: "module" })
+      : () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
   const player = await PcmStreamAudio.open(
     buffer, moduleUrl, signal, onProgress, createWorker,
   );

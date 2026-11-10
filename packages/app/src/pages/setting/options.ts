@@ -33,7 +33,7 @@ export const songLevelData: Record<string, SelectOption & { tip: string }> =
         ? undefined
         : decoder ? `当前环境未启用 ${decoder} 解码器` : "当前浏览器不支持此编码";
       const tip = softwareCodec
-        ? "使用前端解码器输出双声道"
+        ? "根据输出设备播放多声道或立体声"
         : quality.codec === "nac"
           ? "使用本机 NAC 解码器播放"
           : "缺少所选音质时回退到当前浏览器支持的音质，实际规格以音源为准";
@@ -53,9 +53,9 @@ export const neteaseSongLevelData: Record<
   hires: { label: "Hi-Res", tip: "高解析度音质" },
   jyeffect: { label: "高清臻音", tip: "高清臻音" },
   dolby: { label: "杜比全景声", tip: "需要设备支持杜比全景声" },
-  vivid: { label: "臻音全景声", tip: "使用前端 AVS3 解码器混合为双声道" },
+  vivid: { label: "臻音全景声", tip: "使用前端 AVS3 解码器，根据设备选择输出布局" },
   jymaster: { label: "超清母带", tip: "超清母带音质" },
-  sky: { label: "沉浸环绕声", tip: "沉浸环绕声，默认使用 c51 类型" },
+  sky: { label: "沉浸环绕声", tip: "优先输出 5.1，设备不支持时混成立体声" },
 };
 export const neteaseSongLevelOptions: SelectOption[] = Object.entries(
   neteaseSongLevelData,
