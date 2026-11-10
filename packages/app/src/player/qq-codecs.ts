@@ -13,7 +13,11 @@ export const supportedQQCodecs = (): QQCodec[] => {
   const codecs = types
     .filter(([, mime]) => !!audio.canPlayType(mime))
     .map(([codec]) => codec);
-  if (/AppleWebKit\/[\d.]+ \(KHTML, like Gecko\) Version\/[\d.]+ (?:Mobile\/\S+ )?Safari\/[\d.]+$/.test(navigator.userAgent)) {
+  const { userAgent, platform, maxTouchPoints } = navigator;
+  const isAppleMobile = /\b(?:iPhone|iPad|iPod)\b/.test(userAgent) ||
+    (platform === "MacIntel" && maxTouchPoints > 1); // iPadOS desktop mode
+  const isSafari = /AppleWebKit\/[\d.]+ \(KHTML, like Gecko\) Version\/[\d.]+ (?:Mobile\/\S+ )?Safari\/[\d.]+$/.test(userAgent);
+  if (isAppleMobile || isSafari) {
     if (audio.canPlayType('audio/mp4; codecs="ec-3"')) codecs.push("eac3");
     if (audio.canPlayType('audio/mp4; codecs="ac-4"') ||
         audio.canPlayType('audio/mp4; codecs="ac-4.02.02.00"')) codecs.push("ac4");

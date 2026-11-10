@@ -1,6 +1,6 @@
 # 前端音质解码
 
-网页和 Electron renderer 使用同一套播放引擎。音质菜单根据歌曲的 `available_qualities` 和本机解码能力提供选项，切换成功后按接口返回的实际档位显示。网易云的播放元数据只列基础档位，其他已支持的档位显示「音质待确认」，实际是否可用由取链结果决定，切换失败或回退时会提示。
+网页和 Electron renderer 使用同一套播放引擎。音质菜单根据歌曲的 `available_qualities` 和本机解码能力提供选项，切换成功后按接口返回的实际档位显示。网易云的播放元数据只列基础档位，其他已支持的档位也可选择，实际是否可用由取链结果决定，切换失败或回退时会提示。
 
 | 来源 | 档位 | 实测编码与输出 |
 | --- | --- | --- |
@@ -12,8 +12,8 @@
 | 网易云音乐 | 沉浸环绕声 | 5.1 FLAC。内置 WASM 保留 6 路声道，跨域下载受限时交给浏览器原生播放 |
 | 网易云音乐 | 臻音全景声 | `av3a` MP4。可选 AVS3 WASM 保留 7.1.4 声床 |
 | QQ 音乐 | DTS:X | `dtsx` MP4，DTS-UHD Profile 2 的 48 kHz 5.1 ACE 声床。可选 WASM 解码为 6 路 PCM |
-| QQ 音乐 | 杜比全景声 | Safari 原生播放。下载页区分「杜比全景声 AC4」（`DA`）和「杜比全景声 EAC3」（`DAEAC3`，实测含 Atmos JOC）。Safari 不支持 AC-4 时，播放会尝试同曲的 `DAEAC3` |
-| 网易云音乐 | 杜比全景声 | 实测为 AC-4 MP4，播放档位仅向报告支持 AC-4 的 Safari 开放 |
+| QQ 音乐 | 杜比全景声 | 浏览器原生播放。下载页区分「杜比全景声 AC4」（`DA`）和「杜比全景声 EAC3」（`DAEAC3`，实测含 Atmos JOC）。AC-4 不可用时，播放会尝试同曲的 `DAEAC3` |
+| 网易云音乐 | 杜比全景声 | 实测为 AC-4 MP4，播放档位需要浏览器报告支持 AC-4 |
 
 软件解码在起播时根据 `AudioDestinationNode.maxChannelCount` 和实际可建立的 AudioWorklet 输出选择布局。优先使用完整声道，支持较少声道时优先保留 7.1 或 5.1，再退到立体声。缩减布局时将额外声道按左右方向混入，立体声混音省略 LFE。
 
@@ -23,7 +23,7 @@ macOS 上的 Safari 报告当前设备支持系统空间音频时，播放器优
 
 QQ 的软件空间音质使用 `/extra/music/url?audio_api=2` 精确取链。音源链接需允许前端跨域读取。取不到精确音质时走常规播放接口，由实际返回的档位驱动播放。软件解码先下载压缩文件，随后由 Worker 按顺序解码，首个 PCM 块到达即可起播。拖到尚未解码的位置时等待数据，切歌会停止下载或解码并清理 PCM 缓存。
 
-QQ 杜比同样通过精确接口取流。Safari 直接用原生音频元素播放 MP4，保留压缩音轨和 Atmos JOC 元数据。能否启用系统空间音频及头部跟踪取决于音轨和输出设备。 [Apple 杜比音频支持](https://developer.apple.com/streaming/hls-authoring-specification-for-apple-devices.html)
+QQ 杜比同样通过精确接口取流。桌面端限 Safari，iPhone 和 iPad 上根据浏览器报告的编解码能力提供档位。浏览器直接用原生音频元素播放 MP4，保留压缩音轨和 Atmos JOC 元数据。能否启用系统空间音频及头部跟踪取决于音轨和输出设备。 [Apple 杜比音频支持](https://developer.apple.com/streaming/hls-authoring-specification-for-apple-devices.html)
 
 ## 构建可选解码器
 

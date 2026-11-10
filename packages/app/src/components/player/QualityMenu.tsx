@@ -35,7 +35,6 @@ const neteaseLabels: Record<string, string> = {
 };
 // NetEase's playback metadata lists the base qualities. The URL API still accepts these levels.
 const neteaseLevelsToTry = ["jyeffect", "sky", "jymaster", "vivid", "dolby"];
-const pendingQualityLabel = "音质待确认";
 
 const shortLabels: Record<string, string> = {
   WEB: "标准",
@@ -190,8 +189,6 @@ export default function QualityMenu({
                 const current = level === actual;
                 const preferred = level === desired;
                 const supported = choices.includes(level);
-                const needsConfirmation =
-                  !current && supported && extraLevels.includes(level) && !advertised.includes(level);
                 return (
                   <Menu.Item
                     key={level}
@@ -200,7 +197,7 @@ export default function QualityMenu({
                       void switchPlaybackQuality(level);
                     }}
                     className="flex min-h-10 cursor-pointer items-center gap-2 px-3 py-2 text-sm text-[var(--met-fg)] outline-none data-[disabled]:cursor-default data-[highlighted]:bg-[var(--met-bg-hover)]"
-                    aria-label={`${qualityLabel(level, platform)}${current ? "，当前使用" : ""}${preferred ? "，设置期望" : ""}${!supported ? "，暂不可选" : ""}${needsConfirmation ? `，${pendingQualityLabel}` : ""}`}
+                    aria-label={`${qualityLabel(level, platform)}${current ? "，当前使用" : ""}${preferred ? "，设置期望" : ""}${!supported ? "，暂不可选" : ""}`}
                   >
                     <Check
                       size={14}
@@ -216,11 +213,6 @@ export default function QualityMenu({
                       {!supported && !current ? (
                         <span className="py-0.5 text-[var(--met-fg-dim)]">
                           不可选
-                        </span>
-                      ) : null}
-                      {needsConfirmation ? (
-                        <span className="py-0.5 text-[var(--met-fg-dim)]">
-                          {pendingQualityLabel}
                         </span>
                       ) : null}
                       {current ? (

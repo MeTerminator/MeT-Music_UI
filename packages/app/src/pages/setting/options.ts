@@ -38,7 +38,7 @@ export const songLevelData: Record<string, SelectOption & { tip: string }> =
         ? undefined
         : decoder ? `当前环境未启用 ${decoder} 解码器` : "当前浏览器不支持此编码";
       const tip = nativeDolby
-        ? "由 Safari 原生播放，空间音频取决于音源和输出设备"
+        ? "由浏览器原生播放，空间音频取决于音源和输出设备"
         : softwareCodec
         ? "根据输出设备播放多声道或立体声"
         : quality.codec === "nac"

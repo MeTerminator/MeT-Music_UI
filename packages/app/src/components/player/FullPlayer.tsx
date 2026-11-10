@@ -793,10 +793,12 @@ function FullPlayerInner() {
     </div>
   );
 
-  /**
-   * 歌词本体(桌面/窄屏共用):自身撑满,高度由外层容器决定。
-   * 桌面与窄屏均使用用户设置的字号，由歌词行自动换行。
-   */
+  // 手机布局沿用普通歌词的 6.5vw 上限，并限制宽屏手机上的最大字号。
+  const amLyricFontSize = isMobile
+    ? `min(${lyricsFontSize}px, 6.5vw, 30px)`
+    : `${lyricsFontSize}px`;
+
+  // 歌词本体撑满可用空间，高度由外层容器决定。
   const lyricContent = !hasLyric ? null : useAM ? (
     <div
       className="relative h-full w-full overflow-hidden"
@@ -816,10 +818,10 @@ function FullPlayerInner() {
           className="met-amll lyric-font h-full w-full"
           style={
             {
-              fontSize: `${lyricsFontSize}px`,
+              fontSize: amLyricFontSize,
               // 对照旧 AMLyric.vue 109-112:coverTheme shadeTwo rgba 0.95
               "--amll-lp-color": amLyricColor,
-              "--amll-lp-font-size": `${lyricsFontSize}px`,
+              "--amll-lp-font-size": amLyricFontSize,
               "--met-amll-line-width": amll.amllLineWidth,
               "--met-amll-line-padding": `${amll.amllLinePadding}em`,
               "--met-amll-bg-scale": amll.amllBGLineScale,
