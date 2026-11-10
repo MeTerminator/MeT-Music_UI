@@ -8,6 +8,7 @@ import {
   playbackLevel,
   neteasePlaybackQualities,
   qqQualities,
+  qqPlaybackDisplayLevel,
   qqPlaybackQualities,
   songIdentityKey,
   songPlatform,
@@ -48,7 +49,7 @@ const shortLabels: Record<string, string> = {
 };
 const qualityLabel = (level: string, platform: "qq" | "netease") =>
   platform === "qq"
-    ? (qqQualities.find((q) => q.key === level.toUpperCase())?.label ?? level)
+    ? (qqQualities.find((q) => q.key === qqPlaybackDisplayLevel(level))?.label ?? level)
     : (neteaseLabels[level.toLowerCase()] ?? level);
 
 export default function QualityMenu({
@@ -85,10 +86,11 @@ export default function QualityMenu({
   );
   const normalize = (level: string) =>
     platform === "qq" ? level.toUpperCase() : level.toLowerCase();
+  const displayLevel = platform === "qq" ? qqPlaybackDisplayLevel : normalize;
   const actualCodec = dolbyPlaybackCodec(platform, quality?.actualLevel);
   const actual = quality?.actualLevel && (!actualCodec || codecs.includes(actualCodec))
-    ? normalize(quality.actualLevel) : null;
-  const desired = normalize(expected);
+    ? displayLevel(quality.actualLevel) : null;
+  const desired = displayLevel(expected);
   const info = useQuery({
     queryKey: ["playback-quality", platform, key],
     queryFn: () => api.getMusicInfo(song.id, platform),
@@ -107,7 +109,9 @@ export default function QualityMenu({
   );
   const advertised = (available ?? []).map(normalize);
   const extraLevels = platform === "netease" ? neteaseLevelsToTry : [];
-  const choices = [...advertised, ...extraLevels].filter((level) => playable.has(level));
+  const choices = [...advertised, ...extraLevels]
+    .filter((level) => playable.has(level))
+    .map(displayLevel);
   const levels = [
     ...new Set([...choices, ...(actual ? [actual] : []), desired]),
   ];

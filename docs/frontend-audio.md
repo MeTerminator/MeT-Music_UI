@@ -12,7 +12,7 @@
 | 网易云音乐 | 沉浸环绕声 | 5.1 FLAC。内置 WASM 保留 6 路声道，跨域下载受限时交给浏览器原生播放 |
 | 网易云音乐 | 臻音全景声 | `av3a` MP4。可选 AVS3 WASM 保留 7.1.4 声床 |
 | QQ 音乐 | DTS:X | `dtsx` MP4，DTS-UHD Profile 2 的 48 kHz 5.1 ACE 声床。可选 WASM 解码为 6 路 PCM |
-| QQ 音乐 | 杜比全景声、杜比 EAC3 | Safari 原生播放。实测 `DA` 为 AC-4，`DAEAC3` 为带 Atmos JOC 的 Dolby Digital Plus（`ec-3`）。Safari 不支持 AC-4 时，选择 `DA` 会尝试同曲的 `DAEAC3` |
+| QQ 音乐 | 杜比全景声 | Safari 原生播放。下载页区分「杜比全景声 AC4」（`DA`）和「杜比全景声 EAC3」（`DAEAC3`，实测含 Atmos JOC）。Safari 不支持 AC-4 时，播放会尝试同曲的 `DAEAC3` |
 | 网易云音乐 | 杜比全景声 | 实测为 AC-4 MP4，播放档位仅向报告支持 AC-4 的 Safari 开放 |
 
 软件解码在起播时根据 `AudioDestinationNode.maxChannelCount` 和实际可建立的 AudioWorklet 输出选择布局。优先使用完整声道，支持较少声道时优先保留 7.1 或 5.1，再退到立体声。缩减布局时将额外声道按左右方向混入，立体声混音省略 LFE。

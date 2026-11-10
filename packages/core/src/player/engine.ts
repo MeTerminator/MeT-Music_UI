@@ -1,4 +1,4 @@
-import { qqDolbyLevels, qqPlaybackQualities, qqQualities } from "../qq-qualities";
+import { qqDolbyLevels, qqPlaybackDisplayLevel, qqPlaybackQualities, qqQualities } from "../qq-qualities";
 import {
   dolbyPlaybackCodec,
   neteasePlaybackQualities,
@@ -948,9 +948,8 @@ export const switchPlaybackQuality = async (
       quality: { ...next, switching: false },
     };
     if (item.isTrial) deps.notify.warning("当前音质返回了试听音频");
-    if (platform === "qq" && normalized === "DA" && item.level?.toUpperCase() === "DAEAC3") {
-      deps.notify.info("已使用 Safari 支持的杜比 EAC3 音源");
-    } else if (item.level && item.level.toLowerCase() !== normalized.toLowerCase()) {
+    const displayLevel = platform === "qq" ? qqPlaybackDisplayLevel : (level: string) => level.toLowerCase();
+    if (item.level && displayLevel(item.level) !== displayLevel(normalized)) {
       deps.notify.info("所选音质不可用，已使用可播放音质");
     }
     return true;

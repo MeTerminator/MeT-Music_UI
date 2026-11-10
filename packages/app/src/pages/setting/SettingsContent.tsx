@@ -9,7 +9,7 @@
  */
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { playbackLevel, soundStop } from "@met/core";
+import { playbackLevel, qqPlaybackDisplayLevel, soundStop } from "@met/core";
 import { supportedQQCodecs } from "@/player/qq-codecs";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
@@ -72,7 +72,7 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   const [lyricCacheDraft, setLyricCacheDraft] = useState<string | null>(null);
   const sessionId = getSessionId();
   const codecs = supportedQQCodecs();
-  const qqLevel = playbackLevel(settings, "qq", codecs);
+  const qqLevel = qqPlaybackDisplayLevel(playbackLevel(settings, "qq", codecs)).toLowerCase();
   const qqOption = songLevelData[qqLevel];
   const neteaseLevel = playbackLevel(settings, "netease", codecs);
   const neteaseOption = neteasePlaybackOptions.find(({ value }) => value === neteaseLevel);

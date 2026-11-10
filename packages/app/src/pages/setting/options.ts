@@ -7,6 +7,7 @@ import {
   NETEASE_LEVELS,
   neteasePlaybackQualities,
   qqDolbyCodec,
+  qqPlaybackDisplayLevel,
   qqPlaybackQualities,
   qqQualities,
   qqSpatialCodec,
@@ -22,6 +23,7 @@ const playableNetease = neteasePlaybackQualities(codecs, spatial);
 export const songLevelData: Record<string, SelectOption & { tip: string }> =
   Object.fromEntries(
     qqQualities.flatMap((quality) => {
+      if (quality.key !== qqPlaybackDisplayLevel(quality.key)) return [];
       const softwareCodec = qqSpatialCodec(quality.key);
       const nativeDolby = qqDolbyCodec(quality.key);
       const playable = playableQQ.some((q) => q.key === quality.key);
@@ -66,7 +68,10 @@ export const neteaseSongLevelOptions: SelectOption[] = Object.entries(
   neteaseSongLevelData,
 )
   .filter(([level]) => level !== "vivid" || spatial.includes("av3a"))
-  .map(([value, { label }]) => ({ label, value }));
+  .map(([value, { label }]) => ({
+    label: value === "dolby" ? `${label} AC4` : label,
+    value,
+  }));
 
 export const neteasePlaybackOptions: SelectOption[] = NETEASE_LEVELS
   .filter((level) => level !== "dolby" || playableNetease.includes(level))

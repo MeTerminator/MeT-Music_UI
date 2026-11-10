@@ -12,6 +12,9 @@ export const qqDolbyCodec = (level?: string | null): NativeDolbyCodec | undefine
   }
 };
 
+export const qqPlaybackDisplayLevel = (level: string): string =>
+  qqDolbyCodec(level) ? "DA" : level.toUpperCase();
+
 export const qqDolbyLevels = (level: string, codecs: readonly string[]): string[] => {
   switch (qqDolbyCodec(level)) {
     case "ac4":
@@ -55,4 +58,10 @@ export const normalizeQQPlaybackLevel = (level: string, codecs: readonly string[
 export const qqDownloadOptions = (available?: readonly string[] | null) =>
   qqQualities
     .filter((q) => available == null || available.includes(q.key))
-    .map((q) => ({ value: q.key, label: q.label }));
+    .map((q) => {
+      const codec = qqDolbyCodec(q.key);
+      return {
+        value: q.key,
+        label: codec ? `杜比全景声 ${codec.toUpperCase()}` : q.label,
+      };
+    });
