@@ -83,8 +83,9 @@ test("全局设置提供前端已适配的 QQ 和网易云播放音质并保存�
   const qq = page.getByRole("combobox", { name: "QQ 音乐音质选择" });
   await qq.click();
   const qqList = page.getByRole("listbox");
-  await expect(qqList.getByRole("option")).toHaveCount(18);
+  await expect(qqList.getByRole("option")).toHaveCount(19);
   await expect(qqList.getByRole("option", { name: /360 Reality Audio/ })).toBeAttached();
+  await expect(qqList.getByRole("option", { name: /DTS:X/ })).toBeAttached();
   await expect(qqList.getByRole("option", { name: "NAC 品质", exact: true })).toBeEnabled();
   await expect(qqList.getByRole("option", { name: "臻品全景声 7.1.4", exact: true })).toBeEnabled();
   await qqList.getByRole("option", { name: "臻品全景声 3.0", exact: true }).click();
@@ -125,6 +126,9 @@ test("缺少软件解码能力时保留音质名称和已保存的选择", async
   const qqOption = page.getByRole("option", { name: /360 Reality Audio/ });
   await expect(qqOption).toBeDisabled();
   await expect(qqOption).toContainText("当前环境未启用 MPEG-H 解码器");
+  const dtsx = page.getByRole("option", { name: /DTS:X/ });
+  await expect(dtsx).toBeDisabled();
+  await expect(dtsx).toContainText("当前环境未启用 DTS-UHD Profile 2 解码器");
   await page.keyboard.press("Escape");
 
   const netease = page.getByRole("combobox", { name: "网易云音乐音质选择" });

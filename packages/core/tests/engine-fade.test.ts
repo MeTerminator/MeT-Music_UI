@@ -516,6 +516,25 @@ describe("current-play quality override", () => {
     expect(f.status.playbackQuality?.actualLevel).toBe("Q360V3");
   });
 
+  it("falls back when the preferred DTS:X file uses an unsupported presentation", async () => {
+    const f = makeFixture();
+    f.settings.songLevel = "dtsx";
+    f.deps.env.supportedSpatialCodecs = () => ["dtsx"];
+    f.deps.env.decodeSpatial = vi.fn().mockRejectedValue(new Error("unsupported layout"));
+    const native = vi.spyOn(songApi, "getSongUrl").mockResolvedValue(response("HQ", "audio.mp3"));
+    const url = "https://media.example/dtsx.mp4";
+    vi.spyOn(extraApi, "getMusicUrl").mockResolvedValue([{
+      track_info: { mid: "1", file_url: url, file_quality: "DTSX" },
+    }]);
+
+    await initPlayer(true);
+    expect(f.deps.env.decodeSpatial).toHaveBeenCalledWith("dtsx", url, expect.any(AbortSignal), expect.any(Function));
+    expect(native).toHaveBeenCalledWith(1, "hq", "qq", undefined);
+    expect(f.status.playbackQuality).toMatchObject({ requestedLevel: "dtsx", actualLevel: "HQ" });
+    expect(FakeHowl.instances.at(-1)?.opts.src).toEqual(["https://media.example/audio.mp3"]);
+    expect(f.status.playState).toBe(true);
+  });
+
   it("keeps a playing song running at its seek after the quality reload", async () => {
     const f = makeFixture();
     vi.spyOn(songApi, "getSongUrl")

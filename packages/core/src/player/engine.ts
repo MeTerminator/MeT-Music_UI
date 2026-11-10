@@ -424,12 +424,13 @@ const getNormalSongUrl = async (
   status: StatusState,
   playNow: boolean,
   playId: number,
+  fallbackLevel?: string,
 ): Promise<string | null> => {
   try {
     const settings = deps.settings();
     const platform = songPlatform(deps.music().getPlaySongData);
     const requestedLevel = playbackLevel(settings, platform);
-    const item = await getPlaybackItem(id, requestedLevel, platform);
+    const item = await getPlaybackItem(id, fallbackLevel ?? requestedLevel, platform);
     if (!item?.url) return null;
     if (playId !== currentPlayId) return null;
     const songKey = songIdentityKey(deps.music().getPlaySongData);
@@ -576,9 +577,19 @@ export const createPlayer = async (
         releasePreparedAudio = prepared.dispose;
       } catch (error) {
         if (controller.signal.aborted || !isCurrent()) return;
-        status.playLoading = false;
-        status.playState = false;
-        throw error;
+        // A preferred DTS:X source can carry a profile this decoder does not handle.
+        const fallbackUrl =
+          spatial === "dtsx" && !qualityReload && playId && playSongData.id
+            ? await getNormalSongUrl(playSongData.id, status, autoPlay, playId, "hq").catch(() => null)
+            : null;
+        if (controller.signal.aborted || !isCurrent()) return;
+        if (!fallbackUrl) {
+          status.playLoading = false;
+          status.playState = false;
+          throw error;
+        }
+        songUrl = fallbackUrl;
+        deps.notify.warning("此 DTS:X 音源无法解码，已改用可播放音质");
       } finally {
         preparing = false;
         if (audioPreparation === controller) audioPreparation = null;
@@ -628,9 +639,10 @@ export const createPlayer = async (
     status.playSeekMs = 0;
     status.playSongLyricIndex = -1;
     // blob: 链接没有扩展名,必须显式给 format,否则 Howler 认不出编码直接失败
-    const extension = guessAudioFormat(src);
-    const qualityFormat = !extension && actualLevel && platform === "qq"
-      ? qqQualities.find((q) => q.key === actualLevel.toUpperCase())?.extension
+    const extension = guessAudioFormat(songUrl.startsWith("blob:") ? src : songUrl);
+    const loadedLevel = online ? status.playbackQuality?.actualLevel : null;
+    const qualityFormat = !extension && loadedLevel && platform === "qq"
+      ? qqQualities.find((q) => q.key === loadedLevel.toUpperCase())?.extension
       : undefined;
     const format = preparedFormat ?? extension ?? qualityFormat ??
       (songUrl.startsWith("blob:") ? "mp3" : undefined);

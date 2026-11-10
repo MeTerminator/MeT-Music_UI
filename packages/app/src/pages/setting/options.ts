@@ -27,6 +27,7 @@ export const songLevelData: Record<string, SelectOption & { tip: string }> =
       const value = quality.key.toLowerCase();
       const decoder = softwareCodec === "mpegh" ? "MPEG-H"
         : softwareCodec === "vorbis" ? "多声道 Vorbis"
+        : softwareCodec === "dtsx" ? "DTS-UHD Profile 2"
         : quality.codec === "nac" ? "NAC" : undefined;
       const disabledReason = playableQQ.some((q) => q.key === quality.key)
         ? undefined

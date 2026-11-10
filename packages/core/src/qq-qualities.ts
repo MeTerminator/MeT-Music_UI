@@ -1,11 +1,13 @@
 import { qqQualities } from "./qq-qualities.generated";
 export { qqQualities };
-export type SpatialCodec = "mpegh" | "av3a" | "vorbis";
+export type SpatialCodec = "mpegh" | "av3a" | "vorbis" | "dtsx";
 
 export type QQCodec = "aac" | "mp3" | "flac" | "ogg" | "nac";
 
 export const qqSpatialCodec = (level?: string | null): SpatialCodec | undefined => {
   switch (level?.toUpperCase()) {
+    case "DTSX":
+      return "dtsx";
     case "RA360":
       return "mpegh";
     case "Q360V3":

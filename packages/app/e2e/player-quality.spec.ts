@@ -71,7 +71,7 @@ async function setup(
       title: "晴天",
       available_qualities: netease
         ? ["standard", "exhigh", "lossless", "hires"]
-        : ["HQ", "SQ", "RS", "DTSX"],
+        : ["HQ", "SQ", "RS", "DTS"],
     };
     if (url.pathname.endsWith("/song/url/v1")) {
       const level = (url.searchParams.get("level") || "").toUpperCase();

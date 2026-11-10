@@ -28,6 +28,8 @@ describe("QQ browser playback and exact download choices", () => {
   it("enables QQ spatial formats only with their software decoder", () => {
     const keys = qqPlaybackQualities([], ["mpegh", "vorbis"]).map((q) => q.key);
     expect(keys).toEqual(["Q360V3", "Q360V4", "RA360"]);
+    expect(qqPlaybackQualities([], ["dtsx"]).map((q) => q.key)).toEqual(["DTSX"]);
+    expect(normalizeQQPlaybackLevel("dtsx")).toBe("dtsx");
     expect(normalizeQQPlaybackLevel("ra360")).toBe("ra360");
     expect(normalizeQQPlaybackLevel("Q360V4")).toBe("q360v4");
   });

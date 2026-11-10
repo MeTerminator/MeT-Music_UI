@@ -1,5 +1,6 @@
 import { createFile, MP4BoxBuffer } from "mp4box";
 import { errorMessage, type DecodeRequest, type DecodeResponse } from "../nac/types";
+import { DTSX_DECODER_ASSET, requireDtsx51 } from "./dtsx-config";
 import { StereoPcmWriter } from "./pcm-writer";
 
 interface DecoderModule {
@@ -29,6 +30,11 @@ function readTrack(buffer: ArrayBuffer, fourcc: string) {
   );
   if (!track) throw new Error(`MP4 缺少 ${fourcc} 音频轨`);
   const packets = file.getTrackSamplesInfo(track.tkhd.track_id);
+  if (fourcc === "dtsx") {
+    const entries = track.mdia.minf.stbl.stsd.entries;
+    if (entries.length !== 1) throw new Error("暂不支持多种 DTS:X 采样描述");
+    requireDtsx51(entries[0]);
+  }
   const edits = track.edts?.elst?.entries ?? [];
   const edit = edits[0];
   if (edits.length > 1 || (edit && (
@@ -48,7 +54,11 @@ function readTrack(buffer: ArrayBuffer, fourcc: string) {
 }
 
 async function decode({ buffer, base, fileId }: Extract<DecodeRequest, { type: "open" }>) {
-  const fourcc = base.endsWith("/mpegh.js") ? "mhm1" : "av3a";
+  const moduleName = new URL(base).pathname.split("/").at(-1);
+  const fourcc = moduleName === "mpegh.js" ? "mhm1"
+    : moduleName === "av3a.js" ? "av3a"
+    : moduleName === `${DTSX_DECODER_ASSET}.js` ? "dtsx" : undefined;
+  if (!fourcc) throw new Error("未知的空间音频解码器");
   const { packets, start, duration, timescale } = readTrack(buffer, fourcc);
   const { default: createDecoder } = await import(/* @vite-ignore */ base) as {
     default(options: { locateFile: (name: string) => string }): Promise<DecoderModule>;
