@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PCMPlayback } from "../src/player/nac/pcm-playback";
 import { bedLayouts, bedMix, mpegHOutputMix } from "../src/player/spatial/pcm-mix";
+import { nativeWaveLayout, WaveWriter } from "../src/player/spatial/wave";
 
 describe("spatial PCM", () => {
   it("offers full and reduced layouts without inventing extra channels for 5.1", () => {
@@ -15,6 +16,24 @@ describe("spatial PCM", () => {
     expect(bedMix(12, 6)[3]).toEqual([[3, 1]]);
     expect(bedMix(12, 6).flatMap((row) => row.map(([channel]) => channel)).sort((a, b) => a - b))
       .toEqual(Array.from({ length: 12 }, (_, i) => i));
+  });
+
+  it("packages the 7.1.4 speaker layout and writes signed 24-bit samples in channel order", async () => {
+    const writer = new WaveWriter(1, 48_000, 12);
+    writer.write([1, -1, 0.5, -0.5, ...Array<number>(8).fill(0)].map((value) => new Float32Array([value])));
+    const wave = await writer.finish().arrayBuffer();
+    const header = new DataView(wave);
+    expect(header.getUint16(20, true)).toBe(0xfffe);
+    expect(header.getUint16(22, true)).toBe(12);
+    expect(header.getUint32(40, true)).toBe(0x2d63f);
+    expect(header.getUint32(64, true)).toBe(36);
+    expect([...new Uint8Array(wave, 68, 12)]).toEqual([
+      0xff, 0xff, 0x7f, 0x00, 0x00, 0x80, 0x00, 0x00, 0x40, 0x00, 0x00, 0xc0,
+    ]);
+    expect(nativeWaveLayout(bedLayouts(12), 9_181_551)).toBe(12);
+    expect(nativeWaveLayout(bedLayouts(12), 12_000_000)).toBe(8);
+    expect(nativeWaveLayout(bedLayouts(16), 6_811_598)).toBe(8);
+    expect(nativeWaveLayout(bedLayouts(6), 25_000_000)).toBeUndefined();
   });
 
   it("folds center and surrounds into stereo with headroom and omits LFE", () => {

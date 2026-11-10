@@ -540,6 +540,7 @@ export const createPlayer = async (
     let songUrl = src;
     let preparedFormat: string | undefined;
     let preparedPlayer: PlayerAudio | undefined;
+    let preparedNative = false;
     let preparing = true;
     const platform = songPlatform(playSongData);
     const online = !playSongData.path && !playSongData.pc && playMode !== "dj";
@@ -573,6 +574,7 @@ export const createPlayer = async (
         else {
           songUrl = prepared.url;
           preparedFormat = prepared.format;
+          preparedNative = "native" in prepared && prepared.native === true;
         }
         releasePreparedAudio = prepared.dispose;
       } catch (error) {
@@ -650,13 +652,13 @@ export const createPlayer = async (
       : undefined;
     const format = preparedFormat ?? extension ?? qualityFormat ??
       (songUrl.startsWith("blob:") ? "mp3" : undefined);
-    const nativeFlacFallback = spatial === "flac" && !preparedPlayer;
+    const nativeFlacFallback = spatial === "flac" && !preparedPlayer && !preparedNative;
     player =
       preparedPlayer ??
       new Howl({
         src: [songUrl],
         ...(format ? { format: [format] } : {}),
-        html5: html5Player || nativeFlacFallback,
+        html5: html5Player || preparedNative || nativeFlacFallback,
         preload: "metadata",
         volume: status.playVolume,
         rate: status.playRate,

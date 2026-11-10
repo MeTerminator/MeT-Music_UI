@@ -46,7 +46,7 @@ export interface DecodedAudio extends Omit<AudioInfo, 'delay' | 'channels'> {
 /** fileId 用来隔离连续拖入多个文件时，旧任务的异步消息。 */
 export type DecodeRequest =
   | { type: 'prepare' }
-  | { type: 'open'; fileId: number; buffer: ArrayBuffer; base: string }
+  | { type: 'open'; fileId: number; buffer: ArrayBuffer; base: string; wave?: boolean }
   | { type: 'output'; fileId: number; channels: number }
   | { type: 'seek'; fileId: number; sample: number }
   | { type: 'cancel'; fileId: number };
@@ -54,7 +54,8 @@ export type DecodeRequest =
 export type DecodeResponse =
   | { type: 'ready' }
   | { type: 'info'; fileId: number; info: AudioInfo }
-  | { type: 'output'; fileId: number; layouts: readonly number[] }
+  | { type: 'output'; fileId: number; layouts: readonly number[]; samples: number }
+  | { type: 'wave'; fileId: number; blob: Blob }
   | { type: 'status'; fileId: number; message: string }
   | { type: 'chunk'; fileId: number; chunk: PCMChunk }
   | { type: 'progress'; fileId: number; progress: number }

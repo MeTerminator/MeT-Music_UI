@@ -1,6 +1,7 @@
 import type { SpatialCodec } from "@met/core";
 import { getAssetUrl } from "../../platform/web";
 import { PcmStreamAudio } from "../nac/stream-audio";
+import { prepareNativeSpatialAudio, supportsNativeSpatialAudio } from "./safari";
 
 declare const __SPATIAL_DECODERS__: Partial<Record<SpatialCodec, string>>;
 
@@ -32,6 +33,14 @@ export async function decodeSpatialUrl(
     : codec === "vorbis"
       ? () => new Worker(new URL("./vorbis-worker.ts", import.meta.url), { type: "module" })
       : () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  if (await supportsNativeSpatialAudio()) {
+    try {
+      return await prepareNativeSpatialAudio(createWorker, buffer.slice(0), moduleUrl, signal, onProgress);
+    } catch {
+      signal.throwIfAborted();
+      onProgress(0);
+    }
+  }
   const player = await PcmStreamAudio.open(
     buffer, moduleUrl, signal, onProgress, createWorker,
   );

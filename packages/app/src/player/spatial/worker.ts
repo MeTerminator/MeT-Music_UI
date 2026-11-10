@@ -56,7 +56,7 @@ function readTrack(buffer: ArrayBuffer, fourcc: string) {
   return { packets, start, duration, timescale };
 }
 
-async function decode({ buffer, base, fileId }: Extract<DecodeRequest, { type: "open" }>) {
+async function decode({ buffer, base, fileId, wave }: Extract<DecodeRequest, { type: "open" }>) {
   const moduleName = new URL(base).pathname.split("/").at(-1);
   const matches = (names: readonly string[]) => names.some((name) => `${name}.js` === moduleName);
   const fourcc = matches(spatialAssets.mpegh) ? "mhm1"
@@ -87,11 +87,12 @@ async function decode({ buffer, base, fileId }: Extract<DecodeRequest, { type: "
         if (!writer) {
           if (fourcc === "av3a" && channels > 12)
             throw new Error("AVS3 音轨的声道布局不受支持");
-          const output = renderChannels ?? await requestPcmOutput(fileId, bedLayouts(channels));
+          const samples = Math.round(duration * rate);
+          const output = renderChannels ?? await requestPcmOutput(fileId, bedLayouts(channels), samples);
           if (renderChannels !== undefined && channels !== renderChannels)
             throw new Error("MPEG-H 渲染布局与输出布局不一致");
           const mix = renderChannels === undefined ? bedMix(channels, output) : mpegHOutputMix(output);
-          writer = new PcmWriter(fileId, Math.round(duration * rate), rate, mix);
+          writer = new PcmWriter(fileId, samples, rate, mix, wave);
           sourceChannels = channels;
         }
         if (rate !== writer.rate || channels !== sourceChannels)
@@ -138,13 +139,14 @@ async function decode({ buffer, base, fileId }: Extract<DecodeRequest, { type: "
   }
 
   if (fourcc === "mhm1" && decoder._spatial_channels) {
-    const output = await requestPcmOutput(fileId, [12, 8, 6, 2]);
+    const samples = Math.round(duration * 48_000);
+    const output = await requestPcmOutput(fileId, [12, 8, 6, 2], samples);
     try {
       await decodePackets(output);
     } catch (error) {
       if (writer || output === 2) throw error;
       // A presentation may lack a render for the device's layout.
-      await decodePackets(await requestPcmOutput(fileId, [2]));
+      await decodePackets(await requestPcmOutput(fileId, [2], samples));
     }
   } else {
     await decodePackets();

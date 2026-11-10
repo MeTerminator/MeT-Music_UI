@@ -30,7 +30,7 @@ function oggSamples(buffer: ArrayBuffer): number {
   throw new Error("Ogg 音轨缺少有效的结束页");
 }
 
-async function decode(buffer: ArrayBuffer, fileId: number) {
+async function decode({ buffer, fileId, wave }: Extract<DecodeRequest, { type: "open" }>) {
   const samples = oggSamples(buffer);
   const decoder = new OggVorbisDecoder();
   await decoder.ready;
@@ -45,8 +45,8 @@ async function decode(buffer: ArrayBuffer, fileId: number) {
     if (count !== 12 && count !== 16)
       throw new Error(`QQ 全景声的 Vorbis 声道数不受支持（${count}）`);
     if (!writer) {
-      const output = await requestPcmOutput(fileId, bedLayouts(count));
-      writer = new PcmWriter(fileId, samples, sampleRate, bedMix(count, output, true));
+      const output = await requestPcmOutput(fileId, bedLayouts(count), samples);
+      writer = new PcmWriter(fileId, samples, sampleRate, bedMix(count, output, true), wave);
       sourceChannels = count;
     }
     if (sampleRate !== writer.rate || count !== sourceChannels)
@@ -68,7 +68,7 @@ async function decode(buffer: ArrayBuffer, fileId: number) {
 
 self.onmessage = ({ data }: MessageEvent<DecodeRequest>) => {
   if (data.type !== "open") return;
-  void decode(data.buffer, data.fileId).catch((error) =>
+  void decode(data).catch((error) =>
     self.postMessage({
       type: "error", fileId: data.fileId, message: errorMessage(error),
     } satisfies DecodeResponse),

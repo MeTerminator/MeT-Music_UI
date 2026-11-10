@@ -1,9 +1,10 @@
 import { PCM_BLOCK_SAMPLES } from "../nac/types";
 import type { DecodeRequest, DecodeResponse, PCMChunk } from "../nac/types";
 import type { PcmMix } from "./pcm-mix";
+import { WaveWriter } from "./wave";
 
 /** Choose the widest layout the playback graph can actually open before caching PCM. */
-export function requestPcmOutput(fileId: number, layouts: readonly number[]): Promise<number> {
+export function requestPcmOutput(fileId: number, layouts: readonly number[], samples: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const onOutput = ({ data }: MessageEvent<DecodeRequest>) => {
       if (data.type !== "output" || data.fileId !== fileId) return;
@@ -12,23 +13,26 @@ export function requestPcmOutput(fileId: number, layouts: readonly number[]): Pr
       else reject(new Error("播放器选择了不支持的输出布局"));
     };
     self.addEventListener("message", onOutput);
-    self.postMessage({ type: "output", fileId, layouts } satisfies DecodeResponse);
+    self.postMessage({ type: "output", fileId, layouts, samples } satisfies DecodeResponse);
   });
 }
 
 export class PcmWriter {
   written = 0;
   private channels: PCMChunk["channels"];
+  private readonly wave?: WaveWriter;
 
   constructor(
     private readonly fileId: number,
     readonly samples: number,
     readonly rate: number,
     private readonly mix: PcmMix,
+    wave = false,
   ) {
     if (!Number.isSafeInteger(samples) || samples <= 0 || !Number.isFinite(rate) || rate <= 0)
       throw new Error("无效的音频采样参数");
     this.channels = this.allocate();
+    if (wave) this.wave = new WaveWriter(samples, rate, mix.length);
     const blocks = Math.ceil(samples / PCM_BLOCK_SAMPLES);
     this.send({ type: "info", fileId, info: {
       samples, rate, blocks, duration: samples / rate, delay: 0, channels: mix.length,
@@ -57,16 +61,22 @@ export class PcmWriter {
       if (index + 1 !== this.channels[0].length) continue;
 
       const offset = this.written - this.channels[0].length;
-      this.send({
-        type: "chunk", fileId: this.fileId,
-        chunk: { block: offset / PCM_BLOCK_SAMPLES, offset, channels: this.channels },
-      }, this.channels.map((channel) => channel.buffer));
+      if (this.wave) {
+        this.wave.write(this.channels);
+        this.send({ type: "progress", fileId: this.fileId, progress: this.written / this.samples });
+      } else {
+        this.send({
+          type: "chunk", fileId: this.fileId,
+          chunk: { block: offset / PCM_BLOCK_SAMPLES, offset, channels: this.channels },
+        }, this.channels.map((channel) => channel.buffer));
+      }
       if (this.written < this.samples) this.channels = this.allocate();
     }
   }
 
   complete() {
     if (this.written !== this.samples) throw new Error("音频解码不完整");
-    this.send({ type: "complete", fileId: this.fileId });
+    if (this.wave) this.send({ type: "wave", fileId: this.fileId, blob: this.wave.finish() });
+    else this.send({ type: "complete", fileId: this.fileId });
   }
 }

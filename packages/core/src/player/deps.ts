@@ -186,7 +186,10 @@ export interface PlayerEnv {
     url: string,
     signal: AbortSignal,
     onProgress: (percent: number) => void,
-  ): Promise<{ player: PlayerAudio; dispose(): void }>;
+  ): Promise<
+    | { player: PlayerAudio; dispose(): void }
+    | { url: string; format: string; native: true; dispose(): void }
+  >;
   /** 在取链前的用户手势内解锁 PCM 音频上下文。 */
   unlockNac?(): void;
   /** NAC 首块就绪即返回播放器；后台继续解码，dispose 释放资源。 */
