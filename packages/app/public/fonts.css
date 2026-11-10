@@ -6,6 +6,7 @@
 @font-face {
   font-family: 'HarmonyOS_Bold';
   src: url('./fonts/HarmonyOS_Sans_Bold.woff2');
+  font-weight: 700;
 }
 
 /* SF Pro Regular */

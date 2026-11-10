@@ -24,6 +24,12 @@ test("字重可自由设置,0 则跟随字体", async ({ page }) => {
 
   // 默认字重 700
   expect(await weightVar(page)).toBe("700");
+  // WebKit 会对声明为 normal 的 Bold 字体再合成一次粗体。
+  const boldFaces = await page.evaluate(async () =>
+    (await document.fonts.load('700 12px "HarmonyOS_Bold"', "Lyrics"))
+      .map((face) => face.weight),
+  );
+  expect(boldFaces).toEqual(["700"]);
 
   for (const w of [100, 400, 900]) {
     await setSetting(page, { lyricFontWeight: w });
