@@ -1,12 +1,13 @@
 import type { PlayerAudio } from '@met/core';
 import workletURL from './audio-worklet.ts?worker&url';
 import type { AudioInfo, DecodeRequest, DecodeResponse, PCMChunk, PlaybackCommand, PlaybackState } from './types';
+import { outputContextTime, PcmOutputClock } from './output-clock';
 
 let context: AudioContext | null = null;
 let workletReady: Promise<void> | null = null;
 function audioContext(): AudioContext {
   if (!context || context.state === 'closed') {
-    context = new AudioContext();
+    context = new AudioContext({ latencyHint: 'interactive' });
     workletReady = null;
   }
   return context;
@@ -31,6 +32,7 @@ export class PcmStreamAudio implements PlayerAudio {
   private desiredPlaying = false;
   private playRequest = 0;
   private position = 0;
+  private readonly outputClock = new PcmOutputClock();
   private waiting = false;
   private revision = 0;
   private currentVolume = 1;
@@ -197,11 +199,12 @@ export class PcmStreamAudio implements PlayerAudio {
       node.port.onmessage = ({ data }: MessageEvent<PlaybackState>) => {
         if (this.disposed || data.revision < this.revision || !this.info) return;
         this.position = data.position / this.info.rate;
-        if (data.waiting !== this.waiting) {
-          this.waiting = data.waiting;
-          this.emit(data.waiting ? 'waiting' : 'playing');
+        if (data.contextTime !== undefined) {
+          this.outputClock.push({ ...data, contextTime: data.contextTime, position: this.position });
         }
-        if (data.ended && this.desiredPlaying) {
+        const audible = this.outputClock.read(outputContextTime(this.context, performance.now()));
+        this.setWaiting(this.desiredPlaying && audible.waiting);
+        if (audible.ended && this.desiredPlaying) {
           this.desiredPlaying = false;
           this.emit('end');
         }
@@ -244,6 +247,11 @@ export class PcmStreamAudio implements PlayerAudio {
   private emit(event: string, ...args: any[]): void {
     if (!this.disposed) for (const callback of [...(this.handlers.get(event) ?? [])]) callback(...args);
   }
+  private setWaiting(waiting: boolean): void {
+    if (waiting === this.waiting) return;
+    this.waiting = waiting;
+    this.emit(waiting ? 'waiting' : 'playing');
+  }
   on(event: string, callback: Handler): this {
     const callbacks = this.handlers.get(event) ?? new Set<Handler>();
     callbacks.add(callback);
@@ -268,6 +276,8 @@ export class PcmStreamAudio implements PlayerAudio {
     const request = ++this.playRequest;
     void this.context.resume().then(() => {
       if (!this.disposed && this.desiredPlaying && request === this.playRequest) {
+        this.outputClock.reset(this.position);
+        this.setWaiting(true);
         this.send({ type: 'play', fileId: 1 });
         this.emit('play');
       }
@@ -314,8 +324,12 @@ export class PcmStreamAudio implements PlayerAudio {
   seek(): number;
   seek(value: number): this;
   seek(value?: number): number | this {
-    if (value === undefined) return this.position;
+    if (value === undefined) return this.desiredPlaying
+      ? this.outputClock.read(outputContextTime(this.context, performance.now())).position
+      : this.position;
     this.position = Math.max(0, Math.min(this.duration(), value));
+    this.outputClock.reset(this.position);
+    if (this.desiredPlaying) this.setWaiting(true);
     const sample = Math.floor(this.position * (this.info?.rate ?? 44100));
     this.send({ type: 'seek', fileId: 1, sample, revision: ++this.revision });
     this.worker?.postMessage({ type: 'seek', fileId: 1, sample } satisfies DecodeRequest);

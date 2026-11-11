@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { expect, test } from "@playwright/test";
 
-test("FLAC 首批数据即可起播，完整解码后可重复精确定位", async ({ page }) => {
+for (const simulatedLatency of [0, 0.25]) {
+test(`FLAC 首批数据起播、精确定位及输出延迟补偿（${simulatedLatency}s）`, async ({ page }) => {
   const bytes = await readFile(process.env.FLAC_TEST_FILE || new URL("../tests/fixtures/flac/stereo.flac", import.meta.url));
   let metadataEnd = 4;
   while (metadataEnd + 4 < bytes.length) {
@@ -24,6 +25,14 @@ test("FLAC 首批数据即可起播，完整解码后可重复精确定位", asy
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as { port: number };
   try {
+    if (simulatedLatency) await page.addInitScript((delay) => {
+      Object.defineProperty(AudioContext.prototype, "getOutputTimestamp", {
+        configurable: true,
+        value(this: AudioContext) {
+          return { contextTime: Math.max(0, this.currentTime - delay), performanceTime: performance.now() };
+        },
+      });
+    }, simulatedLatency);
     await page.route("http://localhost:3000/api/**", (route) => route.fulfill({ status: 404, json: {} }));
     await page.goto("/app/");
     await page.mouse.click(1, 1);
@@ -49,6 +58,14 @@ test("FLAC 首批数据即可起播，完整解码后可重复精确定位", asy
     expect(finished).toBe(false);
     expect(first.progress).toBeLessThan(100);
     await expect.poll(() => page.evaluate(() => (window as any).__flacPrepared.player.seek())).toBeGreaterThan(0.1);
+    if (simulatedLatency) {
+      const difference = await page.evaluate(() => {
+        const audio = (window as any).__flacPrepared.player;
+        return audio.position - audio.seek(); // 已渲染的位置应领先于已听到的位置。
+      });
+      expect(difference).toBeGreaterThan(0.15);
+      expect(difference).toBeLessThan(0.35);
+    }
     expect(finished).toBe(false);
     await page.evaluate(() => {
       const audio = (window as any).__flacPrepared.player;
@@ -90,3 +107,4 @@ test("FLAC 首批数据即可起播，完整解码后可重复精确定位", asy
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+}

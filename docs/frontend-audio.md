@@ -4,6 +4,8 @@
 
 Safari 的普通 FLAC 音源使用流式 WASM 解码与 AudioWorklet 播放，以避开原生 FLAC 跳转时实际声音与媒体时间失步的问题。读取到首批 PCM 即可起播，无须等待整首下载；后台按块继续读取和解码，跳到尚未收到的位置时暂停采样时钟与歌词动画，数据到达后继续。切歌会取消未完成的读取。带额外尾部数据的 FLAC 会校验最后一帧的采样数、CRC8 和 CRC16 后补解码，不补零或忽略损坏帧。多声道空间音源仍使用下文的输出布局选择。
 
+AudioWorklet 播放时，歌词与进度按浏览器报告的声卡输出时间同步，而不是直接使用已经渲染到输出队列的采样位置。优先使用 `getOutputTimestamp()` 映射时间；不可用时使用 `baseLatency` 与 `outputLatency` 补偿，以适配蓝牙耳机等输出设备。倍速、缓冲与结束位置通过实际渲染记录映射，最后的采样到达输出端后才切歌。[Web Audio 输出时间戳](https://www.w3.org/TR/webaudio/#dom-audiocontext-getoutputtimestamp)
+
 | 来源 | 档位 | 实测编码与输出 |
 | --- | --- | --- |
 | QQ 音乐 | 标准、较高、极高、无损、Hi-Res、臻品母带、臻品全景声 | AAC LC／HE-AAC、MP3、Vorbis、FLAC 由浏览器解码。臻品母带样本为 24-bit／192 kHz FLAC |

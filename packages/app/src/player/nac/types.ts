@@ -73,6 +73,8 @@ export interface PlaybackState {
   playing: boolean;
   waiting: boolean;
   ended: boolean;
+  /** 渲染块末端的 AudioContext 时间；命令确认不携带此字段。 */
+  contextTime?: number;
 }
 
 export type PlaybackCommand =

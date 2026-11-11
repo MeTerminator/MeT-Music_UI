@@ -2,6 +2,7 @@ import { PCMPlayback } from './pcm-playback';
 import type { PlaybackCommand } from './types';
 
 declare const sampleRate: number;
+declare const currentTime: number;
 declare abstract class AudioWorkletProcessor {
   readonly port: MessagePort;
   abstract process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean;
@@ -29,8 +30,8 @@ class NACAudioProcessor extends AudioWorkletProcessor {
     };
   }
 
-  private report(): void {
-    this.port.postMessage(this.playback.state());
+  private report(contextTime?: number): void {
+    this.port.postMessage({ ...this.playback.state(), contextTime });
   }
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
@@ -45,7 +46,7 @@ class NACAudioProcessor extends AudioWorkletProcessor {
       state.waiting !== this.wasWaiting ||
       state.playing !== this.wasPlaying
     ) {
-      this.report();
+      this.report(currentTime + (output[0]?.length ?? 0) / sampleRate);
       this.frames = 0;
     }
     this.wasWaiting = state.waiting;
