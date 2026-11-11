@@ -31,7 +31,7 @@ import { webMediaSession } from "@/platform/media-session";
 import { getBlobUrlFromUrl, getSessionId } from "@/platform/web";
 import { decodeNacUrl } from "./nac/prepare";
 import { supportedQQCodecs } from "./qq-codecs";
-import { decodeSpatialUrl, supportedSpatialCodecs } from "./spatial/prepare";
+import { decodeSpatialUrl, preferSoftwareFlac, supportedSpatialCodecs } from "./spatial/prepare";
 import { unlockPcmAudio } from "./nac/stream-audio";
 import { broadcastHook } from "@/host";
 
@@ -102,6 +102,7 @@ export const setupPlayer = (): void => {
       unlockNac: unlockPcmAudio,
       supportedSpatialCodecs,
       decodeSpatial: decodeSpatialUrl,
+      preferSoftwareFlac,
       // 封面取色:写入 coverBackground(引擎)与 coverTheme(取色实现内部 setState)
       coverGradient: getCoverGradient,
       onTick: broadcastHook,

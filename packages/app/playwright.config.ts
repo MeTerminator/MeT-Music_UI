@@ -28,6 +28,11 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "webkit",
+      testMatch: /(?:lyric-(buffering|seek-gap)|native-seek|flac-playback)\.spec\.ts/,
+      use: { ...devices["Desktop Safari"] },
+    },
   ],
   webServer: {
     command: "pnpm dev",

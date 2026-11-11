@@ -27,6 +27,7 @@ export interface StatusStoreState {
   searchInputFocus: boolean;
   showPlayBar: boolean;
   playState: boolean;
+  playBuffering: boolean;
   playLoading: boolean;
   playUseOtherSource: boolean;
   playListShow: boolean;
@@ -84,6 +85,7 @@ export const useStatusStore = create<StatusStoreState>()(
       searchInputFocus: false,
       showPlayBar: true,
       playState: false,
+      playBuffering: false,
       playLoading: false,
       playUseOtherSource: false,
       playListShow: false,

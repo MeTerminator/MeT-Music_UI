@@ -89,6 +89,8 @@ export default defineConfig({
   server: {
     port: Number(process.env.VITE_DEV_PORT) || 3000,
     host: true,
+    // 浏览器回归报告不应触发正在试听页面的整页重载。
+    watch: { ignored: ["**/test-results/**", "**/playwright-report/**"] },
     proxy: {
       "/api": {
         target: process.env.VITE_API_PROXY_TARGET || "https://music.met6.top:444/api",

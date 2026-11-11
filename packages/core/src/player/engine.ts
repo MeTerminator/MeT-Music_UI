@@ -29,6 +29,7 @@ import {
  *      且缓存失败时回退为在线直链播放,不再整首播放失败。
  */
 import { Howl, Howler } from "howler";
+import { seekPlayer } from "./seek";
 import type { CoverSize, Song } from "../types/song";
 import { emptyLyric, songIdentityKey } from "../types/song";
 import { getSongUrl, getSongLyric, getAMttmlLyric } from "../api/song";
@@ -55,6 +56,7 @@ let currentResource: {
 } | null = null;
 let audioPreparation: AbortController | null = null;
 let releasePreparedAudio: (() => void) | null = null;
+let releaseNativeAudioEvents: (() => void) | null = null;
 // 时长定时器
 let seekInterval: ReturnType<typeof setInterval> | undefined;
 let reportInterval: ReturnType<typeof setInterval> | undefined;
@@ -380,7 +382,8 @@ const supportsSpatial = (platform: Platform, level?: string | null) => {
 };
 
 const unlockDecodedAudio = (platform: Platform, level: string) => {
-  if ((platform === "qq" && level.toLowerCase() === "nac") || supportsSpatial(platform, level))
+  if ((platform === "qq" && level.toLowerCase() === "nac") || supportsSpatial(platform, level) ||
+      deps.env.preferSoftwareFlac?.())
     deps.env.unlockNac?.();
 };
 
@@ -557,21 +560,27 @@ export const createPlayer = async (
       actualLevel ?? quality?.requestedLevel ??
       (online ? playbackLevel(settings, platform, deps.env.supportedQQCodecs?.() ?? []) : null);
     const dolby = dolbyPlaybackCodec(platform, actualLevel);
-    const spatial = supportsSpatial(platform, level);
+    // Safari 的原生 FLAC seek 可能报告正确 currentTime，却播放错误样本。
+    // 先解码为 PCM（或精确的 WAV），不能靠歌词时间偏移补偿。
+    const spatialCodec = supportsSpatial(platform, level);
+    const preciseFlac = !spatialCodec && deps.env.preferSoftwareFlac?.() === true && guessAudioFormat(src) === "flac";
+    const spatial = spatialCodec ?? (preciseFlac ? "flac" : null);
     const needsNac = /\.nac(?:[?#]|$)/i.test(src) ||
       (platform === "qq" && level?.toLowerCase() === "nac");
     if (spatial || needsNac) {
       audioPreparation?.abort();
       const controller = new AbortController();
       audioPreparation = controller;
-      status.songCacheProgress = 0;
+      status.songCacheProgress = preciseFlac ? -1 : 0;
       try {
         const onProgress = (percent: number) => {
-          if (preparing && isCurrent() && !controller.signal.aborted)
+          if (!preciseFlac && preparing && isCurrent() && !controller.signal.aborted)
             status.songCacheProgress = percent;
         };
         const prepared = spatial
-          ? await deps.env.decodeSpatial?.(spatial, src, controller.signal, onProgress)
+          ? preciseFlac
+            ? await deps.env.decodeSpatial?.(spatial, src, controller.signal, onProgress, true)
+            : await deps.env.decodeSpatial?.(spatial, src, controller.signal, onProgress)
           : await deps.env.decodeNac?.(src, controller.signal, onProgress);
         if (!prepared) throw new Error("当前平台未提供此音频解码器");
         if (!isCurrent() || controller.signal.aborted) {
@@ -596,6 +605,8 @@ export const createPlayer = async (
         // Keep native FLAC playback available when a CDN denies the worker's fetch.
         if (spatial === "flac") {
           preparedFormat = guessAudioFormat(src) ?? "flac";
+          if (preciseFlac)
+            deps.notify.warning("此音源无法完成 FLAC 精确解码，已回退原生播放，跳转可能不准确");
         } else if (!fallbackUrl) {
           status.playLoading = false;
           status.playState = false;
@@ -683,6 +694,58 @@ export const createPlayer = async (
     music.setPlayHistory(playSongData);
     // 加载完成
     const loadedPlayer = player;
+    // 软件解码按实际采样推进；跳到尚未收到的位置时也要冻结 AMLL 动画。
+    if (preparedPlayer) {
+      const bufferState = (waiting: boolean) => {
+        if (player !== loadedPlayer) return;
+        setAudioTime(true);
+        justSetSeek(true);
+        status.playBuffering = waiting;
+      };
+      preparedPlayer.on("waiting", () => bufferState(true));
+      preparedPlayer.on("playing", () => bufferState(false));
+    }
+    // Howler 的 play/seek 事件不代表原生音频已经恢复输出。Safari 跳转后
+    // 会等待缓冲，此时 playState 仍为 true，AMLL 的独立动画必须暂停。
+    if (audioDom && typeof audioDom.addEventListener === "function" &&
+        (player as any)._webAudio === false) {
+      const refreshNativeProgress = () => {
+        if (player !== loadedPlayer) return;
+        setAudioTime(true);
+        justSetSeek(true);
+      };
+      const wait = () => {
+        if (player !== loadedPlayer) return;
+        status.playBuffering = true;
+        refreshNativeProgress();
+      };
+      const resume = () => {
+        if (player !== loadedPlayer) return;
+        refreshNativeProgress();
+        // seeked 可能先于 playing，也可能发生在暂停时；没有足够数据时
+        // 继续等待，不能仅凭一次 canplay/seeked 就启动逐字动画。
+        status.playBuffering = audioDom.seeking ||
+          (status.playState && (audioDom.paused || audioDom.readyState < 3));
+      };
+      const events = [
+        ["seeking", wait], ["waiting", wait],
+        ["seeked", resume], ["playing", resume],
+        ["canplay", resume], ["timeupdate", resume],
+      ] as const;
+      for (const [event, handler] of events) audioDom.addEventListener(event, handler);
+      releaseNativeAudioEvents = () => {
+        for (const [event, handler] of events) audioDom.removeEventListener(event, handler);
+      };
+    }
+    // Howler 可将 seek 排队到 play Promise 完成后才执行。届时再次读取
+    // 实际位置，确保暂停跳转也能更新歌词，而不是只刷新 setSeek 调用当帧。
+    player.on("seek", () => {
+      if (player !== loadedPlayer) return;
+      setAudioTime(true);
+      justSetSeek(true);
+      deps.env.onSeek?.();
+      syncMediaSessionPosition(true);
+    });
     let qualityReloadReady = false;
     player?.once("load", () => {
       if (!isCurrent() || player !== loadedPlayer) return;
@@ -782,8 +845,9 @@ export const createPlayer = async (
       }
     });
     // 加载失败
-    const onLoadError = (_id: unknown, errCode: unknown): void => {
+    const onLoadError = (_id: unknown, errCode: unknown, detail?: unknown): void => {
       if (!isCurrent() || player !== loadedPlayer) return;
+      if (detail) console.error("音频解码错误详情：", detail);
       if (qualityReload && !qualityReloadReady) {
         status.playLoading = false;
         status.playState = false;
@@ -893,7 +957,9 @@ export const switchPlaybackQuality = async (
     new Promise((resolve, reject) => {
       const timeout = setTimeout(
         () => finish(new Error("Audio load timed out")),
-        supportsSpatial(platform, status.playbackQuality?.actualLevel) ? 120_000 : 20_000,
+        supportsSpatial(platform, status.playbackQuality?.actualLevel) ||
+          (deps.env.preferSoftwareFlac?.() && guessAudioFormat(url) === "flac")
+          ? 120_000 : 20_000,
       );
       const finish = (error?: Error) => {
         clearTimeout(timeout);
@@ -1227,9 +1293,12 @@ export const soundStop = (): void => {
   console.log("[engine] soundStop called");
   audioPreparation?.abort();
   audioPreparation = null;
+  releaseNativeAudioEvents?.();
+  releaseNativeAudioEvents = null;
   // 清理 Howler
   const settings = deps.settings();
   const status = deps.status();
+  status.playBuffering = false;
 
   if (settings.html5Player) {
     player?.stop();
@@ -1323,7 +1392,7 @@ export const setSeek = (seek = 0, isInternal = false): void => {
     return;
   }
   console.log("[engine] setSeek - seeking player to", seek);
-  player?.seek(seek);
+  if (player) seekPlayer(player, seek);
   setAudioTime(true);
   justSetSeek(true);
   deps.env.onSeek?.();

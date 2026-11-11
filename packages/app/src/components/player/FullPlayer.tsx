@@ -294,6 +294,7 @@ function FullPlayerInner() {
   const coverBackground = useStatusStore((s) => s.coverBackground);
   const coverTheme = useStatusStore((s) => s.coverTheme);
   const playState = useStatusStore((s) => s.playState);
+  const playBuffering = useStatusStore((s) => s.playBuffering);
   const playSeekMs = useStatusStore((s) => s.playSeekMs);
   const playerControlShow = useStatusStore((s) => s.playerControlShow);
   const lyricViewMode = useStatusStore((s) => s.lyricViewMode);
@@ -577,6 +578,8 @@ function FullPlayerInner() {
     lyricPlayerRef.current?.lyricPlayer?.setCurrentTime(time, true);
   }, [
     playSeekRevision,
+    // 缓冲前后强制校准独立运行的逐字动画，包括媒体时间未变化的恢复。
+    playBuffering,
     lyricReady,
     useAM,
     applyAMOffset,
@@ -829,7 +832,7 @@ function FullPlayerInner() {
           }
           lyricLines={amLines}
           currentTime={amCurrentTime}
-          playing={playState}
+          playing={playState && !playBuffering}
           enableSpring={useAMSpring}
           enableScale={useAMScale}
           enableBlur={useAMBlur}

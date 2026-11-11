@@ -31,6 +31,7 @@ export class PcmStreamAudio implements PlayerAudio {
   private desiredPlaying = false;
   private playRequest = 0;
   private position = 0;
+  private waiting = false;
   private revision = 0;
   private currentVolume = 1;
   private currentRate = 1;
@@ -39,6 +40,9 @@ export class PcmStreamAudio implements PlayerAudio {
   private rejectReady: ((error: unknown) => void) | null = null;
   private resolveReady: (() => void) | null = null;
   private readonly ready: Promise<void>;
+  private inputReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  private resolveInput: (() => void) | null = null;
+  private rejectInput: ((error: unknown) => void) | null = null;
 
   private constructor(
     private readonly signal: AbortSignal,
@@ -50,7 +54,7 @@ export class PcmStreamAudio implements PlayerAudio {
   }
 
   static async open(
-    buffer: ArrayBuffer,
+    buffer: ArrayBuffer | ReadableStream<Uint8Array>,
     base: string,
     signal: AbortSignal,
     progress: (percent: number) => void,
@@ -65,7 +69,8 @@ export class PcmStreamAudio implements PlayerAudio {
     return audio;
   }
 
-  private async initialize(buffer: ArrayBuffer, base: string, createWorker: () => Worker): Promise<void> {
+  private async initialize(buffer: ArrayBuffer | ReadableStream<Uint8Array>, base: string, createWorker: () => Worker): Promise<void> {
+    if (!(buffer instanceof ArrayBuffer)) this.inputReader = buffer.getReader();
     workletReady ??= this.context.audioWorklet.addModule(workletURL).catch((error) => { workletReady = null; throw error; });
     await workletReady;
     if (this.disposed) return;
@@ -80,11 +85,44 @@ export class PcmStreamAudio implements PlayerAudio {
         this.fail(error);
       }
     };
-    this.worker.postMessage({ type: 'open', fileId: 1, buffer, base } satisfies DecodeRequest, [buffer]);
+    if (buffer instanceof ArrayBuffer) {
+      this.worker.postMessage({ type: 'open', fileId: 1, buffer, base } satisfies DecodeRequest, [buffer]);
+    } else {
+      this.worker.postMessage({ type: 'open-stream', fileId: 1 } satisfies DecodeRequest);
+      await this.readInput();
+    }
+  }
+
+  private async readInput(): Promise<void> {
+    const reader = this.inputReader!;
+    try {
+      while (!this.disposed) {
+        const { value, done } = await reader.read();
+        if (this.disposed) return;
+        if (done) {
+          this.worker?.postMessage({ type: 'end-stream', fileId: 1 } satisfies DecodeRequest);
+          return;
+        }
+        const buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+        // 解码器消费一块后再读取下一块，避免主线程堆积整首压缩文件。
+        await new Promise<void>((resolve, reject) => {
+          this.resolveInput = resolve;
+          this.rejectInput = reject;
+          this.worker!.postMessage({ type: 'append-stream', fileId: 1, buffer } satisfies DecodeRequest, [buffer]);
+        });
+      }
+    } finally {
+      reader.releaseLock();
+      if (this.inputReader === reader) this.inputReader = null;
+    }
   }
 
   private onDecodeResponse(data: DecodeResponse): void {
     switch (data.type) {
+      case 'input-ready':
+        this.resolveInput?.();
+        this.resolveInput = this.rejectInput = null;
+        break;
       case 'output': {
         if (this.info) throw new Error('音轨中途变更输出布局');
         // A decoder retry may offer only stereo after a multichannel attempt.
@@ -159,6 +197,10 @@ export class PcmStreamAudio implements PlayerAudio {
       node.port.onmessage = ({ data }: MessageEvent<PlaybackState>) => {
         if (this.disposed || data.revision < this.revision || !this.info) return;
         this.position = data.position / this.info.rate;
+        if (data.waiting !== this.waiting) {
+          this.waiting = data.waiting;
+          this.emit(data.waiting ? 'waiting' : 'playing');
+        }
         if (data.ended && this.desiredPlaying) {
           this.desiredPlaying = false;
           this.emit('end');
@@ -195,7 +237,8 @@ export class PcmStreamAudio implements PlayerAudio {
     if (this.disposed) return;
     this.rejectReady?.(error);
     this.rejectReady = null;
-    this.emit('loaderror', null, 3);
+    console.error('PCM 音频解码失败', error);
+    this.emit('loaderror', null, 3, error);
     this.unload();
   }
   private emit(event: string, ...args: any[]): void {
@@ -255,6 +298,9 @@ export class PcmStreamAudio implements PlayerAudio {
     this.disposed = true;
     this.desiredPlaying = false;
     this.loadState = 'unloaded';
+    this.rejectInput?.(new DOMException('已取消音频读取', 'AbortError'));
+    this.resolveInput = this.rejectInput = null;
+    void this.inputReader?.cancel().catch(() => {});
     this.signal.removeEventListener('abort', this.abort);
     clearTimeout(this.fadeTimer);
     this.worker?.terminate();

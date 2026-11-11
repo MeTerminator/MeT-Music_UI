@@ -13,6 +13,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { FakeHowl } = vi.hoisted(() => {
   type Handler = (...args: unknown[]) => void;
 
+  class FakeNativeAudio extends EventTarget {
+    currentTime = 0;
+    paused = true;
+    seeking = false;
+    readyState = 4;
+    crossOrigin: string | null = null;
+  }
+
   class FakeHowl {
     static instances: FakeHowl[] = [];
     static autoLoad = false;
@@ -24,7 +32,8 @@ const { FakeHowl } = vi.hoisted(() => {
     pauseCalls = 0;
     private _playing = false;
     private _volume: number;
-    _sounds = [{ _node: {} }];
+    _sounds = [{ _node: new FakeNativeAudio() }];
+    _webAudio: boolean;
 
     constructor(
       public opts: {
@@ -36,6 +45,7 @@ const { FakeHowl } = vi.hoisted(() => {
       },
     ) {
       this._volume = opts.volume ?? 1;
+      this._webAudio = !opts.html5;
       FakeHowl.instances.push(this);
       if (FakeHowl.autoLoad) {
         const fail = FakeHowl.failNextLoad;
@@ -84,8 +94,13 @@ const { FakeHowl } = vi.hoisted(() => {
       for (const fn of once) fn(...args);
     }
 
+    _emit(ev: string, ...args: unknown[]): void {
+      this.emit(ev, ...args);
+    }
+
     play(): number {
       this._playing = true;
+      this._sounds[0]._node.paused = false;
       this.emit("play");
       return 1;
     }
@@ -93,6 +108,7 @@ const { FakeHowl } = vi.hoisted(() => {
     pause(): this {
       this.pauseCalls++;
       this._playing = false;
+      this._sounds[0]._node.paused = true;
       this.emit("pause");
       return this;
     }
@@ -118,8 +134,11 @@ const { FakeHowl } = vi.hoisted(() => {
     }
 
     seek(v?: number): number {
-      if (typeof v === "number") this.position = v;
-      return this.position;
+      if (typeof v === "number") {
+        this.position = v;
+        this._sounds[0]._node.currentTime = v;
+      }
+      return this._webAudio ? this.position : this._sounds[0]._node.currentTime;
     }
 
     duration(): number {
@@ -161,6 +180,7 @@ import {
   changePlayIndex,
   setSeek,
   getSeek,
+  refreshPlayProgress,
 } from "../src/player/engine";
 import {
   noopMediaSession,
@@ -293,6 +313,117 @@ afterEach(() => {
   soundStop();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("原生音频跳转和缓冲", () => {
+  it("Safari 的普通无损 FLAC 也先解码，不把原始 FLAC 交给原生定位", async () => {
+    const f = makeFixture();
+    f.settings.html5Player = true;
+    f.deps.env.preferSoftwareFlac = () => true;
+    const decoded = new FakeHowl({});
+    const decode = vi.fn(async () => ({ player: decoded, dispose: vi.fn() }));
+    f.deps.env.decodeSpatial = decode;
+    await createPlayer("https://example.com/song.flac?token=test", false);
+    expect(decode).toHaveBeenCalledWith("flac", "https://example.com/song.flac?token=test",
+      expect.any(AbortSignal), expect.any(Function), true);
+    expect(FakeHowl.instances).toEqual([decoded]);
+    decoded.play();
+    setSeek(60);
+    expect(decoded.seek()).toBe(60);
+    decoded.emit("waiting");
+    expect(f.status.playState).toBe(true);
+    expect(f.status.playBuffering).toBe(true);
+    decoded.seek(60.125);
+    decoded.emit("playing");
+    expect(f.status.playBuffering).toBe(false);
+    expect(f.status.playSeekMs).toBe(60125);
+  });
+
+  it("FLAC 解码无法读取音源时明确提示原生回退的定位限制", async () => {
+    const f = makeFixture();
+    f.settings.html5Player = true;
+    f.deps.env.preferSoftwareFlac = () => true;
+    f.deps.env.decodeSpatial = vi.fn(async () => { throw new Error("CORS"); });
+    await createPlayer("https://example.com/song.flac", false);
+    expect(FakeHowl.instances[0].opts.src).toEqual(["https://example.com/song.flac"]);
+    expect(f.deps.notify.warning).toHaveBeenCalledWith(expect.stringContaining("跳转可能不准确"));
+  });
+
+  it("等待缓冲时保留播放意图，恢复时按实际音频位置刷新歌词", async () => {
+    const f = makeFixture();
+    f.settings.html5Player = true;
+    f.music.playSongLyric.lrc = [
+      { time: 0, content: "首句" }, { time: 20, content: "第二句" },
+      { time: 40, content: "第三句" },
+    ];
+    await createPlayer("https://example.com/song.mp3", false);
+    const howl = FakeHowl.instances[0];
+    const audio = howl._sounds[0]._node;
+    howl.play();
+    setSeek(25);
+    audio.seeking = true;
+    audio.readyState = 2;
+    audio.dispatchEvent(new Event("seeking"));
+    audio.dispatchEvent(new Event("waiting"));
+    expect(f.status.playBuffering).toBe(true);
+    expect(f.status.playState).toBe(true);
+    expect(f.status.playSeekMs).toBe(25000);
+
+    // Howler playing() 仍为真，但媒体时钟停住；不能用墙上时间补偿。
+    refreshPlayProgress();
+    expect(f.status.playSeekMs).toBe(25000);
+    audio.seeking = false;
+    audio.dispatchEvent(new Event("seeked"));
+    expect(f.status.playBuffering).toBe(true);
+
+    audio.currentTime = 25.125;
+    audio.readyState = 4;
+    audio.dispatchEvent(new Event("playing"));
+    expect(f.status.playBuffering).toBe(false);
+    expect(f.status.playState).toBe(true);
+    expect(f.status.playSeekMs).toBe(25125);
+    expect(f.status.playTimeData.currentTime).toBe(25.125);
+    expect(f.status.playSongLyricIndex).toBe(1);
+  });
+
+  it("暂停时异步完成的跳转仍刷新全部进度，不启动播放", async () => {
+    const f = makeFixture();
+    f.settings.html5Player = true;
+    await createPlayer("https://example.com/song.mp3", false);
+    const howl = FakeHowl.instances[0];
+    const audio = howl._sounds[0]._node;
+    const onSeek = vi.fn();
+    f.deps.env.onSeek = onSeek;
+    audio.seeking = true;
+    audio.dispatchEvent(new Event("seeking"));
+    audio.currentTime = 43;
+    audio.seeking = false;
+    audio.dispatchEvent(new Event("seeked"));
+    howl.emit("seek");
+    expect(f.status.playBuffering).toBe(false);
+    expect(f.status.playState).toBe(false);
+    expect(f.status.playSeekMs).toBe(43000);
+    expect(f.status.playTimeData.currentTime).toBe(43);
+    expect(onSeek).toHaveBeenCalledOnce();
+  });
+
+  it("连续跳转时 canplay 不提前恢复，换歌后旧音频事件不再写入状态", async () => {
+    const f = makeFixture();
+    f.settings.html5Player = true;
+    await createPlayer("https://example.com/a.mp3", false);
+    const audio = FakeHowl.instances[0]._sounds[0]._node;
+    audio.seeking = true;
+    audio.dispatchEvent(new Event("seeking"));
+    audio.dispatchEvent(new Event("canplay"));
+    expect(f.status.playBuffering).toBe(true);
+    await createPlayer("https://example.com/b.mp3", false);
+    expect(f.status.playBuffering).toBe(false);
+    audio.currentTime = 80;
+    audio.dispatchEvent(new Event("waiting"));
+    audio.dispatchEvent(new Event("timeupdate"));
+    expect(f.status.playBuffering).toBe(false);
+    expect(f.status.playSeekMs).toBe(0);
+  });
 });
 
 describe("fadePlayOrPause 渐出竞态", () => {

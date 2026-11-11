@@ -47,12 +47,16 @@ export interface DecodedAudio extends Omit<AudioInfo, 'delay' | 'channels'> {
 export type DecodeRequest =
   | { type: 'prepare' }
   | { type: 'open'; fileId: number; buffer: ArrayBuffer; base: string; wave?: boolean }
+  | { type: 'open-stream'; fileId: number }
+  | { type: 'append-stream'; fileId: number; buffer: ArrayBuffer }
+  | { type: 'end-stream'; fileId: number }
   | { type: 'output'; fileId: number; channels: number }
   | { type: 'seek'; fileId: number; sample: number }
   | { type: 'cancel'; fileId: number };
 
 export type DecodeResponse =
   | { type: 'ready' }
+  | { type: 'input-ready'; fileId: number }
   | { type: 'info'; fileId: number; info: AudioInfo }
   | { type: 'output'; fileId: number; layouts: readonly number[]; samples: number }
   | { type: 'wave'; fileId: number; blob: Blob }

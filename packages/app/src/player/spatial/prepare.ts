@@ -22,11 +22,18 @@ export function supportedSpatialCodecs(): SpatialCodec[] {
   return [...optional, "vorbis", "flac"];
 }
 
+/** 原生 FLAC 的字节定位在 WebKit/AVFoundation 上可能与媒体时钟失步。 */
+export function preferSoftwareFlac(): boolean {
+  return supportedSpatialCodecs().includes("flac") &&
+    (isAppleMobileBrowser() || /Macintosh.*Version\/[\d.]+.*Safari\//.test(navigator.userAgent));
+}
+
 export async function decodeSpatialUrl(
   codec: SpatialCodec,
   url: string,
   signal: AbortSignal,
   onProgress: (percent: number) => void,
+  streamInput = false,
 ) {
   const appleMobile = isAppleMobileBrowser();
   const assetName = codec === "vorbis" || codec === "flac"
@@ -36,7 +43,6 @@ export async function decodeSpatialUrl(
     throw new Error("空间音频解码器未安装");
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`获取音频失败：HTTP ${response.status}`);
-  const buffer = await response.arrayBuffer();
   const moduleUrl = assetName
     ? new URL(getAssetUrl(`spatial/${assetName}.js`), location.href).href
     : "";
@@ -45,6 +51,11 @@ export async function decodeSpatialUrl(
     : codec === "vorbis"
       ? () => new Worker(new URL("./vorbis-worker.ts", import.meta.url), { type: "module" })
       : () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  if (codec === "flac" && streamInput && response.body) {
+    const player = await PcmStreamAudio.open(response.body, "", signal, onProgress, createWorker, appleMobile);
+    return { player, dispose: () => player.unload() };
+  }
+  const buffer = await response.arrayBuffer();
   if (await supportsNativeSpatialAudio(appleMobile)) {
     try {
       return await prepareNativeSpatialAudio(createWorker, buffer.slice(0), moduleUrl, signal, onProgress);

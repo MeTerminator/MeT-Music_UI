@@ -50,6 +50,8 @@ export interface StatusState {
   /** Runtime only: actual resource and one-play quality override; never persisted. */
   playbackQuality?: PlaybackQualityState | null;
   playState: boolean;
+  /** 音频正在跳转或等待数据；保留 playState 表示用户的播放意图。 */
+  playBuffering?: boolean;
   playLoading: boolean;
   playUseOtherSource: boolean;
   playSeek: number;
@@ -164,6 +166,8 @@ export interface PlayerAudio {
 
 export interface PlayerEnv {
   supportedQQCodecs?(): string[];
+  /** Safari 原生 FLAC seek 的媒体时钟可能与实际样本失步。 */
+  preferSoftwareFlac?(): boolean;
   /** 更新页面标题(旧 document.title 写入点) */
   setTitle(title: string): void;
   /** 播放上报用会话 id(旧 helper.getSessionId) */
@@ -186,6 +190,8 @@ export interface PlayerEnv {
     url: string,
     signal: AbortSignal,
     onProgress: (percent: number) => void,
+    /** 普通 FLAC 边下载边解码；空间音源默认保留原有输出选择。 */
+    streamInput?: boolean,
   ): Promise<
     | { player: PlayerAudio; dispose(): void }
     | { url: string; format: string; native: true; dispose(): void }
