@@ -99,6 +99,18 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
   // 复制 Session ID(对齐旧 copySessionId)
   const copySessionId = () => copyText(sessionId, "已复制 Session ID 到剪贴板");
 
+  const clearLyricCache = () => {
+    try {
+      const keys = Object.keys(localStorage).filter((key) =>
+        key.startsWith("met:lyric-cache:"),
+      );
+      for (const key of keys) localStorage.removeItem(key);
+      toast.success("歌词缓存已清空");
+    } catch {
+      toast.error("清空歌词缓存失败，请重试");
+    }
+  };
+
   // 程序重置(Dialog 二次确认后执行,对齐旧 resetApp)。
   // 必须先停播放器:播放中的 rAF tick 每帧都在写 siteStatus,
   // 否则 localStorage 清完立刻又被 tick 写回,重置等于没生效。
@@ -550,6 +562,14 @@ const SettingsContent = ({ hideHeader = false }: SettingsContentProps) => {
                     </div>
                   </SettingItem>
                 )}
+                <SettingItem
+                  name="清空歌词缓存"
+                  tip="清除已缓存的普通歌词和 TTML 歌词，下次加载时重新获取"
+                >
+                  <Button variant="outline" onClick={clearLyricCache}>
+                    清空歌词缓存
+                  </Button>
+                </SettingItem>
                 <SettingItem
                   name="歌词脏字补全"
                   tip="还原 f**k、sh*t 等英文屏蔽词及常见变形；无法确定的词保留原样"

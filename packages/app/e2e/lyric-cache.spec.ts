@@ -71,4 +71,24 @@ test("普通歌词与 TTML 跨刷新复用缓存，设置有效期、永久及�
     await expect(page.getByText("TTML 歌词", { exact: true })).toBeVisible();
     expect(requests).toEqual({ normal: 3 + index, ttml: 3 + index });
   }
+
+  await openLyricSettings(page);
+  await mode.click();
+  await page.getByRole("option", { name: "永不过期", exact: true }).click();
+  const beforeClear = await page.evaluate(() => ({
+    keys: Object.keys(localStorage).filter((key) => key.startsWith("met:lyric-cache:")),
+    settings: localStorage.getItem("siteSettings"),
+    sessionId: localStorage.getItem("sessionId"),
+  }));
+  expect(beforeClear.keys).toHaveLength(2);
+  await page.getByRole("button", { name: "清空歌词缓存", exact: true }).click();
+  await expect(page.getByText("歌词缓存已清空", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => ({
+    keys: Object.keys(localStorage).filter((key) => key.startsWith("met:lyric-cache:")),
+    settings: localStorage.getItem("siteSettings"),
+    sessionId: localStorage.getItem("sessionId"),
+  }))).toEqual({ ...beforeClear, keys: [] });
+  await page.reload();
+  await expect(page.getByText("TTML 歌词", { exact: true })).toBeVisible();
+  expect(requests).toEqual({ normal: 5, ttml: 5 });
 });
