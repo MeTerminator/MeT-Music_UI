@@ -62,4 +62,7 @@ if [[ "$codec" == mpegh ]]; then
   fi
 elif [[ "$codec" == dtsx ]]; then
   cp "$source_dir/LICENSE" "$asset_dir/dtsx-LICENSE.txt"
+elif [[ "$codec" == av3a ]]; then
+  cp "$source_dir/LICENSE" "$asset_dir/av3a-LICENSE.txt"
+  cp "$source_dir/NOTICE" "$asset_dir/av3a-NOTICE.txt"
 fi

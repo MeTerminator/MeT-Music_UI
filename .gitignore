@@ -33,5 +33,4 @@ packages/app/public/nac/vendor/*.wasm
 
 packages/app/public/nac/vendor/*.map
 
-# Optional WebAssembly audio decoders built from separately supplied SDKs.
-packages/app/public/spatial/
+# Prebuilt spatial decoders in packages/app/public/spatial/ are versioned.

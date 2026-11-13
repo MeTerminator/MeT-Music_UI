@@ -19,6 +19,8 @@ pnpm dev
 pnpm build
 ```
 
+仓库已包含 MPEG-H、AVS3 和 DTS:X 的预编译 WASM 解码器及配套资源，常规开发与打包无需安装 Emscripten 或重新编译解码器。部署时完整保留 `packages/app/dist/` 下的 `spatial/` 目录。版本、许可及重新编译方法见 [前端音质解码](docs/frontend-audio.md)。
+
 ## ⚠️ 使用须知
 
 本项目所使用的 API 均有跨越限制，且含有防护机制，如需在别处使用请联系作者获得开放 API 接口。

@@ -29,7 +29,15 @@ QQ 的软件空间音质使用 `/extra/music/url?audio_api=2` 精确取链。音
 
 QQ 杜比同样通过精确接口取流。桌面端限 Safari，iPhone 和 iPad 上根据浏览器报告的编解码能力提供档位。浏览器直接用原生音频元素播放 MP4，保留压缩音轨和 Atmos JOC 元数据。能否启用系统空间音频及头部跟踪取决于音轨和输出设备。 [Apple 杜比音频支持](https://developer.apple.com/streaming/hls-authoring-specification-for-apple-devices.html)
 
-## 构建可选解码器
+## 使用预编译解码器
+
+仓库的 `packages/app/public/spatial/` 已包含 MPEG-H、AVS3 和 DTS:X 的预编译 `.js` / `.wasm`、相关许可文件及 MPEG-H 源码归档。拉取代码后直接执行 `pnpm install` 和 `pnpm build`，即可将这些资源复制到 `packages/app/dist/spatial/`，无需单独安装 CMake 或 Emscripten。
+
+不要只保留 `.wasm`：对应的 `.js` 也是加载解码器所必需的。资源来源与版本见该目录的 `README.md`，文件校验值见 `SHA256SUMS`。NAC 运行时仍由构建脚本从锁定的 `onnxruntime-web` 依赖自动复制。
+
+## 重新编译解码器
+
+仅在更新解码器源码或修改 C/C++ 适配层时需要执行以下步骤，并将更新后的资源和校验值一起提交。
 
 运行以下命令前，将 CMake 和 Emscripten 3.1.74 加入当前 shell 的 PATH。
 
@@ -48,7 +56,7 @@ pnpm build
 
 脚本将 `.js` 和 `.wasm` 写入 `packages/app/public/spatial/`。启动开发服务器和构建时会检测各解码器的资源，只有存在对应资源时才提供该档位。部署静态产物时保留 `dist/spatial/`，以 JavaScript MIME 提供 `.js`，以 `application/wasm` 提供 `.wasm`。这些文件按需加载。多声道构建使用 `mpegh-v2`、`av3a-v2` 和 `dtsx-v3`。如果只有旧版构建产物，相应档位仍可播放立体声。
 
-MPEG-H 测试使用上游 `4448b69738da2fa5f2f2b0ce29eea32509e046`，构建脚本会附带其版权许可证，并从 Git 源码生成归档。AVS3 适配的是 `molan_av3a.h` 接口，以 AVS3A_RMv3.3.1 的 7.1.4 输入验证。可选解码器按各自许可提供，生成物独立于仓库源码。[Fraunhofer 许可](https://github.com/Fraunhofer-IIS/mpeghdec/blob/r4.0.1/LICENSE.txt) [UWA 代码共享政策](https://www.theuwa.com/UWA_Code_Sharing_Policy.pdf)
+MPEG-H 测试使用上游 `4448b69738da2fa5f2f2b0ce29eea32509e046`，构建脚本会附带其版权许可证，并从 Git 源码生成归档。AVS3 适配的是 `molan_av3a.h` 接口，以 AVS3A_RMv3.3.1 的 7.1.4 输入验证。解码器按各自许可提供，随仓库保留对应许可文件。[Fraunhofer 许可](https://github.com/Fraunhofer-IIS/mpeghdec/blob/r4.0.1/LICENSE.txt) [UWA 代码共享政策](https://www.theuwa.com/UWA_Code_Sharing_Policy.pdf)
 
 
 DTS:X 构建需要 Python 3 和固定版本的 DTSX_decoder 源码。脚本提取其中的 ACE 解码代码，采用 ACE 的逆变换，修正 QQ 音源的频带比特分配、跨帧预测和帧解析。生成的 WASM 随附上游 PolyForm Noncommercial 许可证。[DTSX_decoder 源码](https://github.com/almirus/DTSX_decoder/tree/5ba94ae7353ed57b04991f5dc2fdefc8865a1878)
