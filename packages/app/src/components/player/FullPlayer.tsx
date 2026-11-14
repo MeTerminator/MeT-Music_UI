@@ -122,6 +122,14 @@ const FULL_PLAYER_CSS = `
   --amll-lp-line-padding-x: var(--met-amll-line-padding);
   --amll-lp-bg-line-scale: var(--met-amll-bg-scale);
 }
+/* AMLL 的行容器默认只有 .2em 绘制留白，长音强调会把首字向左展开。
+   只解除行本身的绘制隔离；播放器外层仍负责视口裁切与渐隐。
+   content-visibility:auto 也会隐式开启 paint containment，需一并解除。
+   按 DOM 层级选中含主行/翻译的行容器，避免依赖库的 CSS Modules 哈希。 */
+.met-amll .amll-lyric-player.dom > div > div:has(> div) {
+  contain: layout style;
+  content-visibility: visible;
+}
 .met-fp-icon-in {
   animation: met-fp-icon-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }

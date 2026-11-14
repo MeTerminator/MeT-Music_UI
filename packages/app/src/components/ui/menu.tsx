@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Menu as BaseMenu } from "@base-ui-components/react/menu";
+import { Menu as BaseMenu } from "@base-ui/react/menu";
 
 /** 菜单项定义(DropdownMenu 与 ContextMenu 共用) */
 export interface MenuItemDef {

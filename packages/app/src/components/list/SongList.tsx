@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { playbackLevel, songPlatform, songIdentityKey } from "@met/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ContextMenu as BaseContextMenu } from "@base-ui-components/react/context-menu";
+import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { Clapperboard, Download, Ellipsis, FileMusic, Hash, Link, ListEnd, Locate, MessageSquare, Play, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 import {

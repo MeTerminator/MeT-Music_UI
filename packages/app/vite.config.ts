@@ -112,7 +112,7 @@ export default defineConfig({
             { name: "lyrics", test: /node_modules\/@applemusic-like-lyrics\// },
             { name: "react", test: /node_modules\/(?:react|react-dom|scheduler)\// },
             { name: "router", test: /node_modules\/@tanstack\// },
-            { name: "ui", test: /node_modules\/(?:@base-ui-components\/|@floating-ui\/)/ },
+            { name: "ui", test: /node_modules\/(?:@base-ui\/|@floating-ui\/)/ },
             { name: "motion", test: /node_modules\/(?:motion|motion-dom|motion-utils|framer-motion)\// },
           ],
         },

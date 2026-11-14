@@ -7,7 +7,7 @@
  * 渲染与 /setting 路由页同一份 SettingsContent（hideHeader，左右分类布局）。
  * 开关由 useStatusStore.showSettingsPanel 控制(不持久化)。
  */
-import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { X } from "lucide-react";
 import { useStatusStore } from "@/stores/status";
 import SettingsContent from "@/pages/setting/SettingsContent";

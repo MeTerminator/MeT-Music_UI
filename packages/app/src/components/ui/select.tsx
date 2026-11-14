@@ -1,4 +1,4 @@
-import { Select as BaseSelect } from "@base-ui-components/react/select";
+import { Select as BaseSelect } from "@base-ui/react/select";
 import { ChevronDown } from "lucide-react";
 
 export interface SelectOption<V extends string = string> {

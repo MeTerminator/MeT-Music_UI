@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import {
   ContextMenu as BaseContextMenu,
   type ContextMenuTriggerProps,
-} from "@base-ui-components/react/context-menu";
+} from "@base-ui/react/context-menu";
 import { MenuItems, menuPopupClassName, type MenuItemDef } from "./menu";
 
 export interface ContextMenuProps {

@@ -4,19 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import { Music } from "lucide-react";
-// plyr 的类型声明(export=)与其 ESM 产物(type: module + export default)冲突,
-// 默认导入的类型需豁免;类型侧改用其 UMD 全局命名空间(export as namespace Plyr)。
-// @ts-expect-error -- plyr d.ts 在 bundler 解析下无 default 导出
-import PlyrDefault from "plyr";
+import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import { fadePlayOrPause, formatNumber } from "@met/core";
 import { useStatusStore } from "@/stores/status";
-
-/** plyr 构造器(运行时 default 导出即类本体) */
-const PlyrCtor = PlyrDefault as new (
-  target: HTMLElement | string,
-  options?: Plyr.Options,
-) => Plyr;
 
 /** MV 详情(mv/detail 返回 data 字段;仅声明本页用到的字段) */
 interface VideoDetail {
@@ -147,7 +138,7 @@ export default function VideosPlayer() {
     video.playsInline = true;
     container.appendChild(video);
     const qualities = sources.map((source) => source.size).filter((size): size is number => size != null);
-    const player = new PlyrCtor(video, {
+    const player = new Plyr(video, {
       ...playerOptions,
       quality: { default: Math.max(...qualities), options: qualities },
     });

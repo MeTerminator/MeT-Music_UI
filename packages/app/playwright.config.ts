@@ -30,7 +30,7 @@ export default defineConfig({
     },
     {
       name: "webkit",
-      testMatch: /(?:lyric-(buffering|seek-gap)|native-seek|flac-playback)\.spec\.ts/,
+      testMatch: /(?:lyric-(buffering|seek-gap|clipping)|native-seek|flac-playback)\.spec\.ts/,
       use: { ...devices["Desktop Safari"] },
     },
   ],

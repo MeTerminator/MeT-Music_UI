@@ -10,6 +10,8 @@ allowBuilds:
   core-js: true
   sharp: true
   protobufjs: false
+  # Plyr 已包含 dist；无需运行其仓库开发环境的安装脚本。
+  plyr: false
 
 # music-metadata@11.15.0 已在既有 lockfile 中(2026-08-18 依赖升级引入),
 # 仅比 pnpm 默认的发布冷静期窗口新约 1 小时;豁免以解除安装阻塞,可随时移除。

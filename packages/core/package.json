@@ -1,6 +1,6 @@
 {
   "name": "@met/core",
-  "version": "7.2.1",
+  "version": "7.2.2",
   "private": true,
   "description": "MeT-Music 框架无关核心:播放引擎、歌词解析、API 客户端、一起听协议",
   "type": "module",
@@ -14,15 +14,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@applemusic-like-lyrics/lyric": "^1.0.2",
+    "@applemusic-like-lyrics/lyric": "^1.1.0",
     "howler": "^2.2.4",
-    "ky": "^2.0.2",
-    "lyric-kit": "^0.6.0",
-    "zod": "^4.4.3"
+    "ky": "^2.2.0",
+    "lyric-kit": "^0.7.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/howler": "^2.2.13",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.1.0"
   }
 }

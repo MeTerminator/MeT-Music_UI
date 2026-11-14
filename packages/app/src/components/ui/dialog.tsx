@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 
 export interface DialogProps {
   open: boolean;
